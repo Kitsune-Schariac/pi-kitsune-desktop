@@ -220,8 +220,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   setModel: async (provider, modelId) => {
     try {
-      const data = await invoke<ModelInfo>("set_model", { provider, model_id: modelId });
+      const data = await invoke<ModelInfo>("set_model", { provider, modelId });
       set({ currentModel: data });
+      // 换模型后 thinking levels 可能变, 重新拉取
+      await get().loadThinkingLevels();
     } catch (e) { set({ error: String(e) }); }
   },
 
