@@ -43,7 +43,7 @@ export function MessageList() {
     >
       <div className="mx-auto max-w-3xl space-y-4">
         {entries.length === 0 && (
-          <div className="py-20 text-center text-neutral-600">
+          <div className="py-20 text-center text-neutral-400">
             输入消息开始对话
           </div>
         )}

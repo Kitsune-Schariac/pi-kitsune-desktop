@@ -1,139 +1,96 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSessionStore } from "./store/session";
+import { useProjectsStore } from "./store/projects";
 import { MessageList } from "./components/MessageList";
 import { InputBar } from "./components/InputBar";
-import { ModelPicker } from "./components/ModelPicker";
 import { SessionTabs } from "./components/SessionTabs";
-import { Terminal, FolderOpen, Loader2 } from "lucide-react";
+import { Sidebar } from "./components/Sidebar";
+import { EmptyState } from "./components/EmptyState";
+import { SettingsPanel } from "./components/panels/SettingsPanel";
+import { SkillsPanel } from "./components/panels/SkillsPanel";
+import { PackagesPanel } from "./components/panels/PackagesPanel";
+import { Loader2, X } from "lucide-react";
+
+export type PanelKind = "skills" | "packages" | "settings" | null;
 
 export default function App() {
-  const sessions = useSessionStore((s) => s.sessions);
-  const sessionOrder = useSessionStore((s) => s.sessionOrder);
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
-  const startSession = useSessionStore((s) => s.startSession);
-  const stopSession = useSessionStore((s) => s.stopSession);
-
+  const sessions = useSessionStore((s) => s.sessions);
   const active = activeSessionId ? sessions[activeSessionId] : null;
-  const hasSession = sessionOrder.length > 0;
+  const stopSession = useSessionStore((s) => s.stopSession);
+  const loadProjects = useProjectsStore((s) => s.loadProjects);
+  const [panel, setPanel] = useState<PanelKind>(null);
+  // 空状态: 项目选择器的选中值 (InputBar 发送时自动建会话用)
+  const [emptyProject, setEmptyProject] = useState("");
 
-  const [cwdInput, setCwdInput] = useState("");
-  const [connecting, setConnecting] = useState(false);
-  const [showConnect, setShowConnect] = useState(false);
-  const [connectError, setConnectError] = useState<string | null>(null);
+  // 启动即加载侧边栏数据 (无连接面板, 直接进主界面)
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
 
-  const handleConnect = async () => {
-    if (!cwdInput.trim()) return;
-    setConnecting(true);
-    setConnectError(null);
-    try {
-      await startSession(cwdInput.trim());
-      setCwdInput("");
-      setShowConnect(false);
-    } catch (e) {
-      setConnectError(String(e));
-    }
-    setConnecting(false);
-  };
-
-  // 连接面板 (无 session 全屏 / 有 session 时作为覆盖层)
-  const connectForm = (
-    <div className="w-full max-w-md space-y-6 rounded-2xl border border-neutral-800 bg-neutral-900/90 p-8 shadow-2xl">
-      <div className="flex items-center gap-3">
-        <Terminal className="h-7 w-7 text-orange-400" />
-        <div>
-          <h1 className="text-xl font-semibold">Pi Kitsune</h1>
-          <p className="text-sm text-neutral-500">pi coding agent 桌面端</p>
-        </div>
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm text-neutral-400">工作目录</label>
-        <input
-          value={cwdInput}
-          onChange={(e) => setCwdInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleConnect()}
-          placeholder="C:\your\project"
-          className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-2.5 text-sm outline-none focus:border-orange-500/50"
-        />
-      </div>
-      {connectError && <p className="text-sm text-red-400">{connectError}</p>}
-      <div className="flex gap-3">
-        <button
-          onClick={handleConnect}
-          disabled={!cwdInput.trim() || connecting}
-          className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 font-medium text-white transition hover:bg-orange-600 disabled:opacity-50"
-        >
-          {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderOpen className="h-4 w-4" />}
-          连接
-        </button>
-        {hasSession && (
-          <button
-            onClick={() => setShowConnect(false)}
-            className="rounded-lg border border-neutral-800 px-4 py-2.5 text-sm text-neutral-400 transition hover:text-neutral-200"
-          >
-            取消
-          </button>
-        )}
-      </div>
-    </div>
-  );
-
-  // 无 session: 全屏连接面板
-  if (!hasSession) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center bg-neutral-950 text-neutral-100">
-        {connectForm}
-      </div>
-    );
-  }
-
-  // 有 session: tabs + 聊天 + 可选连接覆盖层
-  const queueLen = (active?.steeringQueue.length || 0) + (active?.followUpQueue.length || 0);
   return (
-    <div className="flex h-screen w-screen flex-col bg-neutral-950 text-neutral-100">
-      <SessionTabs onNew={() => setShowConnect(true)} />
-      <header className="flex items-center justify-between border-b border-neutral-800 px-6 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Terminal className="h-5 w-5 text-orange-400" />
-            <span className="font-medium">Pi Kitsune</span>
+    <div className="flex h-screen w-screen overflow-hidden bg-white text-neutral-900">
+      <Sidebar onOpenPanel={setPanel} />
+      <main className="flex min-w-0 flex-1 flex-col">
+        <SessionTabs />
+        {active ? (
+          <>
+            <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="truncate font-medium">
+                  {active.sessionName || active.cwd.split(/[\\/]/).filter(Boolean).pop()}
+                </span>
+                <span className="truncate text-xs text-neutral-400" title={active.cwd}>
+                  {active.cwd}
+                </span>
+                {active.isStreaming && (
+                  <span className="flex shrink-0 items-center gap-1 text-xs text-neutral-500">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    思考中
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => stopSession(activeSessionId!)}
+                className="shrink-0 rounded-md px-2 py-1 text-xs text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-600"
+              >
+                关闭会话
+              </button>
+            </header>
+            <MessageList />
+          </>
+        ) : (
+          <EmptyState project={emptyProject} onProjectChange={setEmptyProject} />
+        )}
+        <InputBar emptyProject={emptyProject} />
+        {active?.error && (
+          <div className="border-t border-red-200 bg-red-50 px-6 py-2 text-sm text-red-600">
+            {active.error}
           </div>
-          {active?.isStreaming && (
-            <span className="flex items-center gap-1 text-xs text-neutral-500">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              思考中
-            </span>
-          )}
-          <ModelPicker />
-        </div>
-        <div className="flex items-center gap-3 text-sm text-neutral-500">
-          {queueLen > 0 && (
-            <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
-              队列 {queueLen}
-            </span>
-          )}
-          <span className="max-w-xs truncate" title={active?.cwd ?? ""}>
-            {active?.cwd}
-          </span>
-          {activeSessionId && (
-            <button
-              onClick={() => stopSession(activeSessionId)}
-              className="rounded px-2 py-1 text-neutral-400 transition hover:bg-neutral-800 hover:text-neutral-200"
-            >
-              断开
-            </button>
-          )}
-        </div>
-      </header>
-      <MessageList />
-      <InputBar />
-      {active?.error && (
-        <div className="border-t border-red-900/50 bg-red-950/30 px-6 py-2 text-sm text-red-400">
-          {active.error}
-        </div>
-      )}
-      {showConnect && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-neutral-950/80">
-          {connectForm}
+        )}
+      </main>
+
+      {/* 右侧面板抽屉 (设置/Skill/package) */}
+      {panel && (
+        <div className="absolute inset-0 z-40 flex justify-end bg-neutral-900/10">
+          <div className="flex h-full w-[380px] flex-col border-l border-neutral-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-3">
+              <span className="font-medium">
+                {panel === "skills" ? "Skill 管理" : panel === "packages" ? "pi Package" : "设置"}
+              </span>
+              <button
+                onClick={() => setPanel(null)}
+                className="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {panel === "skills" && <SkillsPanel />}
+              {panel === "packages" && <PackagesPanel />}
+              {panel === "settings" && <SettingsPanel />}
+            </div>
+          </div>
         </div>
       )}
     </div>

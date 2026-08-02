@@ -33,12 +33,12 @@ function extractResultText(result: unknown): string {
 function DiffView({ text }: { text: string }) {
   const lines = text.split("\n");
   return (
-    <pre className="mt-2 max-h-64 overflow-auto rounded bg-neutral-950/60 p-2 text-xs leading-relaxed">
+    <pre className="mt-2 max-h-64 overflow-auto rounded bg-neutral-50 p-2 text-xs leading-relaxed">
       {lines.map((line, i) => {
         let cls = "text-neutral-400";
-        if (line.startsWith("+")) cls = "text-green-400";
-        else if (line.startsWith("-")) cls = "text-red-400";
-        else if (line.startsWith("@@")) cls = "text-neutral-600";
+        if (line.startsWith("+")) cls = "text-green-600";
+        else if (line.startsWith("-")) cls = "text-red-600";
+        else if (line.startsWith("@@")) cls = "text-neutral-400";
         return (
           <div key={i} className={cls}>
             {line || " "}
@@ -61,12 +61,12 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
   const isBash = entry.toolName === "bash";
 
   return (
-    <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-3 text-sm">
-      <div className="flex items-center gap-2 text-neutral-300">
-        <Icon className="h-4 w-4 text-neutral-500" />
+    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-sm">
+      <div className="flex items-center gap-2 text-neutral-700">
+        <Icon className="h-4 w-4 text-neutral-400" />
         <span className="font-medium">{entry.toolName}</span>
         {entry.status === "running" && (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-neutral-500" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-neutral-400" />
         )}
         {entry.status === "done" && (
           <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
@@ -83,7 +83,7 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
       {/* 工具结果差异化渲染 */}
       {resultText && isDiff && <DiffView text={resultText} />}
       {resultText && isBash && (
-        <pre className="mt-2 max-h-48 overflow-auto rounded bg-black/70 p-2 font-mono text-xs text-green-300/80">
+        <pre className="mt-2 max-h-48 overflow-auto rounded bg-neutral-900 p-2 font-mono text-xs text-green-300">
           {resultText}
         </pre>
       )}

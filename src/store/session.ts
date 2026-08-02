@@ -24,6 +24,8 @@ export interface ModelInfo {
 interface SessionState {
   sessionId: string;
   cwd: string;
+  sessionPath: string | null; // 加载的历史会话文件 (新建会话为 null)
+  sessionName: string | null; // get_state.sessionName
   isStreaming: boolean;
   entries: ChatEntry[];
   currentAssistantId: string | null;
@@ -34,6 +36,14 @@ interface SessionState {
   availableThinkingLevels: string[];
   steeringQueue: string[];
   followUpQueue: string[];
+  contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } | null;
+  tokenStats: {
+    tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
+    cost: number;
+    userMessages: number;
+    assistantMessages: number;
+    totalMessages: number;
+  } | null;
 }
 
 interface SessionStore {
@@ -41,10 +51,10 @@ interface SessionStore {
   activeSessionId: string | null;
   sessionOrder: string[];
 
-  startSession: (cwd: string, provider?: string, model?: string) => Promise<string>;
+  startSession: (cwd: string, opts?: { provider?: string; model?: string; sessionPath?: string }) => Promise<string>;
   stopSession: (sessionId: string) => Promise<void>;
   setActiveSession: (sessionId: string) => void;
-  sendPrompt: (sessionId: string, text: string) => Promise<void>;
+  sendPrompt: (sessionId: string, text: string, images?: unknown[]) => Promise<void>;
   abort: (sessionId: string) => Promise<void>;
   setModel: (sessionId: string, provider: string, modelId: string) => Promise<void>;
   cycleModel: (sessionId: string) => Promise<void>;
@@ -53,6 +63,9 @@ interface SessionStore {
   loadState: (sessionId: string) => Promise<void>;
   loadModels: (sessionId: string) => Promise<void>;
   loadThinkingLevels: (sessionId: string) => Promise<void>;
+  loadSessionStats: (sessionId: string) => Promise<void>;
+  loadEntries: (sessionId: string) => Promise<void>;
+  renameSession: (sessionId: string, name: string) => Promise<void>;
   handleEvent: (payload: { sessionId: string; event: Record<string, unknown> }) => void;
 }
 
@@ -70,22 +83,37 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     activeSessionId: null,
     sessionOrder: [],
 
-    startSession: async (cwd, provider, model) => {
-      const id = await invoke<string>("start_session", { cwd, provider, model });
+    startSession: async (cwd, opts) => {
+      const id = await invoke<string>("start_session", {
+        cwd,
+        provider: opts?.provider ?? null,
+        model: opts?.model ?? null,
+        sessionPath: opts?.sessionPath ?? null,
+      });
       set((state) => ({
         sessions: {
           ...state.sessions,
           [id]: {
-            sessionId: id, cwd, isStreaming: false, entries: [], currentAssistantId: null,
+            sessionId: id, cwd, sessionPath: opts?.sessionPath ?? null, sessionName: null,
+            isStreaming: false, entries: [], currentAssistantId: null,
             error: null, currentModel: null, thinkingLevel: "medium",
             availableModels: [], availableThinkingLevels: ["off"],
             steeringQueue: [], followUpQueue: [],
+            contextUsage: null, tokenStats: null,
           },
         },
         activeSessionId: id,
         sessionOrder: [...state.sessionOrder.filter((sid) => sid !== id), id],
       }));
-      await Promise.all([get().loadState(id), get().loadModels(id), get().loadThinkingLevels(id)]);
+      const tasks: Promise<unknown>[] = [
+        get().loadState(id),
+        get().loadModels(id),
+        get().loadThinkingLevels(id),
+        get().loadSessionStats(id),
+      ];
+      // 历史会话: 加载条目 (长文件较慢, 不阻塞其它初始化)
+      if (opts?.sessionPath) tasks.push(get().loadEntries(id));
+      await Promise.all(tasks);
       return id;
     },
 
@@ -104,7 +132,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
 
     setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
 
-    sendPrompt: async (sessionId, text) => {
+    sendPrompt: async (sessionId, text, images) => {
       const s = get().sessions[sessionId];
       if (!s || !text.trim()) return;
       patch(sessionId, {
@@ -112,7 +140,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         isStreaming: true,
       });
       try {
-        await invoke("send_prompt", { sessionId, message: text });
+        await invoke("send_prompt", { sessionId, message: text, images: images ?? null });
       } catch (e) {
         patch(sessionId, { isStreaming: false, error: String(e) });
       }
@@ -172,6 +200,50 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         const data = await invoke<{ levels: string[] }>("get_available_thinking_levels", { sessionId });
         patch(sessionId, { availableThinkingLevels: data.levels || ["off"] });
       } catch { /* ignore */ }
+    },
+
+    loadSessionStats: async (sessionId) => {
+      try {
+        const data = await invoke<Record<string, unknown>>("get_session_stats", { sessionId });
+        const cu = data.contextUsage as { tokens?: number | null; contextWindow?: number; percent?: number | null } | undefined;
+        const tk = data.tokens as { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number } | undefined;
+        patch(sessionId, {
+          contextUsage: cu ? {
+            tokens: cu.tokens ?? null,
+            contextWindow: cu.contextWindow ?? 0,
+            percent: cu.percent ?? null,
+          } : null,
+          tokenStats: tk ? {
+            tokens: {
+              input: tk.input ?? 0, output: tk.output ?? 0,
+              cacheRead: tk.cacheRead ?? 0, cacheWrite: tk.cacheWrite ?? 0,
+              total: tk.total ?? 0,
+            },
+            cost: (data.cost as number) ?? 0,
+            userMessages: (data.userMessages as number) ?? 0,
+            assistantMessages: (data.assistantMessages as number) ?? 0,
+            totalMessages: (data.totalMessages as number) ?? 0,
+          } : null,
+        });
+      } catch { /* ignore */ }
+    },
+
+    loadEntries: async (sessionId) => {
+      try {
+        const data = await invoke<{ entries: unknown[] }>("get_entries", { sessionId });
+        patch(sessionId, { entries: mapHistoryEntries(data.entries || []) });
+      } catch (e) {
+        patch(sessionId, { error: `历史加载失败: ${String(e)}` });
+      }
+    },
+
+    renameSession: async (sessionId, name) => {
+      try {
+        await invoke("set_session_name", { sessionId, name });
+        patch(sessionId, { sessionName: name });
+      } catch (e) {
+        patch(sessionId, { error: String(e) });
+      }
     },
 
     handleEvent: (payload) => {
@@ -246,3 +318,47 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     },
   };
 });
+
+/**
+ * get_entries 历史条目 → ChatEntry 映射 (纯函数, 便于测试)
+ * message 条目: user 取 text 块拼接; assistant 拆 thinking/text/toolCall 块
+ * 其余类型 (model_change 等) 忽略
+ */
+export function mapHistoryEntries(entries: unknown[]): ChatEntry[] {
+  const result: ChatEntry[] = [];
+  for (const raw of entries) {
+    const e = raw as { id?: string; type?: string; message?: { role?: string; content?: unknown[] } };
+    if (e.type !== "message" || !e.message) continue;
+    const content = e.message.content ?? [];
+    if (e.message.role === "user") {
+      const text = content
+        .filter((b) => (b as { type?: string }).type === "text")
+        .map((b) => (b as { text?: string }).text ?? "")
+        .join("");
+      if (text) result.push({ id: e.id ?? crypto.randomUUID(), kind: "message", role: "user", text });
+    } else if (e.message.role === "assistant") {
+      let text = "";
+      let thinking = "";
+      for (const block of content) {
+        const b = block as { type?: string; text?: string; thinking?: string; id?: string; name?: string; arguments?: unknown };
+        if (b.type === "text" && b.text) text += b.text;
+        else if (b.type === "thinking" && b.thinking) thinking += b.thinking;
+        else if (b.type === "toolCall") {
+          // 历史里的工具调用: 无执行结果, 只展示调用参数
+          result.push({
+            id: b.id ?? crypto.randomUUID(), kind: "tool",
+            toolCallId: b.id, toolName: b.name, args: b.arguments,
+            status: "done", result: null,
+          });
+        }
+      }
+      if (text || thinking) {
+        result.push({
+          id: e.id ?? crypto.randomUUID(), kind: "message", role: "assistant",
+          text, thinking: thinking || undefined,
+        });
+      }
+    }
+  }
+  return result;
+}

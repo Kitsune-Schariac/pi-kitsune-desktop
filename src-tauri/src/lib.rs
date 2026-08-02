@@ -1,4 +1,5 @@
 mod pi_runtime;
+mod session_fs;
 
 use pi_runtime::PiRuntime;
 use std::collections::HashMap;
@@ -57,6 +58,7 @@ impl RuntimePool {
 type SharedRuntime = Arc<Mutex<RuntimePool>>;
 
 /// 启动一个 pi sidecar 会话, 返回 sessionId (不替换已有 session, 多个并存)
+/// session_path 存在时: spawn 后 switch_session 加载历史会话文件
 #[tauri::command]
 async fn start_session(
     app: tauri::AppHandle,
@@ -64,6 +66,7 @@ async fn start_session(
     cwd: String,
     provider: Option<String>,
     model: Option<String>,
+    session_path: Option<String>,
 ) -> Result<String, String> {
     let session_id = format!(
         "sess_{}",
@@ -72,7 +75,21 @@ async fn start_session(
             .map_err(|e| e.to_string())?
             .as_millis()
     );
-    let runtime = PiRuntime::spawn(app, session_id.clone(), cwd, provider, model).await?;
+    let mut runtime = PiRuntime::spawn(app, session_id.clone(), cwd, provider, model).await?;
+    // 加载历史会话: 切换失败或被扩展取消时停掉 runtime, 防止僵尸 pi 进程
+    if let Some(path) = session_path {
+        match runtime.switch_session(path).await {
+            Ok(true) => {
+                runtime.stop().await?;
+                return Err("切换会话被扩展取消".into());
+            }
+            Ok(false) => {}
+            Err(e) => {
+                runtime.stop().await?;
+                return Err(format!("加载会话失败: {e}"));
+            }
+        }
+    }
     let mut guard = state.lock().await;
     guard.runtimes.insert(session_id.clone(), runtime);
     guard.touch(&session_id);
@@ -85,11 +102,12 @@ async fn send_prompt(
     state: State<'_, SharedRuntime>,
     session_id: String,
     message: String,
+    images: Option<Vec<serde_json::Value>>,
 ) -> Result<(), String> {
     let mut guard = state.lock().await;
     guard.touch(&session_id);
     let runtime = guard.runtimes.get_mut(&session_id).ok_or("session 不存在")?;
-    runtime.send_prompt(message).await
+    runtime.send_prompt(message, images).await
 }
 
 #[tauri::command]
@@ -160,14 +178,43 @@ async fn get_available_thinking_levels(state: State<'_, SharedRuntime>, session_
     runtime.get_available_thinking_levels().await
 }
 
+// --- M4: 会话切换后加载 (历史/统计/重命名) ---
+
+#[tauri::command]
+async fn get_entries(state: State<'_, SharedRuntime>, session_id: String) -> Result<serde_json::Value, String> {
+    let mut guard = state.lock().await;
+    guard.touch(&session_id);
+    let runtime = guard.runtimes.get_mut(&session_id).ok_or("session 不存在")?;
+    runtime.get_entries().await
+}
+
+#[tauri::command]
+async fn get_session_stats(state: State<'_, SharedRuntime>, session_id: String) -> Result<serde_json::Value, String> {
+    let mut guard = state.lock().await;
+    guard.touch(&session_id);
+    let runtime = guard.runtimes.get_mut(&session_id).ok_or("session 不存在")?;
+    runtime.get_session_stats().await
+}
+
+#[tauri::command]
+async fn set_session_name(state: State<'_, SharedRuntime>, session_id: String, name: String) -> Result<(), String> {
+    let mut guard = state.lock().await;
+    let runtime = guard.runtimes.get_mut(&session_id).ok_or("session 不存在")?;
+    runtime.set_session_name(name).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(Mutex::new(RuntimePool::new())) as SharedRuntime)
         .invoke_handler(tauri::generate_handler![
             start_session, send_prompt, abort_session, stop_session,
             get_state, get_available_models, set_model, cycle_model,
-            set_thinking_level, cycle_thinking_level, get_available_thinking_levels
+            set_thinking_level, cycle_thinking_level, get_available_thinking_levels,
+            get_entries, get_session_stats, set_session_name,
+            session_fs::list_projects_and_sessions, session_fs::delete_session_file,
+            session_fs::read_file_for_context, session_fs::list_skills_and_packages,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

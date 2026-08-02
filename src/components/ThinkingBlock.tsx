@@ -6,7 +6,7 @@ export function ThinkingBlock({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   if (!text) return null;
   return (
-    <div className="mb-2 rounded-lg border border-neutral-800/60 bg-neutral-900/40">
+    <div className="mb-2 rounded-lg border border-neutral-200 bg-neutral-50">
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-neutral-500 transition hover:text-neutral-400"
@@ -18,10 +18,10 @@ export function ThinkingBlock({ text }: { text: string }) {
         )}
         <Brain className="h-3 w-3" />
         <span>推理过程</span>
-        <span className="text-neutral-700">{text.length} 字</span>
+        <span className="text-neutral-400">{text.length} 字</span>
       </button>
       {expanded && (
-        <div className="whitespace-pre-wrap border-t border-neutral-800/60 px-3 py-2 text-xs leading-relaxed text-neutral-500">
+        <div className="whitespace-pre-wrap border-t border-neutral-200 px-3 py-2 text-xs leading-relaxed text-neutral-500">
           {text}
         </div>
       )}

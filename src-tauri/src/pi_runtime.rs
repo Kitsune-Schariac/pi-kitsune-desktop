@@ -203,9 +203,16 @@ impl PiRuntime {
 
     // --- fire-and-forget 命令 (回复走事件流) ---
 
-    pub async fn send_prompt(&mut self, message: String) -> Result<(), String> {
-        self.send_command(serde_json::json!({ "type": "prompt", "message": message }))
-            .await
+    pub async fn send_prompt(
+        &mut self,
+        message: String,
+        images: Option<Vec<serde_json::Value>>,
+    ) -> Result<(), String> {
+        let mut cmd = serde_json::json!({ "type": "prompt", "message": message });
+        if let Some(imgs) = images {
+            cmd["images"] = serde_json::Value::Array(imgs);
+        }
+        self.send_command(cmd).await
     }
 
     pub async fn abort(&mut self) -> Result<(), String> {
@@ -240,6 +247,33 @@ impl PiRuntime {
 
     pub async fn get_available_thinking_levels(&mut self) -> Result<serde_json::Value, String> {
         Self::extract_data(self.send_request(serde_json::json!({ "type": "get_available_thinking_levels" })).await?)
+    }
+
+    // --- M4: 会话切换 / 历史 / 统计 / 重命名 ---
+
+    /// 切换加载历史 session 文件; Ok(true) = 被扩展取消
+    pub async fn switch_session(&mut self, session_path: String) -> Result<bool, String> {
+        let data = Self::extract_data(
+            self.send_request(serde_json::json!({ "type": "switch_session", "sessionPath": session_path }))
+                .await?,
+        )?;
+        Ok(data.get("cancelled").and_then(|v| v.as_bool()).unwrap_or(false))
+    }
+
+    /// 拉取会话全量历史条目 (append 序, 含压缩前历史与分支)
+    pub async fn get_entries(&mut self) -> Result<serde_json::Value, String> {
+        Self::extract_data(self.send_request(serde_json::json!({ "type": "get_entries" })).await?)
+    }
+
+    /// token/成本/context window 统计 (全 session 累计)
+    pub async fn get_session_stats(&mut self) -> Result<serde_json::Value, String> {
+        Self::extract_data(self.send_request(serde_json::json!({ "type": "get_session_stats" })).await?)
+    }
+
+    /// 设置会话显示名 (写入 session jsonl, pi 原生支持)
+    pub async fn set_session_name(&mut self, name: String) -> Result<(), String> {
+        Self::extract_data(self.send_request(serde_json::json!({ "type": "set_session_name", "name": name })).await?)?;
+        Ok(())
     }
 
     /// 停止 pi 子进程; Windows 上 taskkill /T 杀整个进程树 (cmd /c 派生的 node 进程也要带走)

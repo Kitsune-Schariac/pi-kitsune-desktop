@@ -3,16 +3,16 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
-  background: #0a0a0a;
+  background: #ffffff;
 }
 
-/* 自定义滚动条: 暗色主题下默认滚动条太亮 */
+/* 自定义滚动条: 浅色下用中性灰, 保持细窄 */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

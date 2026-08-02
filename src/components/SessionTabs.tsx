@@ -8,7 +8,7 @@ function shortName(cwd: string): string {
 }
 
 // 顶部多 session 标签栏: 切换/关闭/新建
-export function SessionTabs({ onNew }: { onNew: () => void }) {
+export function SessionTabs({ onNew }: { onNew?: () => void }) {
   const sessionOrder = useSessionStore((s) => s.sessionOrder);
   const sessions = useSessionStore((s) => s.sessions);
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
@@ -16,7 +16,7 @@ export function SessionTabs({ onNew }: { onNew: () => void }) {
   const stopSession = useSessionStore((s) => s.stopSession);
 
   return (
-    <div className="flex items-center gap-1 border-b border-neutral-800 bg-neutral-950 px-2">
+    <div className="flex items-center gap-1 border-b border-neutral-200 bg-white px-2">
       {sessionOrder.map((sid) => {
         const s = sessions[sid];
         if (!s) return null;
@@ -26,8 +26,8 @@ export function SessionTabs({ onNew }: { onNew: () => void }) {
             onClick={() => setActiveSession(sid)}
             className={`group flex items-center gap-2 rounded-t-lg px-3 py-2 text-sm cursor-pointer transition ${
               sid === activeSessionId
-                ? "bg-neutral-900 text-neutral-100"
-                : "text-neutral-500 hover:bg-neutral-900/50 hover:text-neutral-300"
+                ? "bg-neutral-100 text-neutral-900"
+                : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700"
             }`}
           >
             <span className="max-w-[120px] truncate">{shortName(s.cwd)}</span>
@@ -39,7 +39,7 @@ export function SessionTabs({ onNew }: { onNew: () => void }) {
                   e.stopPropagation();
                   stopSession(sid);
                 }}
-                className="text-neutral-700 opacity-0 transition hover:text-red-400 group-hover:opacity-100"
+                className="text-neutral-300 opacity-0 transition hover:text-red-500 group-hover:opacity-100"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -47,13 +47,15 @@ export function SessionTabs({ onNew }: { onNew: () => void }) {
           </div>
         );
       })}
-      <button
-        onClick={onNew}
-        className="flex items-center justify-center rounded px-2 py-2 text-neutral-600 transition hover:bg-neutral-900 hover:text-neutral-300"
-        title="新建会话"
-      >
-        <Plus className="h-4 w-4" />
-      </button>
+      {onNew && (
+        <button
+          onClick={onNew}
+          className="flex items-center justify-center rounded px-2 py-2 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+          title="新建会话"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      )}
     </div>
   );
 }
