@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSessionStore } from "./store/session";
 import { MessageList } from "./components/MessageList";
 import { InputBar } from "./components/InputBar";
+import { ModelPicker } from "./components/ModelPicker";
 import { Terminal, FolderOpen, Loader2 } from "lucide-react";
 
 export default function App() {
@@ -11,6 +12,8 @@ export default function App() {
   const cwd = useSessionStore((s) => s.cwd);
   const startSession = useSessionStore((s) => s.startSession);
   const stopSession = useSessionStore((s) => s.stopSession);
+  const steeringQueue = useSessionStore((s) => s.steeringQueue);
+  const followUpQueue = useSessionStore((s) => s.followUpQueue);
 
   const [cwdInput, setCwdInput] = useState("");
   const [connecting, setConnecting] = useState(false);
@@ -70,17 +73,28 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen flex-col bg-neutral-950 text-neutral-100">
       <header className="flex items-center justify-between border-b border-neutral-800 px-6 py-3">
-        <div className="flex items-center gap-2">
-          <Terminal className="h-5 w-5 text-orange-400" />
-          <span className="font-medium">Pi Kitsune</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Terminal className="h-5 w-5 text-orange-400" />
+            <span className="font-medium">Pi Kitsune</span>
+          </div>
           {isStreaming && (
             <span className="flex items-center gap-1 text-xs text-neutral-500">
               <Loader2 className="h-3 w-3 animate-spin" />
               思考中
             </span>
           )}
+          <ModelPicker />
         </div>
         <div className="flex items-center gap-3 text-sm text-neutral-500">
+          {(steeringQueue.length > 0 || followUpQueue.length > 0) && (
+            <span
+              className="rounded bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400"
+              title={`steer: ${steeringQueue.length}, followUp: ${followUpQueue.length}`}
+            >
+              队列 {steeringQueue.length + followUpQueue.length}
+            </span>
+          )}
           <span className="max-w-xs truncate" title={cwd}>
             {cwd}
           </span>

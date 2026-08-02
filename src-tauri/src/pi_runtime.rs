@@ -1,18 +1,28 @@
+use std::collections::HashMap;
 use std::process::Stdio;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
+use tokio::sync::{oneshot, Mutex};
 
-/// 一个 `pi --mode rpc` 子进程的封装: 持有 stdin 写入端 + 子进程句柄
+/// pi RPC 命令的待响应表: id → oneshot sender
+/// 发命令时生成 id 存入, stdout reader 收到对应 response 后取出唤醒, 实现 request-response 关联
+type PendingRequests = Arc<Mutex<HashMap<String, oneshot::Sender<serde_json::Value>>>>;
+
+/// 一个 `pi --mode rpc` 子进程的封装
 pub struct PiRuntime {
     #[allow(dead_code)] // M3 RuntimePool 会读取
     pub session_id: String,
     child: Child,
     stdin: ChildStdin,
+    pending: PendingRequests,
+    id_counter: Arc<AtomicU64>,
 }
 
 impl PiRuntime {
-    /// 启动 pi sidecar: spawn `pi --mode rpc`, 后台读 stdout 按 \n 切帧转发事件给前端
+    /// 启动 pi sidecar: spawn `pi --mode rpc`, 后台读 stdout 分流 (response 走 pending, event 走 pi_event)
     pub async fn spawn(
         app: AppHandle,
         session_id: String,
@@ -41,7 +51,10 @@ impl PiRuntime {
         let stdout = child.stdout.take().ok_or("无法获取 pi stdout")?;
         let stderr = child.stderr.take();
 
-        // 后台 task: 按 \n 切帧读 stdout → 解析 JSON → emit 给前端
+        let pending: PendingRequests = Arc::new(Mutex::new(HashMap::new()));
+        let pending_for_reader = pending.clone();
+
+        // 后台 task: 按 \n 切帧读 stdout, 分流 response 和 event
         // 铁律: 严格按 \n 切, 不用会处理 U+2028/U+2029 的通用 line reader (Node readline 的坑, 这俩在 JSON 字符串里合法)
         let sid = session_id.clone();
         tokio::spawn(async move {
@@ -63,10 +76,28 @@ impl PiRuntime {
                             continue;
                         }
                         match serde_json::from_slice::<serde_json::Value>(line) {
-                            Ok(event) => {
+                            Ok(frame) => {
+                                // 分流: type="response" 且带 id 的帧 → 走 pending channel 交给 send_request
+                                let is_response = frame.get("type").and_then(|v| v.as_str())
+                                    == Some("response");
+                                let id = frame
+                                    .get("id")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string());
+                                if is_response {
+                                    if let Some(id) = id {
+                                        let mut guard = pending_for_reader.lock().await;
+                                        if let Some(sender) = guard.remove(&id) {
+                                            let _ = sender.send(frame);
+                                            continue;
+                                        }
+                                    }
+                                    // 没匹配到 pending 的 response fallthrough 走事件流 (过期/无 id)
+                                }
+                                // event 或无 id response → emit pi_event
                                 let _ = app.emit("pi_event", serde_json::json!({
                                     "sessionId": &sid,
-                                    "event": event,
+                                    "event": frame,
                                 }));
                             }
                             Err(e) => {
@@ -101,10 +132,16 @@ impl PiRuntime {
             });
         }
 
-        Ok(PiRuntime { session_id, child, stdin })
+        Ok(PiRuntime {
+            session_id,
+            child,
+            stdin,
+            pending,
+            id_counter: Arc::new(AtomicU64::new(0)),
+        })
     }
 
-    /// 写一个 RPC 命令到 pi stdin (JSON 序列化 + \n)
+    /// fire-and-forget: 写命令到 pi stdin (JSON + \n), 不等响应 (prompt/abort 用, 真正回复走事件流)
     async fn send_command(&mut self, command: serde_json::Value) -> Result<(), String> {
         let line = serde_json::to_string(&command).map_err(|e| e.to_string())?;
         self.stdin
@@ -118,6 +155,54 @@ impl PiRuntime {
         Ok(())
     }
 
+    /// request-response: 发带 id 的命令, 注册 oneshot, 等 stdout reader 按 id 回送 response
+    async fn send_request(
+        &mut self,
+        command: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let id = format!("req-{}", self.id_counter.fetch_add(1, Ordering::SeqCst));
+        let mut cmd = command;
+        if let Some(obj) = cmd.as_object_mut() {
+            obj.insert("id".into(), serde_json::json!(id));
+        }
+        let (tx, rx) = oneshot::channel();
+        self.pending.lock().await.insert(id.clone(), tx);
+
+        let line = serde_json::to_string(&cmd).map_err(|e| e.to_string())?;
+        self.stdin
+            .write_all(line.as_bytes())
+            .await
+            .map_err(|e| format!("写 pi stdin 失败: {e}"))?;
+        self.stdin
+            .write_all(b"\n")
+            .await
+            .map_err(|e| format!("写换行失败: {e}"))?;
+
+        // 30s 超时防 pi 不响应; 超时/错误后清理 pending 表防泄漏
+        match tokio::time::timeout(std::time::Duration::from_secs(30), rx).await {
+            Ok(Ok(resp)) => Ok(resp),
+            Ok(Err(_)) => {
+                self.pending.lock().await.remove(&id);
+                Err("pi 响应通道关闭".into())
+            }
+            Err(_) => {
+                self.pending.lock().await.remove(&id);
+                Err("等待 pi 响应超时 (30s)".into())
+            }
+        }
+    }
+
+    /// 从 response 里取 data, 失败取 error
+    fn extract_data(resp: serde_json::Value) -> Result<serde_json::Value, String> {
+        if resp.get("success").and_then(|v| v.as_bool()) == Some(true) {
+            Ok(resp.get("data").cloned().unwrap_or(serde_json::Value::Null))
+        } else {
+            Err(resp.get("error").and_then(|v| v.as_str()).unwrap_or("未知错误").to_string())
+        }
+    }
+
+    // --- fire-and-forget 命令 (回复走事件流) ---
+
     pub async fn send_prompt(&mut self, message: String) -> Result<(), String> {
         self.send_command(serde_json::json!({ "type": "prompt", "message": message }))
             .await
@@ -125,6 +210,36 @@ impl PiRuntime {
 
     pub async fn abort(&mut self) -> Result<(), String> {
         self.send_command(serde_json::json!({ "type": "abort" })).await
+    }
+
+    // --- request-response 命令 (同步返回 data) ---
+
+    pub async fn get_state(&mut self) -> Result<serde_json::Value, String> {
+        Self::extract_data(self.send_request(serde_json::json!({ "type": "get_state" })).await?)
+    }
+
+    pub async fn get_available_models(&mut self) -> Result<serde_json::Value, String> {
+        Self::extract_data(self.send_request(serde_json::json!({ "type": "get_available_models" })).await?)
+    }
+
+    pub async fn set_model(&mut self, provider: String, model_id: String) -> Result<serde_json::Value, String> {
+        Self::extract_data(self.send_request(serde_json::json!({ "type": "set_model", "provider": provider, "modelId": model_id })).await?)
+    }
+
+    pub async fn cycle_model(&mut self) -> Result<serde_json::Value, String> {
+        Self::extract_data(self.send_request(serde_json::json!({ "type": "cycle_model" })).await?)
+    }
+
+    pub async fn set_thinking_level(&mut self, level: String) -> Result<serde_json::Value, String> {
+        Self::extract_data(self.send_request(serde_json::json!({ "type": "set_thinking_level", "level": level })).await?)
+    }
+
+    pub async fn cycle_thinking_level(&mut self) -> Result<serde_json::Value, String> {
+        Self::extract_data(self.send_request(serde_json::json!({ "type": "cycle_thinking_level" })).await?)
+    }
+
+    pub async fn get_available_thinking_levels(&mut self) -> Result<serde_json::Value, String> {
+        Self::extract_data(self.send_request(serde_json::json!({ "type": "get_available_thinking_levels" })).await?)
     }
 
     /// 停止 pi 子进程; Windows 上 taskkill /T 杀整个进程树 (cmd /c 派生的 node 进程也要带走)

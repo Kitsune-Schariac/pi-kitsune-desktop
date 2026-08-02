@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useSessionStore } from "../store/session";
 import { ToolCallCard } from "./ToolCallCard";
+import { ThinkingBlock } from "./ThinkingBlock";
 import { User, Bot } from "lucide-react";
 
 export function MessageList() {
@@ -48,6 +49,7 @@ export function MessageList() {
                     : "bg-neutral-900 text-neutral-200"
                 }`}
               >
+                {e.thinking && <ThinkingBlock text={e.thinking} />}
                 {e.text ||
                   (e.role === "assistant" && (
                     <span className="animate-pulse text-neutral-600">…</span>

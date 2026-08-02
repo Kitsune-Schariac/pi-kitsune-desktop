@@ -1,13 +1,52 @@
 import type { ChatEntry } from "../store/session";
 import { Terminal, Wrench, Loader2, CheckCircle2, XCircle } from "lucide-react";
 
-// 工具图标映射: 只对 bash 特化, 其余用通用扳手
 const toolIcons: Record<string, typeof Terminal> = {
   bash: Terminal,
   edit: Wrench,
   write: Wrench,
   read: Wrench,
 };
+
+// 从 pi 的 tool result 里提取文本 (result.content[].text)
+function extractResultText(result: unknown): string {
+  if (typeof result === "string") return result;
+  if (result && typeof result === "object") {
+    const r = result as { content?: unknown[] };
+    if (Array.isArray(r.content)) {
+      const texts = r.content
+        .filter(
+          (c): c is { type: string; text: string } =>
+            typeof c === "object" &&
+            c !== null &&
+            (c as { type?: string }).type === "text"
+        )
+        .map((c) => c.text || "");
+      if (texts.length) return texts.join("\n");
+    }
+  }
+  return "";
+}
+
+// diff 行着色: + 绿 - 红 @@ 灰
+function DiffView({ text }: { text: string }) {
+  const lines = text.split("\n");
+  return (
+    <pre className="mt-2 max-h-64 overflow-auto rounded bg-neutral-950/60 p-2 text-xs leading-relaxed">
+      {lines.map((line, i) => {
+        let cls = "text-neutral-400";
+        if (line.startsWith("+")) cls = "text-green-400";
+        else if (line.startsWith("-")) cls = "text-red-400";
+        else if (line.startsWith("@@")) cls = "text-neutral-600";
+        return (
+          <div key={i} className={cls}>
+            {line || " "}
+          </div>
+        );
+      })}
+    </pre>
+  );
+}
 
 export function ToolCallCard({ entry }: { entry: ChatEntry }) {
   const Icon = toolIcons[entry.toolName || ""] || Wrench;
@@ -16,6 +55,9 @@ export function ToolCallCard({ entry }: { entry: ChatEntry }) {
       ? entry.args
       : JSON.stringify(entry.args, null, 2)
     : "";
+  const resultText = entry.result ? extractResultText(entry.result) : "";
+  const isDiff = entry.toolName === "edit" || entry.toolName === "write";
+  const isBash = entry.toolName === "bash";
 
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-3 text-sm">
@@ -37,11 +79,16 @@ export function ToolCallCard({ entry }: { entry: ChatEntry }) {
           {argsStr}
         </pre>
       )}
-      {entry.result != null && (
+      {/* 工具结果差异化渲染 */}
+      {resultText && isDiff && <DiffView text={resultText} />}
+      {resultText && isBash && (
+        <pre className="mt-2 max-h-48 overflow-auto rounded bg-black/70 p-2 font-mono text-xs text-green-300/80">
+          {resultText}
+        </pre>
+      )}
+      {resultText && !isDiff && !isBash && (
         <pre className="mt-2 max-h-48 overflow-auto rounded bg-neutral-950/60 p-2 text-xs text-neutral-400">
-          {typeof entry.result === "string"
-            ? entry.result
-            : JSON.stringify(entry.result, null, 2)}
+          {resultText}
         </pre>
       )}
     </div>

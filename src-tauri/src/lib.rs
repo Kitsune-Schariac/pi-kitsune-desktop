@@ -63,6 +63,57 @@ async fn stop_session(state: State<'_, SharedRuntime>) -> Result<(), String> {
     Ok(())
 }
 
+// --- M2: 模型与思考级别控制 (request-response, 同步返回) ---
+
+#[tauri::command]
+async fn get_state(state: State<'_, SharedRuntime>) -> Result<serde_json::Value, String> {
+    let mut guard = state.lock().await;
+    let runtime = guard.as_mut().ok_or("没有活跃的 session")?;
+    runtime.get_state().await
+}
+
+#[tauri::command]
+async fn get_available_models(state: State<'_, SharedRuntime>) -> Result<serde_json::Value, String> {
+    let mut guard = state.lock().await;
+    let runtime = guard.as_mut().ok_or("没有活跃的 session")?;
+    runtime.get_available_models().await
+}
+
+#[tauri::command]
+async fn set_model(state: State<'_, SharedRuntime>, provider: String, model_id: String) -> Result<serde_json::Value, String> {
+    let mut guard = state.lock().await;
+    let runtime = guard.as_mut().ok_or("没有活跃的 session")?;
+    runtime.set_model(provider, model_id).await
+}
+
+#[tauri::command]
+async fn cycle_model(state: State<'_, SharedRuntime>) -> Result<serde_json::Value, String> {
+    let mut guard = state.lock().await;
+    let runtime = guard.as_mut().ok_or("没有活跃的 session")?;
+    runtime.cycle_model().await
+}
+
+#[tauri::command]
+async fn set_thinking_level(state: State<'_, SharedRuntime>, level: String) -> Result<serde_json::Value, String> {
+    let mut guard = state.lock().await;
+    let runtime = guard.as_mut().ok_or("没有活跃的 session")?;
+    runtime.set_thinking_level(level).await
+}
+
+#[tauri::command]
+async fn cycle_thinking_level(state: State<'_, SharedRuntime>) -> Result<serde_json::Value, String> {
+    let mut guard = state.lock().await;
+    let runtime = guard.as_mut().ok_or("没有活跃的 session")?;
+    runtime.cycle_thinking_level().await
+}
+
+#[tauri::command]
+async fn get_available_thinking_levels(state: State<'_, SharedRuntime>) -> Result<serde_json::Value, String> {
+    let mut guard = state.lock().await;
+    let runtime = guard.as_mut().ok_or("没有活跃的 session")?;
+    runtime.get_available_thinking_levels().await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -71,7 +122,14 @@ pub fn run() {
             start_session,
             send_prompt,
             abort_session,
-            stop_session
+            stop_session,
+            get_state,
+            get_available_models,
+            set_model,
+            cycle_model,
+            set_thinking_level,
+            cycle_thinking_level,
+            get_available_thinking_levels
         ])
         .on_window_event(|window, event| {
             // 窗口关闭时清理 pi 子进程, 不留僵尸进程
