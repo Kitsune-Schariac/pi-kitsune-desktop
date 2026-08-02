@@ -23,6 +23,7 @@ out/
 
 # ===== Rust / Tauri 构建产物 =====
 src-tauri/target/
+src-tauri/gen/
 target/
 
 # ===== Tauri sidecar 二进制 (pi 编译产物, 打包时再处理) =====
