@@ -11,9 +11,15 @@ use tokio::sync::Mutex;
 const POOL_CAPACITY: usize = 6;
 
 /// 多 session 运行时池: HashMap 管理多个 pi sidecar, LRU 淘汰最久未活动的
+/// M4.5: 预热槽 (warm) — 打开会话后后台预 spawn 同 cwd 的 pi, 下次点击直接复用
 struct RuntimePool {
     runtimes: HashMap<String, PiRuntime>,
     last_active: HashMap<String, Instant>,
+    /// 预热好的空闲 runtime (cwd 匹配时复用, 避免 pi 冷启动 ~3.5s)
+    warm: Option<PiRuntime>,
+    warm_cwd: Option<String>,
+    /// 预热 spawn 进行中 (防并发重复预热)
+    warming: bool,
 }
 
 impl RuntimePool {
@@ -21,12 +27,56 @@ impl RuntimePool {
         Self {
             runtimes: HashMap::new(),
             last_active: HashMap::new(),
+            warm: None,
+            warm_cwd: None,
+            warming: false,
         }
     }
 
     /// 更新 session 最近活动时间 (LRU 依据)
     fn touch(&mut self, session_id: &str) {
         self.last_active.insert(session_id.to_string(), Instant::now());
+    }
+
+    /// 取预热 runtime: cwd 匹配才复用, 否则 None (调用方负责替换/丢弃)
+    fn take_warm(&mut self, cwd: &str) -> Option<PiRuntime> {
+        if self.warm_cwd.as_deref() == Some(cwd) {
+            self.warming = false;
+            self.warm_cwd = None;
+            self.warm.take()
+        } else {
+            None
+        }
+    }
+
+    /// 丢弃不匹配的 warm (cwd 变化): 异步 stop 不阻塞调用方
+    fn drop_warm(&mut self) {
+        if let Some(mut rt) = self.warm.take() {
+            self.warm_cwd = None;
+            tauri::async_runtime::spawn(async move {
+                let _ = rt.stop().await;
+            });
+        }
+        self.warming = false;
+    }
+
+    /// 标记预热进行中 (防并发重复); 返回 false = 已有预热在跑
+    fn mark_warming(&mut self) -> bool {
+        if self.warming || self.warm.is_some() {
+            false
+        } else {
+            self.warming = true;
+            true
+        }
+    }
+
+    /// 预热完成回写 (无论成败都清标志)
+    fn finish_warming(&mut self, cwd: String, rt: Result<PiRuntime, String>) {
+        self.warming = false;
+        if let Ok(rt) = rt {
+            self.warm = Some(rt);
+            self.warm_cwd = Some(cwd);
+        }
     }
 
     /// 超过 capacity 时淘汰最久未活动的 runtime (graceful stop)
@@ -52,13 +102,20 @@ impl RuntimePool {
             let _ = rt.stop().await;
         }
         self.last_active.clear();
+        if let Some(mut rt) = self.warm.take() {
+            let _ = rt.stop().await;
+        }
+        self.warm_cwd = None;
+        self.warming = false;
     }
 }
 
 type SharedRuntime = Arc<Mutex<RuntimePool>>;
 
 /// 启动一个 pi sidecar 会话, 返回 sessionId (不替换已有 session, 多个并存)
-/// session_path 存在时: spawn 后 switch_session 加载历史会话文件
+/// session_path 存在时: switch_session 加载历史会话文件
+/// M4.5: 优先复用预热 runtime (cwd 匹配); 完成后后台预热同 cwd 的下一个
+/// 慢操作 (spawn/switch) 不持有全局锁, 避免并发打开会话互相阻塞
 #[tauri::command]
 async fn start_session(
     app: tauri::AppHandle,
@@ -75,9 +132,29 @@ async fn start_session(
             .map_err(|e| e.to_string())?
             .as_millis()
     );
-    let mut runtime = PiRuntime::spawn(app, session_id.clone(), cwd, provider, model).await?;
-    // 加载历史会话: 切换失败或被扩展取消时停掉 runtime, 防止僵尸 pi 进程
+
+    // 阶段 1 (锁内, 快速): 取 warm / 丢弃不匹配 warm / 标记预热 (防并发重复)
+    let warm_rt;
+    let need_warm_up = {
+        let mut guard = state.lock().await;
+        warm_rt = match guard.take_warm(&cwd) {
+            Some(rt) => Some(rt),
+            None => {
+                guard.drop_warm();
+                None
+            }
+        };
+        // 无论 warm 是否命中都触发下一轮预热, 保证连续切换始终命中
+        guard.mark_warming()
+    };
+
+    // 阶段 2 (无锁, 慢操作): spawn (或复用 warm) + switch_session
+    let mut runtime = match warm_rt {
+        Some(rt) => rt,
+        None => PiRuntime::spawn(app.clone(), session_id.clone(), cwd.clone(), provider, model).await?,
+    };
     if let Some(path) = session_path {
+        // 加载历史会话: 切换失败或被扩展取消时停掉 runtime, 防止僵尸 pi 进程
         match runtime.switch_session(path).await {
             Ok(true) => {
                 runtime.stop().await?;
@@ -90,10 +167,33 @@ async fn start_session(
             }
         }
     }
-    let mut guard = state.lock().await;
-    guard.runtimes.insert(session_id.clone(), runtime);
-    guard.touch(&session_id);
-    guard.evict_lru().await;
+
+    // 阶段 3 (锁内, 快速): 入池 + 触发后台预热
+    {
+        let mut guard = state.lock().await;
+        guard.runtimes.insert(session_id.clone(), runtime);
+        guard.touch(&session_id);
+        guard.evict_lru().await;
+    }
+    // 预热: spawn 同 cwd 的 pi 存槽 (spawn 本身 ~10ms, pi 的 3.5s 初始化在后台自然度过;
+    // 预热不写 session 文件, 复用后 switch_session 绑定真实会话)
+    if need_warm_up {
+        let state2 = state.inner().clone();
+        let cwd2 = cwd.clone();
+        let app2 = app.clone();
+        let warm_sid = format!(
+            "warm_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| e.to_string())?
+                .as_millis()
+        );
+        tauri::async_runtime::spawn(async move {
+            let rt = PiRuntime::spawn(app2, warm_sid, cwd2.clone(), None, None).await;
+            let mut guard = state2.lock().await;
+            guard.finish_warming(cwd2, rt);
+        });
+    }
     Ok(session_id)
 }
 
