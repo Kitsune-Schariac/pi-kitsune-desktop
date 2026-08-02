@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { ChatEntry } from "../store/session";
 import { Terminal, Wrench, Loader2, CheckCircle2, XCircle } from "lucide-react";
 
@@ -48,7 +49,7 @@ function DiffView({ text }: { text: string }) {
   );
 }
 
-export function ToolCallCard({ entry }: { entry: ChatEntry }) {
+export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatEntry }) {
   const Icon = toolIcons[entry.toolName || ""] || Wrench;
   const argsStr = entry.args
     ? typeof entry.args === "string"
@@ -93,4 +94,4 @@ export function ToolCallCard({ entry }: { entry: ChatEntry }) {
       )}
     </div>
   );
-}
+});

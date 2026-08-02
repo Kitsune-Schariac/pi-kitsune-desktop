@@ -1,20 +1,43 @@
 import { useEffect, useRef } from "react";
 import { useSessionStore } from "../store/session";
 import { ToolCallCard } from "./ToolCallCard";
-import { ThinkingBlock } from "./ThinkingBlock";
-import { User, Bot } from "lucide-react";
+import { MessageItem } from "./MessageItem";
 
 export function MessageList() {
   const entries = useSessionStore((s) => s.entries);
+  const containerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  // 是否自动跟随滚动: 用户主动上滑查看历史时暂停, 回到底部后恢复
+  const autoScrollRef = useRef(true);
+  const prevLenRef = useRef(0);
 
-  // 新内容到达时自动滚到底部
+  const handleScroll = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    // 距底部 < 80px 视为"在底部", 允许自动跟随
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    autoScrollRef.current = atBottom;
+  };
+
+  // entries 变化时滚动: 新消息强制跟随, 流式 delta 只在用户在底部时跟随
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    const newLen = entries.length;
+    const isNewMessage = newLen > prevLenRef.current;
+    if (isNewMessage) autoScrollRef.current = true;
+    prevLenRef.current = newLen;
+
+    if (autoScrollRef.current) {
+      // 新消息平滑滚动, 流式 delta 瞬间跳 (避免 smooth 动画堆积卡顿)
+      endRef.current?.scrollIntoView({ behavior: isNewMessage ? "smooth" : "auto" });
+    }
   }, [entries]);
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-4">
+    <div
+      ref={containerRef}
+      onScroll={handleScroll}
+      className="flex-1 overflow-y-auto px-6 py-4"
+    >
       <div className="mx-auto max-w-3xl space-y-4">
         {entries.length === 0 && (
           <div className="py-20 text-center text-neutral-600">
@@ -23,39 +46,7 @@ export function MessageList() {
         )}
         {entries.map((e) =>
           e.kind === "message" ? (
-            <div
-              key={e.id}
-              className={`flex gap-3 ${
-                e.role === "user" ? "flex-row-reverse" : ""
-              }`}
-            >
-              <div
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                  e.role === "user"
-                    ? "bg-blue-500/10 text-blue-400"
-                    : "bg-orange-500/10 text-orange-400"
-                }`}
-              >
-                {e.role === "user" ? (
-                  <User className="h-4 w-4" />
-                ) : (
-                  <Bot className="h-4 w-4" />
-                )}
-              </div>
-              <div
-                className={`min-w-0 max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                  e.role === "user"
-                    ? "bg-blue-500/10 text-neutral-100"
-                    : "bg-neutral-900 text-neutral-200"
-                }`}
-              >
-                {e.thinking && <ThinkingBlock text={e.thinking} />}
-                {e.text ||
-                  (e.role === "assistant" && (
-                    <span className="animate-pulse text-neutral-600">…</span>
-                  ))}
-              </div>
-            </div>
+            <MessageItem key={e.id} entry={e} />
           ) : (
             <ToolCallCard key={e.id} entry={e} />
           )
