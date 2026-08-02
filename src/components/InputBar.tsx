@@ -4,13 +4,17 @@ import { Send, Square } from "lucide-react";
 
 export function InputBar() {
   const [text, setText] = useState("");
-  const isStreaming = useSessionStore((s) => s.isStreaming);
+  const activeSessionId = useSessionStore((s) => s.activeSessionId);
+  const isStreaming = useSessionStore((s) => {
+    const a = s.activeSessionId ? s.sessions[s.activeSessionId] : null;
+    return a?.isStreaming ?? false;
+  });
   const sendPrompt = useSessionStore((s) => s.sendPrompt);
   const abort = useSessionStore((s) => s.abort);
 
   const handleSend = () => {
-    if (!text.trim() || isStreaming) return;
-    sendPrompt(text.trim());
+    if (!text.trim() || isStreaming || !activeSessionId) return;
+    sendPrompt(activeSessionId, text.trim());
     setText("");
   };
 
@@ -36,7 +40,7 @@ export function InputBar() {
         />
         {isStreaming ? (
           <button
-            onClick={abort}
+            onClick={() => activeSessionId && abort(activeSessionId)}
             className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/20 text-red-400 transition hover:bg-red-500/30"
             title="中止"
           >

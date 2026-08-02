@@ -4,7 +4,10 @@ import { ToolCallCard } from "./ToolCallCard";
 import { MessageItem } from "./MessageItem";
 
 export function MessageList() {
-  const entries = useSessionStore((s) => s.entries);
+  const entries = useSessionStore((s) => {
+  const a = s.activeSessionId ? s.sessions[s.activeSessionId] : null;
+  return a?.entries ?? [];
+});
   const containerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   // 是否自动跟随滚动: 用户主动上滑查看历史时暂停, 回到底部后恢复

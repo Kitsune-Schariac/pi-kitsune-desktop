@@ -1,15 +1,12 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 
-// 对话流里的条目: 消息 或 工具调用, 按时间顺序排列
 export interface ChatEntry {
   id: string;
   kind: "message" | "tool";
-  // message 字段
   role?: "user" | "assistant";
   text?: string;
-  thinking?: string; // M2: 推理过程, 和正文分开渲染 (折叠面板)
-  // tool 字段
+  thinking?: string;
   toolCallId?: string;
   toolName?: string;
   args?: unknown;
@@ -17,241 +14,235 @@ export interface ChatEntry {
   result?: unknown;
 }
 
-// M2: 模型信息 (从 pi get_available_models / get_state 返回里提取)
 export interface ModelInfo {
   id: string;
   name: string;
   provider: string;
 }
 
-interface SessionStore {
-  // M1: 会话与对话
-  sessionId: string | null;
+// 单个 session 的完整状态 (M3: 多 session, 每个 session 独立)
+interface SessionState {
+  sessionId: string;
   cwd: string;
   isStreaming: boolean;
   entries: ChatEntry[];
   currentAssistantId: string | null;
   error: string | null;
-
-  // M2: 模型与思考级别
   currentModel: ModelInfo | null;
   thinkingLevel: string;
   availableModels: ModelInfo[];
   availableThinkingLevels: string[];
-
-  // M2: steer/followUp 待处理队列
   steeringQueue: string[];
   followUpQueue: string[];
-
-  // M1 actions
-  startSession: (cwd: string, provider?: string, model?: string) => Promise<void>;
-  sendPrompt: (text: string) => Promise<void>;
-  abort: () => Promise<void>;
-  stopSession: () => Promise<void>;
-  handleEvent: (event: Record<string, unknown>) => void;
-
-  // M2 actions
-  loadState: () => Promise<void>;
-  loadModels: () => Promise<void>;
-  setModel: (provider: string, modelId: string) => Promise<void>;
-  cycleModel: () => Promise<void>;
-  setThinkingLevel: (level: string) => Promise<void>;
-  cycleThinkingLevel: () => Promise<void>;
-  loadThinkingLevels: () => Promise<void>;
 }
 
-export const useSessionStore = create<SessionStore>((set, get) => ({
-  sessionId: null,
-  cwd: "",
-  isStreaming: false,
-  entries: [],
-  currentAssistantId: null,
-  error: null,
-  currentModel: null,
-  thinkingLevel: "medium",
-  availableModels: [],
-  availableThinkingLevels: ["off"],
-  steeringQueue: [],
-  followUpQueue: [],
+interface SessionStore {
+  sessions: Record<string, SessionState>;
+  activeSessionId: string | null;
+  sessionOrder: string[];
 
-  startSession: async (cwd, provider, model) => {
-    const id = await invoke<string>("start_session", { cwd, provider, model });
-    set({ sessionId: id, cwd, entries: [], isStreaming: false, error: null });
-    // M2: 连接成功后拉取模型状态 + 列表 + 思考级别
-    await Promise.all([get().loadState(), get().loadModels(), get().loadThinkingLevels()]);
-  },
+  startSession: (cwd: string, provider?: string, model?: string) => Promise<string>;
+  stopSession: (sessionId: string) => Promise<void>;
+  setActiveSession: (sessionId: string) => void;
+  sendPrompt: (sessionId: string, text: string) => Promise<void>;
+  abort: (sessionId: string) => Promise<void>;
+  setModel: (sessionId: string, provider: string, modelId: string) => Promise<void>;
+  cycleModel: (sessionId: string) => Promise<void>;
+  setThinkingLevel: (sessionId: string, level: string) => Promise<void>;
+  cycleThinkingLevel: (sessionId: string) => Promise<void>;
+  loadState: (sessionId: string) => Promise<void>;
+  loadModels: (sessionId: string) => Promise<void>;
+  loadThinkingLevels: (sessionId: string) => Promise<void>;
+  handleEvent: (payload: { sessionId: string; event: Record<string, unknown> }) => void;
+}
 
-  sendPrompt: async (text) => {
-    const { sessionId, entries } = get();
-    if (!sessionId || !text.trim()) return;
-    set({
-      entries: [...entries, { id: crypto.randomUUID(), kind: "message", role: "user", text }],
-      isStreaming: true,
+export const useSessionStore = create<SessionStore>((set, get) => {
+  // 更新指定 session 的部分字段 (闭包 helper, handleEvent/actions 复用)
+  const patch = (sessionId: string, fields: Partial<SessionState>) =>
+    set((state) => {
+      const s = state.sessions[sessionId];
+      if (!s) return state;
+      return { sessions: { ...state.sessions, [sessionId]: { ...s, ...fields } } };
     });
-    try {
-      await invoke("send_prompt", { message: text });
-    } catch (e) {
-      set({ isStreaming: false, error: String(e) });
-    }
-  },
 
-  abort: async () => {
-    try {
-      await invoke("abort_session");
-    } catch (e) {
-      set({ error: String(e) });
-    }
-  },
+  return {
+    sessions: {},
+    activeSessionId: null,
+    sessionOrder: [],
 
-  stopSession: async () => {
-    try {
-      await invoke("stop_session");
-    } catch {
-      // 忽略: 进程可能已退出
-    }
-    set({ sessionId: null, entries: [], isStreaming: false, currentAssistantId: null });
-  },
-
-  // 核心: 把 pi 流式事件映射成 GUI 状态更新
-  handleEvent: (event) => {
-    const type = event.type as string;
-    switch (type) {
-      case "agent_start":
-        set({ isStreaming: true });
-        break;
-
-      // assistant 消息开始: 追加一条空 assistant 消息, 记下 id 供后续 delta 追加
-      case "message_start": {
-        const msg = event.message as { role?: string; id?: string } | undefined;
-        if (msg?.role === "assistant") {
-          const id = msg.id || crypto.randomUUID();
-          set((state) => ({
-            entries: [...state.entries, { id, kind: "message", role: "assistant", text: "", thinking: "" }],
-            currentAssistantId: id,
-          }));
-        }
-        break;
-      }
-
-      // 流式 delta: text_delta 追加正文, thinking_delta 追加推理 (M2 新增)
-      case "message_update": {
-        const ev = event.assistantMessageEvent as { type?: string; delta?: string } | undefined;
-        const { currentAssistantId, entries } = get();
-        if (!currentAssistantId || !ev?.delta) break;
-        if (ev.type === "text_delta") {
-          set({
-            entries: entries.map((e) =>
-              e.id === currentAssistantId && e.kind === "message"
-                ? { ...e, text: (e.text || "") + ev.delta! }
-                : e
-            ),
-          });
-        } else if (ev.type === "thinking_delta") {
-          set({
-            entries: entries.map((e) =>
-              e.id === currentAssistantId && e.kind === "message"
-                ? { ...e, thinking: (e.thinking || "") + ev.delta! }
-                : e
-            ),
-          });
-        }
-        break;
-      }
-
-      case "message_end":
-        set({ currentAssistantId: null });
-        break;
-
-      case "tool_execution_start": {
-        const entry: ChatEntry = {
-          id: event.toolCallId as string,
-          kind: "tool",
-          toolCallId: event.toolCallId as string,
-          toolName: event.toolName as string,
-          args: event.args,
-          status: "running",
-        };
-        set((state) => ({ entries: [...state.entries, entry] }));
-        break;
-      }
-
-      case "tool_execution_end":
-        set((state) => ({
-          entries: state.entries.map((e) =>
-            e.kind === "tool" && e.toolCallId === event.toolCallId
-              ? { ...e, status: event.isError ? "error" : "done", result: event.result }
-              : e
-          ),
-        }));
-        break;
-
-      // M2: steer/followUp 队列变化
-      case "queue_update": {
-        const q = event as { steering?: string[]; followUp?: string[] };
-        set({ steeringQueue: q.steering || [], followUpQueue: q.followUp || [] });
-        break;
-      }
-
-      case "agent_settled":
-        set({ isStreaming: false, currentAssistantId: null });
-        break;
-
-      case "pi_process_exit":
-        set({ isStreaming: false, currentAssistantId: null, error: "pi 进程已退出" });
-        break;
-    }
-  },
-
-  // M2 actions: 模型与思考级别控制
-  loadState: async () => {
-    try {
-      const data = await invoke<Record<string, unknown>>("get_state");
-      const model = data.model as ModelInfo | null | undefined;
-      set({ currentModel: model || null, thinkingLevel: (data.thinkingLevel as string) || "medium" });
-    } catch { /* 忽略 */ }
-  },
-
-  loadModels: async () => {
-    try {
-      const data = await invoke<{ models: ModelInfo[] }>("get_available_models");
-      set({ availableModels: data.models || [] });
-    } catch { /* 忽略 */ }
+    startSession: async (cwd, provider, model) => {
+      const id = await invoke<string>("start_session", { cwd, provider, model });
+      set((state) => ({
+        sessions: {
+          ...state.sessions,
+          [id]: {
+            sessionId: id, cwd, isStreaming: false, entries: [], currentAssistantId: null,
+            error: null, currentModel: null, thinkingLevel: "medium",
+            availableModels: [], availableThinkingLevels: ["off"],
+            steeringQueue: [], followUpQueue: [],
+          },
+        },
+        activeSessionId: id,
+        sessionOrder: [...state.sessionOrder.filter((sid) => sid !== id), id],
+      }));
+      await Promise.all([get().loadState(id), get().loadModels(id), get().loadThinkingLevels(id)]);
+      return id;
     },
 
-  setModel: async (provider, modelId) => {
-    try {
-      const data = await invoke<ModelInfo>("set_model", { provider, modelId });
-      set({ currentModel: data });
-      // 换模型后 thinking levels 可能变, 重新拉取
-      await get().loadThinkingLevels();
-    } catch (e) { set({ error: String(e) }); }
-  },
+    stopSession: async (sessionId) => {
+      try { await invoke("stop_session", { sessionId }); } catch { /* ignore */ }
+      set((state) => {
+        const sessions = { ...state.sessions };
+        delete sessions[sessionId];
+        const sessionOrder = state.sessionOrder.filter((sid) => sid !== sessionId);
+        const activeSessionId = state.activeSessionId === sessionId
+          ? (sessionOrder[sessionOrder.length - 1] ?? null)
+          : state.activeSessionId;
+        return { sessions, sessionOrder, activeSessionId };
+      });
+    },
 
-  cycleModel: async () => {
-    try {
-      const data = await invoke<{ model: ModelInfo; thinkingLevel: string } | null>("cycle_model");
-      if (data?.model) set({ currentModel: data.model, thinkingLevel: data.thinkingLevel || get().thinkingLevel });
-    } catch { /* 忽略 */ }
-  },
+    setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
 
-  setThinkingLevel: async (level) => {
-    try {
-      await invoke("set_thinking_level", { level });
-      set({ thinkingLevel: level });
-    } catch (e) { set({ error: String(e) }); }
-  },
+    sendPrompt: async (sessionId, text) => {
+      const s = get().sessions[sessionId];
+      if (!s || !text.trim()) return;
+      patch(sessionId, {
+        entries: [...s.entries, { id: crypto.randomUUID(), kind: "message", role: "user", text }],
+        isStreaming: true,
+      });
+      try {
+        await invoke("send_prompt", { sessionId, message: text });
+      } catch (e) {
+        patch(sessionId, { isStreaming: false, error: String(e) });
+      }
+    },
 
-  cycleThinkingLevel: async () => {
-    try {
-      const data = await invoke<{ level: string } | null>("cycle_thinking_level");
-      if (data?.level) set({ thinkingLevel: data.level });
-    } catch { /* 忽略 */ }
-  },
+    abort: async (sessionId) => {
+      try { await invoke("abort_session", { sessionId }); }
+      catch (e) { patch(sessionId, { error: String(e) }); }
+    },
 
-  loadThinkingLevels: async () => {
-    try {
-      const data = await invoke<{ levels: string[] }>("get_available_thinking_levels");
-      set({ availableThinkingLevels: data.levels || ["off"] });
-    } catch { /* 忽略 */ }
-  },
-}));
+    loadState: async (sessionId) => {
+      try {
+        const data = await invoke<Record<string, unknown>>("get_state", { sessionId });
+        patch(sessionId, {
+          currentModel: (data.model as ModelInfo) || null,
+          thinkingLevel: (data.thinkingLevel as string) || "medium",
+        });
+      } catch { /* ignore */ }
+    },
+
+    loadModels: async (sessionId) => {
+      try {
+        const data = await invoke<{ models: ModelInfo[] }>("get_available_models", { sessionId });
+        patch(sessionId, { availableModels: data.models || [] });
+      } catch { /* ignore */ }
+    },
+
+    setModel: async (sessionId, provider, modelId) => {
+      try {
+        const data = await invoke<ModelInfo>("set_model", { sessionId, provider, modelId });
+        patch(sessionId, { currentModel: data });
+        await get().loadThinkingLevels(sessionId);
+      } catch (e) { patch(sessionId, { error: String(e) }); }
+    },
+
+    cycleModel: async (sessionId) => {
+      try {
+        const data = await invoke<{ model: ModelInfo; thinkingLevel: string } | null>("cycle_model", { sessionId });
+        if (data?.model) patch(sessionId, { currentModel: data.model, thinkingLevel: data.thinkingLevel || get().sessions[sessionId]?.thinkingLevel || "medium" });
+      } catch { /* ignore */ }
+    },
+
+    setThinkingLevel: async (sessionId, level) => {
+      try { await invoke("set_thinking_level", { sessionId, level }); patch(sessionId, { thinkingLevel: level }); }
+      catch (e) { patch(sessionId, { error: String(e) }); }
+    },
+
+    cycleThinkingLevel: async (sessionId) => {
+      try {
+        const data = await invoke<{ level: string } | null>("cycle_thinking_level", { sessionId });
+        if (data?.level) patch(sessionId, { thinkingLevel: data.level });
+      } catch { /* ignore */ }
+    },
+
+    loadThinkingLevels: async (sessionId) => {
+      try {
+        const data = await invoke<{ levels: string[] }>("get_available_thinking_levels", { sessionId });
+        patch(sessionId, { availableThinkingLevels: data.levels || ["off"] });
+      } catch { /* ignore */ }
+    },
+
+    handleEvent: (payload) => {
+      const { sessionId, event } = payload;
+      const s = get().sessions[sessionId];
+      if (!s) return;
+      const type = event.type as string;
+      switch (type) {
+        case "agent_start":
+          patch(sessionId, { isStreaming: true });
+          break;
+        case "message_start": {
+          const msg = event.message as { role?: string; id?: string } | undefined;
+          if (msg?.role === "assistant") {
+            const id = msg.id || crypto.randomUUID();
+            const cur = get().sessions[sessionId]!;
+            patch(sessionId, {
+              entries: [...cur.entries, { id, kind: "message", role: "assistant", text: "", thinking: "" }],
+              currentAssistantId: id,
+            });
+          }
+          break;
+        }
+        case "message_update": {
+          const ev = event.assistantMessageEvent as { type?: string; delta?: string } | undefined;
+          const cur = get().sessions[sessionId];
+          if (!cur || !cur.currentAssistantId || !ev?.delta) break;
+          if (ev.type === "text_delta") {
+            patch(sessionId, { entries: cur.entries.map((e) =>
+              e.id === cur.currentAssistantId && e.kind === "message" ? { ...e, text: (e.text || "") + ev.delta! } : e
+            )});
+          } else if (ev.type === "thinking_delta") {
+            patch(sessionId, { entries: cur.entries.map((e) =>
+              e.id === cur.currentAssistantId && e.kind === "message" ? { ...e, thinking: (e.thinking || "") + ev.delta! } : e
+            )});
+          }
+          break;
+        }
+        case "message_end":
+          patch(sessionId, { currentAssistantId: null });
+          break;
+        case "tool_execution_start": {
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          patch(sessionId, { entries: [...cur.entries, {
+            id: event.toolCallId as string, kind: "tool", toolCallId: event.toolCallId as string,
+            toolName: event.toolName as string, args: event.args, status: "running",
+          }]});
+          break;
+        }
+        case "tool_execution_end": {
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          patch(sessionId, { entries: cur.entries.map((e) =>
+            e.kind === "tool" && e.toolCallId === event.toolCallId
+              ? { ...e, status: event.isError ? "error" : "done", result: event.result } : e
+          )});
+          break;
+        }
+        case "queue_update": {
+          const q = event as { steering?: string[]; followUp?: string[] };
+          patch(sessionId, { steeringQueue: q.steering || [], followUpQueue: q.followUp || [] });
+          break;
+        }
+        case "agent_settled":
+          patch(sessionId, { isStreaming: false, currentAssistantId: null });
+          break;
+        case "pi_process_exit":
+          patch(sessionId, { isStreaming: false, currentAssistantId: null, error: "pi 进程已退出" });
+          break;
+      }
+    },
+  };
+});

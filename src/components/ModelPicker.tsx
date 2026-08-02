@@ -4,10 +4,23 @@ import { Cpu, ChevronDown, Brain, Layers } from "lucide-react";
 
 // header 里的 provider → model 两级选择 + thinking level 切换
 export function ModelPicker() {
-  const currentModel = useSessionStore((s) => s.currentModel);
-  const availableModels = useSessionStore((s) => s.availableModels);
-  const thinkingLevel = useSessionStore((s) => s.thinkingLevel);
-  const availableThinkingLevels = useSessionStore((s) => s.availableThinkingLevels);
+  const activeSessionId = useSessionStore((s) => s.activeSessionId);
+  const currentModel = useSessionStore((s) => {
+    const a = s.activeSessionId ? s.sessions[s.activeSessionId] : null;
+    return a?.currentModel ?? null;
+  });
+  const availableModels = useSessionStore((s) => {
+    const a = s.activeSessionId ? s.sessions[s.activeSessionId] : null;
+    return a?.availableModels ?? [];
+  });
+  const thinkingLevel = useSessionStore((s) => {
+    const a = s.activeSessionId ? s.sessions[s.activeSessionId] : null;
+    return a?.thinkingLevel ?? "medium";
+  });
+  const availableThinkingLevels = useSessionStore((s) => {
+    const a = s.activeSessionId ? s.sessions[s.activeSessionId] : null;
+    return a?.availableThinkingLevels ?? ["off"];
+  });
   const setModel = useSessionStore((s) => s.setModel);
   const setThinkingLevel = useSessionStore((s) => s.setThinkingLevel);
 
@@ -81,7 +94,7 @@ export function ModelPicker() {
               <button
                 key={m.id}
                 onClick={() => {
-                  setModel(m.provider, m.id);
+                  setModel(activeSessionId!, m.provider, m.id);
                   setModelOpen(false);
                 }}
                 className={`block w-full px-3 py-1.5 text-left text-xs transition hover:bg-neutral-800 ${
@@ -117,7 +130,7 @@ export function ModelPicker() {
                 <button
                   key={lv}
                   onClick={() => {
-                    setThinkingLevel(lv);
+                    setThinkingLevel(activeSessionId!, lv);
                     setLevelOpen(false);
                   }}
                   className={`block w-full px-3 py-1 text-left text-xs uppercase transition hover:bg-neutral-800 ${

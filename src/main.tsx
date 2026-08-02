@@ -10,7 +10,7 @@ import "./index.css";
 // 而 listen() 是 async, cleanup 时 listener 可能还没注册完导致泄漏,
 // 两个监听器会让每个 text_delta 被处理两次 → 流式文字翻倍重复
 listen<{ sessionId: string; event: Record<string, unknown> }>("pi_event", (e) => {
-  useSessionStore.getState().handleEvent(e.payload.event);
+  useSessionStore.getState().handleEvent(e.payload);
 });
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
