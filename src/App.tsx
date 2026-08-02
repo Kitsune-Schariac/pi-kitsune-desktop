@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { useState } from "react";
 import { useSessionStore } from "./store/session";
 import { MessageList } from "./components/MessageList";
 import { InputBar } from "./components/InputBar";
@@ -15,19 +14,6 @@ export default function App() {
 
   const [cwdInput, setCwdInput] = useState("");
   const [connecting, setConnecting] = useState(false);
-
-  // 监听 pi 事件: 只 setup 一次, 用 getState() 取最新 handleEvent 避免闭包陈旧
-  useEffect(() => {
-    let un: (() => void) | null = null;
-    listen<{ sessionId: string; event: Record<string, unknown> }>("pi_event", (e) => {
-      useSessionStore.getState().handleEvent(e.payload.event);
-    }).then((fn) => {
-      un = fn;
-    });
-    return () => {
-      un?.();
-    };
-  }, []);
 
   const handleConnect = async () => {
     if (!cwdInput.trim()) return;
