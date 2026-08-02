@@ -1,0 +1,38 @@
+# ===== AI 工具私有目录，禁止入库 =====
+.trellis/
+.pi/
+.pi-subagents/
+.agents/
+.cursor/
+.claude/
+.ai/
+.zed/
+.codex/
+.codebuddy/
+.qoder/
+.setUp/
+
+# ===== 依赖 =====
+node_modules/
+
+# ===== 前端构建产物 =====
+dist/
+build/
+out/
+.vite/
+
+# ===== Rust / Tauri 构建产物 =====
+src-tauri/target/
+target/
+
+# ===== Tauri sidecar 二进制 (pi 编译产物, 打包时再处理) =====
+src-taurisidecar-bin/
+*.exe.bak
+
+# ===== 系统/编辑器 =====
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

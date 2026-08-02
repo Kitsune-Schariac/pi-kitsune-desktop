@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"主窗口默认权限: invoke 自定义 command + 监听事件","local":true,"windows":["main"],"permissions":["core:default"]}}
