@@ -3,7 +3,6 @@ import { useSessionStore } from "./store/session";
 import { useProjectsStore } from "./store/projects";
 import { MessageList } from "./components/MessageList";
 import { InputBar } from "./components/InputBar";
-import { SessionTabs } from "./components/SessionTabs";
 import { Sidebar } from "./components/Sidebar";
 import { EmptyState } from "./components/EmptyState";
 import { SettingsPanel } from "./components/panels/SettingsPanel";
@@ -32,7 +31,6 @@ export default function App() {
     <div className="flex h-screen w-screen overflow-hidden bg-white text-neutral-900">
       <Sidebar onOpenPanel={setPanel} />
       <main className="flex min-w-0 flex-1 flex-col">
-        <SessionTabs />
         {active ? (
           <>
             <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
