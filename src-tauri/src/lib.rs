@@ -1,5 +1,6 @@
 mod pi_runtime;
 mod session_fs;
+mod token_stats;
 
 use pi_runtime::PiRuntime;
 use std::collections::HashMap;
@@ -315,6 +316,7 @@ pub fn run() {
             get_entries, get_session_stats, set_session_name,
             session_fs::list_projects_and_sessions, session_fs::delete_session_file,
             session_fs::read_file_for_context, session_fs::list_skills_and_packages,
+            token_stats::get_token_stats,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

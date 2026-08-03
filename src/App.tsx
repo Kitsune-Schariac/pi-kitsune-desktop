@@ -5,7 +5,7 @@ import { MessageList } from "./components/MessageList";
 import { InputBar } from "./components/InputBar";
 import { Sidebar } from "./components/Sidebar";
 import { EmptyState } from "./components/EmptyState";
-import { SettingsPanel } from "./components/panels/SettingsPanel";
+import { SettingsWindow } from "./components/settings/SettingsWindow";
 import { SkillsPanel } from "./components/panels/SkillsPanel";
 import { PackagesPanel } from "./components/panels/PackagesPanel";
 import { Loader2, X } from "lucide-react";
@@ -72,7 +72,10 @@ export default function App() {
         <InputBar emptyProject={emptyProject} onHeightChange={setInputBarH} />
       </main>
 
-      {/* 右侧面板抽屉 (设置/Skill/package) */}
+      {/* 设置: 独立模态窗口 (与右侧 drawer 并存, 不冲突) */}
+      {panel === "settings" && <SettingsWindow onClose={() => setPanel(null)} />}
+
+      {/* 右侧面板抽屉 (Skill/package) */}
       {panel && (
         <div className="absolute inset-0 z-40 flex justify-end bg-neutral-900/10">
           <div className="flex h-full w-[380px] flex-col border-l border-neutral-200 bg-white shadow-2xl">
@@ -90,7 +93,6 @@ export default function App() {
             <div className="flex-1 overflow-y-auto">
               {panel === "skills" && <SkillsPanel />}
               {panel === "packages" && <PackagesPanel />}
-              {panel === "settings" && <SettingsPanel />}
             </div>
           </div>
         </div>

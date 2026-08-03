@@ -21,7 +21,7 @@ pub struct SessionInfo {
     pub preview: String,      // 首条 user 消息摘要
 }
 
-fn agent_dir() -> Result<PathBuf, String> {
+pub(crate) fn agent_dir() -> Result<PathBuf, String> {
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .map_err(|_| "无法确定用户主目录".to_string())?;
