@@ -176,8 +176,8 @@ export function InputBar({
     : null;
 
   return (
-    // 悬浮输入卡: 底部居中, 宽度与消息列表一致 (max-w-[70%]), 与消息区分离成浮动层
-    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 mx-auto w-full max-w-[70%] px-4">
+    // 悬浮输入卡: 底部居中, 宽度与消息列表一致 (max-w-[65%]), 与消息区分离成浮动层
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 mx-auto w-full max-w-[65%] px-4">
       <div
         ref={cardRef}
         // 半透明悬浮卡: 消息从卡片后方滑过时可见 (不挡内容), 轻模糊防文字混叠

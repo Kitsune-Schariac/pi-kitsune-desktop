@@ -5,7 +5,7 @@ import { Sparkles, Package, Settings, FolderKanban, Plus, FolderOpen } from "luc
 // 左侧边栏: 功能区 (skill/package/设置) + 项目会话区
 export function Sidebar({ onOpenPanel }: { onOpenPanel: (p: PanelKind) => void }) {
   return (
-    <aside className="flex w-[15%] flex-col border-r border-neutral-200 bg-neutral-50">
+    <aside className="flex w-[18%] flex-col border-r border-neutral-200 bg-neutral-50">
       {/* 品牌区 */}
       <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
         <div className="flex items-center gap-2">
