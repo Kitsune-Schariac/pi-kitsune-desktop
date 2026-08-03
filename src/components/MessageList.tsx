@@ -3,7 +3,7 @@ import { useSessionStore } from "../store/session";
 import { ToolCallCard } from "./ToolCallCard";
 import { MessageItem } from "./MessageItem";
 
-export function MessageList() {
+export function MessageList({ inputBarH = 0 }: { inputBarH?: number }) {
   const entries = useSessionStore((s) => {
   const a = s.activeSessionId ? s.sessions[s.activeSessionId] : null;
   return a?.entries ?? [];
@@ -40,6 +40,9 @@ export function MessageList() {
       ref={containerRef}
       onScroll={handleScroll}
       className="flex-1 overflow-y-auto pt-4"
+      // 底部 padding = 输入卡高 + bottom-4(16px) + 间隔 24px: 滚动到底消息停在卡片上方间隔处,
+      // 滚动过程中消息可平滑滑入卡片后方 (卡片半透明可见), 不会被提前截断
+      style={{ paddingBottom: inputBarH + 40 }}
     >
       {/* px-6 放内层: 保证 70% 宽度与悬浮输入卡一致 (外层 padding 会使百分比相对内容区, 差 48px) */}
       <div className="mx-auto max-w-[70%] space-y-4 px-6">

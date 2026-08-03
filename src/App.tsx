@@ -23,7 +23,6 @@ export default function App() {
   const [emptyProject, setEmptyProject] = useState("");
   // 悬浮输入卡高度: 动态撑开消息区底部留白, 避免高输入框遮挡最后一条消息
   const [inputBarH, setInputBarH] = useState(0);
-
   // 启动即加载侧边栏数据 (无连接面板, 直接进主界面)
   useEffect(() => {
     loadProjects();
@@ -32,12 +31,9 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white text-neutral-900">
       <Sidebar onOpenPanel={setPanel} />
-      {/* relative: 供底部悬浮输入框 absolute 定位 */}
-      {/* paddingBottom 跟随输入卡高度: 卡片高 + bottom-4(16px), 滚动到底时消息紧贴卡片顶部 */}
-      <main
-        className="relative flex min-w-0 flex-1 flex-col"
-        style={{ paddingBottom: inputBarH + 16 }}
-      >
+      {/* relative: 供底部悬浮输入框 absolute 定位
+          不压缩滚动区: 消息可滑到输入卡后方 (半透明可见), 底部留白由 MessageList 内部 padding 承担 */}
+      <main className="relative flex min-w-0 flex-1 flex-col">
         {active ? (
           <>
             <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
@@ -68,7 +64,7 @@ export default function App() {
                 {active.error}
               </div>
             )}
-            <MessageList />
+            <MessageList inputBarH={inputBarH} />
           </>
         ) : (
           <EmptyState project={emptyProject} onProjectChange={setEmptyProject} />

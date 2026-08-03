@@ -180,7 +180,8 @@ export function InputBar({
     <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 mx-auto w-full max-w-[70%] px-4">
       <div
         ref={cardRef}
-        className="pointer-events-auto rounded-2xl border border-neutral-200 bg-white/95 shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-sm transition focus-within:border-orange-400"
+        // 半透明悬浮卡: 消息从卡片后方滑过时可见 (不挡内容), 轻模糊防文字混叠
+        className="pointer-events-auto rounded-2xl border border-neutral-200 bg-white/80 shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition focus-within:border-orange-400"
       >
         <div className="px-4 pt-3">
           {/* 引用文件 chips */}
@@ -216,7 +217,7 @@ export function InputBar({
           placeholder={isStreaming ? "等待回复…" : "输入消息, Enter 发送"}
           disabled={isStreaming}
           rows={2}
-          className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-sm text-neutral-800 outline-none placeholder:text-neutral-400 disabled:opacity-60"
+          className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-sm text-neutral-800 outline-none placeholder:text-neutral-500 disabled:opacity-60"
         />
 
         {/* 输入框内底部工具行: 左上下文 / 右 context window + 选择器 + 发送 */}
