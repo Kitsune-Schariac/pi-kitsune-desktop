@@ -1,6 +1,7 @@
 import { memo } from "react";
 import type { ChatEntry } from "../store/session";
 import { ThinkingBlock } from "./ThinkingBlock";
+import { Markdown } from "./Markdown";
 import { User, Bot } from "lucide-react";
 
 // 单条消息渲染: memo 浅比较 entry。streaming 时 store 的 map 只对当前条目建新对象,
@@ -26,17 +27,18 @@ export const MessageItem = memo(function MessageItem({ entry }: { entry: ChatEnt
         )}
       </div>
       <div
-        className={`min-w-0 max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+        className={`min-w-0 w-full rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
           entry.role === "user"
             ? "bg-blue-50 text-neutral-800"
             : "bg-neutral-100 text-neutral-800"
         }`}
       >
         {entry.thinking && <ThinkingBlock text={entry.thinking} />}
-        {entry.text ||
-          (entry.role === "assistant" && (
-            <span className="animate-pulse text-neutral-400">…</span>
-          ))}
+        {entry.text ? (
+          <Markdown text={entry.text} />
+        ) : entry.role === "assistant" ? (
+          <span className="animate-pulse text-neutral-400">…</span>
+        ) : null}
       </div>
     </div>
   );
