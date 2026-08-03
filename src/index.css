@@ -12,6 +12,15 @@ body {
   background: #ffffff;
 }
 
+/* 锁死页面级滚动: 只允许内部滚动容器滚动, 避免整个窗口像浏览器一样被拖动 */
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 /* 自定义滚动条: 浅色下用中性灰, 保持细窄 */
 ::-webkit-scrollbar {
   width: 8px;
@@ -172,12 +181,4 @@ body {
   max-width: 100%;
   border-radius: 6px;
   margin: 0.5em 0;
-}
-
-/* 内联代码在用户气泡中保持可读 */
-.bg-blue-50 .markdown-body code {
-  background: rgba(255, 255, 255, 0.6);
-}
-.bg-neutral-100 .markdown-body code {
-  background: rgba(255, 255, 255, 0.5);
 }
