@@ -39,9 +39,10 @@ export function MessageList() {
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="flex-1 overflow-y-auto px-6 py-4"
+      className="flex-1 overflow-y-auto pt-4"
     >
-      <div className="mx-auto max-w-3xl space-y-4">
+      {/* px-6 放内层: 保证 70% 宽度与悬浮输入卡一致 (外层 padding 会使百分比相对内容区, 差 48px) */}
+      <div className="mx-auto max-w-[70%] space-y-4 px-6">
         {entries.length === 0 && (
           <div className="py-20 text-center text-neutral-400">
             输入消息开始对话
@@ -54,8 +55,9 @@ export function MessageList() {
             <ToolCallCard key={e.id} entry={e} />
           )
         )}
-        <div ref={endRef} />
       </div>
+      {/* 滚动锚点放 space-y 容器外: 避免被 space-y-4 加 margin, 否则最后消息与输入卡之间总有 16px 空隙 */}
+      <div ref={endRef} />
     </div>
   );
 }

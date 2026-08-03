@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/session";
@@ -30,7 +30,7 @@ function MiniSelect({ label, icon: Icon, value, options, onChange, disabled }: {
       <button
         onClick={() => setOpenSel(!openSel)}
         disabled={disabled}
-        className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs text-neutral-600 transition hover:border-neutral-300 hover:bg-neutral-50 disabled:opacity-40"
+        className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-40"
         title={label}
       >
         <Icon className="h-3 w-3 text-neutral-400" />
@@ -59,12 +59,45 @@ function MiniSelect({ label, icon: Icon, value, options, onChange, disabled }: {
   );
 }
 
-export function InputBar({ emptyProject }: { emptyProject: string }) {
+// textarea 自动增高的最大高度: 12 行 × 行高 20px + 垂直 padding 16px
+const TEXTAREA_MAX_HEIGHT = 12 * 20 + 16;
+
+export function InputBar({
+  emptyProject,
+  onHeightChange,
+}: {
+  emptyProject: string;
+  // 卡片实际高度变化时回调 (App 据此调整消息区底部留白, 避免高输入框遮挡消息)
+  onHeightChange?: (h: number) => void;
+}) {
   const [text, setText] = useState("");
   const [refs, setRefs] = useState<FileRef[]>([]);
   const [ctxOpen, setCtxOpen] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // textarea 自动增高: 内容超过 rows 高度时拉高, 上限 12 行 (超出后内部滚动)
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    if (!text) {
+      el.style.height = "";
+      return;
+    }
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT)}px`;
+  }, [text]);
+
+  // 卡片高度变化时上报, 让 App 动态调整消息区底部留白
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    onHeightChange?.(el.offsetHeight);
+    const ro = new ResizeObserver(() => onHeightChange?.(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [onHeightChange]);
 
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
   const sessions = useSessionStore((s) => s.sessions);
@@ -143,10 +176,16 @@ export function InputBar({ emptyProject }: { emptyProject: string }) {
     : null;
 
   return (
-    <div className="border-t border-neutral-200 bg-white px-6 py-3">
-      {/* 引用文件 chips */}
-      {refs.length > 0 && (
-        <div className="mx-auto mb-2 flex max-w-3xl flex-wrap gap-1.5">
+    // 悬浮输入卡: 底部居中, 宽度与消息列表一致 (max-w-[70%]), 与消息区分离成浮动层
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 mx-auto w-full max-w-[70%] px-4">
+      <div
+        ref={cardRef}
+        className="pointer-events-auto rounded-2xl border border-neutral-200 bg-white/95 shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-sm transition focus-within:border-orange-400"
+      >
+        <div className="px-4 pt-3">
+          {/* 引用文件 chips */}
+          {refs.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
           {refs.map((r, i) => (
             <span
               key={i}
@@ -169,7 +208,6 @@ export function InputBar({ emptyProject }: { emptyProject: string }) {
         </div>
       )}
 
-      <div className="mx-auto max-w-3xl">
         <textarea
           ref={textareaRef}
           value={text}
@@ -178,12 +216,12 @@ export function InputBar({ emptyProject }: { emptyProject: string }) {
           placeholder={isStreaming ? "等待回复…" : "输入消息, Enter 发送"}
           disabled={isStreaming}
           rows={2}
-          className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-800 outline-none placeholder:text-neutral-400 focus:border-orange-400 focus:bg-white disabled:opacity-60"
+          className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-sm text-neutral-800 outline-none placeholder:text-neutral-400 disabled:opacity-60"
         />
 
-        {/* 底部状态栏: 左上下文按钮 / 右 context window + 选择器 + 发送 */}
-        {hint && <p className="mt-1 text-right text-xs text-orange-600">{hint}</p>}
-        <div className="mt-2 flex items-center justify-between">
+        {/* 输入框内底部工具行: 左上下文 / 右 context window + 选择器 + 发送 */}
+        {hint && <p className="px-4 text-right text-xs text-orange-600">{hint}</p>}
+        <div className="flex items-center justify-between px-2 pb-2">
           {/* 左下: 上下文添加 */}
           <div className="relative">
             <button
@@ -214,7 +252,7 @@ export function InputBar({ emptyProject }: { emptyProject: string }) {
           <div className="flex items-center gap-2">
             {/* context window 使用情况 */}
             <div
-              className="flex items-center gap-1.5 rounded-lg border border-neutral-200 px-2 py-1.5"
+              className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition hover:bg-neutral-100"
               title={cuText ? `上下文 ${cuText} tokens` : "暂无上下文统计"}
             >
               <div className="h-1.5 w-16 overflow-hidden rounded-full bg-neutral-200">
@@ -280,6 +318,7 @@ export function InputBar({ emptyProject }: { emptyProject: string }) {
               </button>
             )}
           </div>
+        </div>
         </div>
       </div>
     </div>

@@ -21,6 +21,8 @@ export default function App() {
   const [panel, setPanel] = useState<PanelKind>(null);
   // 空状态: 项目选择器的选中值 (InputBar 发送时自动建会话用)
   const [emptyProject, setEmptyProject] = useState("");
+  // 悬浮输入卡高度: 动态撑开消息区底部留白, 避免高输入框遮挡最后一条消息
+  const [inputBarH, setInputBarH] = useState(0);
 
   // 启动即加载侧边栏数据 (无连接面板, 直接进主界面)
   useEffect(() => {
@@ -30,7 +32,12 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white text-neutral-900">
       <Sidebar onOpenPanel={setPanel} />
-      <main className="flex min-w-0 flex-1 flex-col">
+      {/* relative: 供底部悬浮输入框 absolute 定位 */}
+      {/* paddingBottom 跟随输入卡高度: 卡片高 + bottom-4(16px), 滚动到底时消息紧贴卡片顶部 */}
+      <main
+        className="relative flex min-w-0 flex-1 flex-col"
+        style={{ paddingBottom: inputBarH + 16 }}
+      >
         {active ? (
           <>
             <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
@@ -55,17 +62,18 @@ export default function App() {
                 关闭会话
               </button>
             </header>
+            {/* 错误提示放 header 下方: 悬浮输入框会盖住底部区域, 放底部看不见 */}
+            {active?.error && (
+              <div className="border-b border-red-200 bg-red-50 px-6 py-2 text-sm text-red-600">
+                {active.error}
+              </div>
+            )}
             <MessageList />
           </>
         ) : (
           <EmptyState project={emptyProject} onProjectChange={setEmptyProject} />
         )}
-        <InputBar emptyProject={emptyProject} />
-        {active?.error && (
-          <div className="border-t border-red-200 bg-red-50 px-6 py-2 text-sm text-red-600">
-            {active.error}
-          </div>
-        )}
+        <InputBar emptyProject={emptyProject} onHeightChange={setInputBarH} />
       </main>
 
       {/* 右侧面板抽屉 (设置/Skill/package) */}
