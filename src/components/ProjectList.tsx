@@ -71,7 +71,7 @@ function formatTime(ts: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return ts;
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 // 会话行标题: preview 首行优先, 回退时间
@@ -339,12 +339,8 @@ export function ProjectList() {
                       });
                     }}
                   >
-                    {isLoading ? (
+                    {isLoading && (
                       <Loader2 className="h-3 w-3 shrink-0 animate-spin text-orange-400" />
-                    ) : openId ? (
-                      <MessageSquare className="h-3 w-3 shrink-0 text-orange-400" />
-                    ) : (
-                      <MessageSquare className="h-3 w-3 shrink-0 text-neutral-300" />
                     )}
                     <span className="min-w-0 flex-1 truncate">{sessionTitle(s)}</span>
                     <span className="shrink-0 text-[10px] text-neutral-400">{formatTime(s.timestamp)}</span>
@@ -389,7 +385,6 @@ export function ProjectList() {
                       });
                     }}
                   >
-                    <MessageSquare className="h-3 w-3 shrink-0 text-orange-400" />
                     <span className="min-w-0 flex-1 truncate">{openSessionTitle(s)}</span>
                     <span className="shrink-0 text-[10px] text-neutral-400">新会话</span>
                     <button
