@@ -36,6 +36,11 @@ interface ProjectsStore {
 const ORDER_KEY = "kitsune.projectOrder";
 const EXPAND_KEY = "kitsune.projectExpanded";
 
+/// 会话路径对账: 大小写不敏感 (Windows 文件系统不区分大小写, pi 与磁盘扫描路径字符串可能不一致)
+export function pathEq(a: string | null | undefined, b: string | null | undefined): boolean {
+  return !!a && !!b && a.toLowerCase() === b.toLowerCase();
+}
+
 // 项目顺序持久化: localStorage 存顺序路径数组
 function loadOrder(): string[] {
   try {
@@ -66,15 +71,22 @@ export const useProjectsStore = create<ProjectsStore>((set) => ({
         const ib = orderIndex.has(b.path) ? orderIndex.get(b.path)! : order.length;
         return ia - ib;
       });
-      const projects = list
-        .filter((p) => !expanded.includes(`removed:${p.path}`))
-        .map((p) => ({
-          ...p,
-          expanded: expanded.includes(p.path),
-          visibleCount: 5,
-          removed: false,
-        }));
-      set({ projects, loaded: true, error: null });
+      // 保留内存中的展开/加载状态: 前端注入的"虚拟项目" (新会话所在 cwd 尚无磁盘记录)
+      // 转正成真实项目后, 若直接按 localStorage 恢复, 没被用户手动展开过会折叠 → 新会话看不到
+      set((state) => {
+        const projects = list
+          .filter((p) => !expanded.includes(`removed:${p.path}`))
+          .map((p) => {
+            const prev = state.projects.find((q) => q.path === p.path);
+            return {
+              ...p,
+              expanded: prev ? prev.expanded : expanded.includes(p.path),
+              visibleCount: prev ? prev.visibleCount : 5,
+              removed: false,
+            };
+          });
+        return { projects, loaded: true, error: null };
+      });
     } catch (e) {
       set({ error: String(e), loaded: true });
     }

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { useProjectsStore, pathEq } from "./projects";
 
 export interface ChatEntry {
   id: string;
@@ -21,7 +22,7 @@ export interface ModelInfo {
 }
 
 // 单个 session 的完整状态 (M3: 多 session, 每个 session 独立)
-interface SessionState {
+export interface SessionState {
   sessionId: string;
   cwd: string;
   sessionPath: string | null; // 加载的历史会话文件 (新建会话为 null)
@@ -157,6 +158,9 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         patch(sessionId, {
           currentModel: (data.model as ModelInfo) || null,
           thinkingLevel: (data.thinkingLevel as string) || "medium",
+          // 新会话 spawn 后 get_state 即返回真实 sessionFile 路径 (文件在首次 prompt 后才落盘);
+          // 有值才覆盖, 无值 (极端情况) 保留 startSession 传入的历史路径
+          sessionPath: (data.sessionFile as string) || (get().sessions[sessionId]?.sessionPath ?? null),
         });
       } catch { /* ignore */ }
     },
@@ -310,6 +314,17 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         }
         case "agent_settled":
           patch(sessionId, { isStreaming: false, currentAssistantId: null });
+          // 新会话落盘后刷新侧边栏: 首次 prompt 已把 session 文件写入磁盘, 重新扫描让
+          // 侧边栏的"打开中"虚拟节点转正为历史会话节点 (磁盘列表已含则天然去重不刷)
+          {
+            const sp = get().sessions[sessionId]?.sessionPath;
+            const inDisk = useProjectsStore.getState().projects.some((p) =>
+              p.sessions.some((ds) => pathEq(ds.session_path, sp))
+            );
+            if (sp && !inDisk) {
+              useProjectsStore.getState().loadProjects();
+            }
+          }
           break;
         case "pi_process_exit":
           patch(sessionId, { isStreaming: false, currentAssistantId: null, error: "pi 进程已退出" });

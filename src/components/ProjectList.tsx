@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useProjectsStore, type SessionNode } from "../store/projects";
-import { useSessionStore } from "../store/session";
+import { useProjectsStore, pathEq, type SessionNode, type ProjectNode } from "../store/projects";
+import { useSessionStore, type SessionState } from "../store/session";
 import {
   ChevronRight, ChevronDown, Trash2, Plus,
   Loader2, MessageSquare, FolderOpen, X,
@@ -80,6 +80,25 @@ function sessionTitle(s: SessionNode): string {
   return first || s.file_name;
 }
 
+// 打开中会话 (磁盘尚无记录) 的标题: 第一条 user 消息截断, 还没发过消息显示"新会话"
+function openSessionTitle(s: SessionState): string {
+  const first = s.entries.find((e) => e.kind === "message" && e.role === "user")?.text?.trim();
+  return (first ? first.slice(0, 40) : "新会话") || "新会话";
+}
+
+// 打开中但磁盘会话列表里没有的会话: 按 cwd 挂到对应项目下 (新会话未落盘 / 已落盘未刷新)
+// 对账用 pathEq (Windows 路径大小写不敏感, pi 与磁盘扫描路径字符串可能不一致)
+function openOnlySessions(
+  p: { path: string; sessions: SessionNode[] },
+  sessionOrder: string[],
+  sessions: Record<string, SessionState>
+): { sid: string; s: SessionState }[] {
+  return sessionOrder
+    .map((sid) => ({ sid, s: sessions[sid] }))
+    .filter((x): x is { sid: string; s: SessionState } => !!x.s && x.s.cwd === p.path)
+    .filter((x) => !x.s.sessionPath || !p.sessions.some((ds) => pathEq(ds.session_path, x.s.sessionPath)));
+}
+
 export function ProjectList() {
   const projects = useProjectsStore((s) => s.projects);
   const loaded = useProjectsStore((s) => s.loaded);
@@ -118,7 +137,33 @@ export function ProjectList() {
       </div>
     );
   }
-  if (projects.length === 0) {
+
+  // 打开中的会话可能属于磁盘上还不存在会话文件的项目 (首次在该目录新建会话):
+  // 注入虚拟项目行, 否则新会话在侧边栏无处可挂 (必须在空判断前计算, 否则全空时看不到新会话)
+  const virtualProjects: ProjectNode[] = sessionOrder
+    .map((sid) => sessions[sid])
+    .filter((s): s is SessionState => !!s)
+    .filter((s) => !projects.some((p) => pathEq(p.path, s.cwd)))
+    .map((s) => ({
+      path: s.cwd,
+      display_name: s.cwd.split(/[\\/]/).filter(Boolean).pop() || s.cwd,
+      expanded: true,
+      visibleCount: 5,
+      removed: false,
+      sessions: [],
+    }));
+  // 同一 cwd 多个会话只注入一个虚拟项目
+  const seenCwd = new Set<string>();
+  const uniqueVirtual = virtualProjects.filter((v) => {
+    const k = v.path.toLowerCase();
+    if (seenCwd.has(k)) return false;
+    seenCwd.add(k);
+    return true;
+  });
+  // 磁盘项目在前, 虚拟项目追加在后 (虚拟项目不参与持久化顺序/拖拽)
+  const displayProjects = [...projects, ...uniqueVirtual];
+
+  if (projects.length === 0 && uniqueVirtual.length === 0) {
     return (
       <div className="px-4 py-6 text-sm text-neutral-400">
         暂无项目。在对话区选择项目即可开始。
@@ -126,9 +171,15 @@ export function ProjectList() {
     );
   }
 
+  // 移除虚拟项目 = 关闭该 cwd 下全部打开会话 (无磁盘记录可删, 会话关完项目自然消失)
+  const stopAllCwdSessions = (cwd: string) => {
+    sessionOrder.filter((sid) => sessions[sid]?.cwd === cwd).forEach((sid) => stopSession(sid));
+  };
+
   // 点击会话: 已打开 → 切换; 未打开 → 加载历史
+  // openId 对账用 pathEq: pi 返回的 sessionFile 与磁盘扫描路径可能大小写/分隔符不一致
   const handleOpenSession = async (projectPath: string, s: SessionNode) => {
-    const openId = sessionOrder.find((sid) => sessions[sid]?.sessionPath === s.session_path);
+    const openId = sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, s.session_path));
     if (openId) {
       setActiveSession(openId);
       return;
@@ -154,7 +205,7 @@ export function ProjectList() {
 
   // 删除会话: 若正在使用则先停 runtime, 再删文件
   const handleDeleteSession = async (projectPath: string, s: SessionNode) => {
-    const openId = sessionOrder.find((sid) => sessions[sid]?.sessionPath === s.session_path);
+    const openId = sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, s.session_path));
     if (openId) await stopSession(openId);
     await removeSession(projectPath, s.session_path);
   };
@@ -165,18 +216,22 @@ export function ProjectList() {
       setRenamingPath(null);
       return;
     }
-    const openId = sessionOrder.find((sid) => sessions[sid]?.sessionPath === renamingPath);
+    const openId = sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, renamingPath));
     if (openId) await renameSession(openId, renameValue.trim());
     setRenamingPath(null);
   };
 
   return (
     <div className="flex-1 overflow-y-auto px-2 py-1">
-      {projects.map((p, index) => (
+      {displayProjects.map((p, index) => {
+        // 虚拟项目 (磁盘无记录, 只承载打开中的会话): 不可拖拽, 移除 = 关闭该 cwd 全部会话
+        const isVirtual = index >= projects.length;
+        return (
         <div
           key={p.path}
-          draggable
+          draggable={!isVirtual}
           onDragStart={(e) => {
+            if (isVirtual) return; // 虚拟项目不参与持久化排序
             setDragIndex(index);
             e.dataTransfer.effectAllowed = "move";
           }}
@@ -196,10 +251,15 @@ export function ProjectList() {
               e.preventDefault();
               setCtx({
                 x: e.clientX, y: e.clientY,
-                items: [
-                  { label: "新建会话", icon: Plus, onClick: () => handleNewSession(p.path) },
-                  { label: "移除项目", icon: X, danger: true, onClick: () => removeProject(p.path) },
-                ],
+                items: isVirtual
+                  ? [
+                      { label: "新建会话", icon: Plus, onClick: () => handleNewSession(p.path) },
+                      { label: "移除项目", icon: X, danger: true, onClick: () => stopAllCwdSessions(p.path) },
+                    ]
+                  : [
+                      { label: "新建会话", icon: Plus, onClick: () => handleNewSession(p.path) },
+                      { label: "移除项目", icon: X, danger: true, onClick: () => removeProject(p.path) },
+                    ],
               });
             }}
           >
@@ -222,7 +282,7 @@ export function ProjectList() {
                 <Plus className="h-3.5 w-3.5" />
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); removeProject(p.path); }}
+                onClick={(e) => { e.stopPropagation(); isVirtual ? stopAllCwdSessions(p.path) : removeProject(p.path); }}
                 className="rounded p-0.5 text-neutral-400 transition hover:bg-neutral-200 hover:text-red-500"
                 title="移除项目"
               >
@@ -235,7 +295,7 @@ export function ProjectList() {
           {p.expanded && (
             <div className="ml-4 border-l border-neutral-200 pl-2">
               {p.sessions.slice(0, p.visibleCount).map((s) => {
-                const openId = sessionOrder.find((sid) => sessions[sid]?.sessionPath === s.session_path);
+                const openId = sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, s.session_path));
                 const isActive = openId === activeSessionId;
                 const isLoading = startingPath === s.session_path;
                 return (
@@ -249,7 +309,7 @@ export function ProjectList() {
                     onClick={() => handleOpenSession(p.path, s)}
                     onContextMenu={(e) => {
                       e.preventDefault();
-                      const open = sessionOrder.find((sid) => sessions[sid]?.sessionPath === s.session_path);
+                      const open = sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, s.session_path));
                       setCtx({
                         x: e.clientX, y: e.clientY,
                         items: [
@@ -292,10 +352,47 @@ export function ProjectList() {
                   显示更多 ({p.sessions.length - p.visibleCount})…
                 </button>
               )}
+              {/* 打开中但磁盘列表没有的会话 (新会话未落盘 / 已落盘未刷新): 直接可点回 */}
+              {openOnlySessions(p, sessionOrder, sessions).map(({ sid, s }) => {
+                const isActive = sid === activeSessionId;
+                return (
+                  <div
+                    key={`open:${sid}`}
+                    className={`group flex cursor-pointer items-center gap-1.5 rounded-md py-1 pl-1.5 pr-1 text-sm transition ${
+                      isActive
+                        ? "bg-orange-100 text-orange-700"
+                        : "text-neutral-600 hover:bg-neutral-200/60"
+                    }`}
+                    onClick={() => setActiveSession(sid)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setCtx({
+                        x: e.clientX, y: e.clientY,
+                        items: [
+                          { label: "打开", icon: FolderOpen, onClick: () => setActiveSession(sid) },
+                          { label: "删除会话", icon: Trash2, danger: true, onClick: () => stopSession(sid) },
+                        ],
+                      });
+                    }}
+                  >
+                    <MessageSquare className="h-3 w-3 shrink-0 text-orange-400" />
+                    <span className="min-w-0 flex-1 truncate">{openSessionTitle(s)}</span>
+                    <span className="shrink-0 text-[10px] text-neutral-400">新会话</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); stopSession(sid); }}
+                      className="hidden shrink-0 rounded p-0.5 text-neutral-400 transition hover:text-red-500 group-hover:block"
+                      title="删除会话"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
 
       {ctx && <ContextMenu {...ctx} onClose={() => setCtx(null)} />}
 
