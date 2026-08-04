@@ -46,6 +46,7 @@ export interface SessionState {
     totalMessages: number;
   } | null;
   detached: boolean;            // pi 进程已停但 entries 仍在内存 (秒切缓存), 切回走 reattach
+  hasUnread: boolean;           // 后台完成任务有新消息, 用户未看 (侧边栏显示点提醒)
   lastEntryMtime: number | null; // jsonl 文件 mtime baseline (mtime 守卫: 没变就不重读 entries)
 }
 
@@ -112,7 +113,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
             [id]: {
               sessionId: id, cwd, sessionPath: opts?.sessionPath ?? null, sessionName: null,
               isStreaming: false, entries: [], currentAssistantId: null,
-              detached: false, lastEntryMtime: null,
+              detached: false, lastEntryMtime: null, hasUnread: false,
               error: null, currentModel: null, thinkingLevel: "medium",
               availableModels: [], availableThinkingLevels: ["off"],
               steeringQueue: [], followUpQueue: [],
@@ -214,7 +215,13 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       patch(sessionId, { detached: true, isStreaming: false, currentAssistantId: null });
     },
 
-    setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
+    setActiveSession: (sessionId) => set((state) => {
+      const s = state.sessions[sessionId];
+      // 切到该会话即视为已读, 清除未读标记 (侧边栏点 → 日期)
+      return s?.hasUnread
+        ? { activeSessionId: sessionId, sessions: { ...state.sessions, [sessionId]: { ...s, hasUnread: false } } }
+        : { activeSessionId: sessionId };
+    }),
 
     sendPrompt: async (sessionId, text, images) => {
       const s = get().sessions[sessionId];
@@ -405,6 +412,10 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         }
         case "agent_settled":
           patch(sessionId, { isStreaming: false, currentAssistantId: null });
+          // 后台完成任务: 若用户没在看这个会话, 标记未读 (侧边栏圈圈→点提醒看)
+          if (get().activeSessionId !== sessionId) {
+            patch(sessionId, { hasUnread: true });
+          }
           // 新会话落盘后刷新侧边栏: 首次 prompt 已把 session 文件写入磁盘, 重新扫描让
           // 侧边栏的"打开中"虚拟节点转正为历史会话节点 (磁盘列表已含则天然去重不刷)
           {

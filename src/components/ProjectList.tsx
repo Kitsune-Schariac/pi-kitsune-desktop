@@ -343,7 +343,13 @@ export function ProjectList() {
                       <Loader2 className="h-3 w-3 shrink-0 animate-spin text-orange-400" />
                     )}
                     <span className="min-w-0 flex-1 truncate">{sessionTitle(s)}</span>
-                    <span className="shrink-0 text-[10px] text-neutral-400">{formatTime(s.timestamp)}</span>
+                    {openId && sessions[openId]?.isStreaming ? (
+                      <Loader2 className="h-3 w-3 shrink-0 animate-spin text-orange-400" />
+                    ) : openId && sessions[openId]?.hasUnread ? (
+                      <span className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-orange-500" />
+                    ) : (
+                      <span className="shrink-0 text-[10px] text-neutral-400">{formatTime(s.timestamp)}</span>
+                    )}
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteSession(p.path, s); }}
                       className="hidden shrink-0 rounded p-0.5 text-neutral-400 transition hover:text-red-500 group-hover:block"
@@ -386,7 +392,13 @@ export function ProjectList() {
                     }}
                   >
                     <span className="min-w-0 flex-1 truncate">{openSessionTitle(s)}</span>
-                    <span className="shrink-0 text-[10px] text-neutral-400">新会话</span>
+                    {s.isStreaming ? (
+                      <Loader2 className="h-3 w-3 shrink-0 animate-spin text-orange-400" />
+                    ) : s.hasUnread ? (
+                      <span className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-orange-500" />
+                    ) : (
+                      <span className="shrink-0 text-[10px] text-neutral-400">新会话</span>
+                    )}
                     <button
                       onClick={(e) => { e.stopPropagation(); stopSession(sid); removeSessionState(sid); }}
                       className="hidden shrink-0 rounded p-0.5 text-neutral-400 transition hover:text-red-500 group-hover:block"
