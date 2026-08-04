@@ -53,6 +53,7 @@ interface SessionStore {
   sessions: Record<string, SessionState>;
   activeSessionId: string | null;
   sessionOrder: string[];
+  isSwitching: boolean;
 
   startSession: (cwd: string, opts?: { provider?: string; model?: string; sessionPath?: string }) => Promise<string>;
   stopSession: (sessionId: string) => Promise<void>;
@@ -93,40 +94,47 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     sessions: {},
     activeSessionId: null,
     sessionOrder: [],
+    isSwitching: false,
 
     startSession: async (cwd, opts) => {
-      const id = await invoke<string>("start_session", {
-        cwd,
-        provider: opts?.provider ?? null,
-        model: opts?.model ?? null,
-        sessionPath: opts?.sessionPath ?? null,
-      });
-      set((state) => ({
-        sessions: {
-          ...state.sessions,
-          [id]: {
-            sessionId: id, cwd, sessionPath: opts?.sessionPath ?? null, sessionName: null,
-            isStreaming: false, entries: [], currentAssistantId: null,
-            detached: false, lastEntryMtime: null,
-            error: null, currentModel: null, thinkingLevel: "medium",
-            availableModels: [], availableThinkingLevels: ["off"],
-            steeringQueue: [], followUpQueue: [],
-            contextUsage: null, tokenStats: null,
+      // 切换中: 立即切掉旧消息内容, 消息区显示混沌 loading 动画 (startSession 慢操作期间不残留旧会话)
+      set({ isSwitching: true });
+      try {
+        const id = await invoke<string>("start_session", {
+          cwd,
+          provider: opts?.provider ?? null,
+          model: opts?.model ?? null,
+          sessionPath: opts?.sessionPath ?? null,
+        });
+        set((state) => ({
+          sessions: {
+            ...state.sessions,
+            [id]: {
+              sessionId: id, cwd, sessionPath: opts?.sessionPath ?? null, sessionName: null,
+              isStreaming: false, entries: [], currentAssistantId: null,
+              detached: false, lastEntryMtime: null,
+              error: null, currentModel: null, thinkingLevel: "medium",
+              availableModels: [], availableThinkingLevels: ["off"],
+              steeringQueue: [], followUpQueue: [],
+              contextUsage: null, tokenStats: null,
+            },
           },
-        },
-        activeSessionId: id,
-        sessionOrder: [...state.sessionOrder.filter((sid) => sid !== id), id],
-      }));
-      const tasks: Promise<unknown>[] = [
-        get().loadState(id),
-        get().loadModels(id),
-        get().loadThinkingLevels(id),
-        get().loadSessionStats(id),
-      ];
-      // 历史会话: 加载条目 (长文件较慢, 不阻塞其它初始化)
-      if (opts?.sessionPath) tasks.push(get().loadEntries(id));
-      await Promise.all(tasks);
-      return id;
+          activeSessionId: id,
+          sessionOrder: [...state.sessionOrder.filter((sid) => sid !== id), id],
+        }));
+        const tasks: Promise<unknown>[] = [
+          get().loadState(id),
+          get().loadModels(id),
+          get().loadThinkingLevels(id),
+          get().loadSessionStats(id),
+        ];
+        // 历史会话: 加载条目 (长文件较慢, 不阻塞其它初始化)
+        if (opts?.sessionPath) tasks.push(get().loadEntries(id));
+        await Promise.all(tasks);
+        return id;
+      } finally {
+        set({ isSwitching: false });
+      }
     },
 
     stopSession: async (sessionId) => {

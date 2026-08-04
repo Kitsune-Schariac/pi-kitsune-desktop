@@ -182,3 +182,29 @@ body,
   border-radius: 6px;
   margin: 0.5em 0;
 }
+
+/* 洛伦兹吸引子 loading (会话切换中): 混沌系统蝴蝶轨迹, 流动光沿轨道跑 + 整体慢旋 */
+.lorenz-wrap {
+  width: 160px;
+  height: 160px;
+  animation: lorenz-spin 18s linear infinite;
+}
+.lorenz-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.lorenz-flow {
+  animation: lorenz-dash var(--dur) linear infinite;
+}
+@keyframes lorenz-dash {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -1.05; }
+}
+@keyframes lorenz-spin {
+  to { transform: rotate(360deg); }
+}
+/* 无障碍: 减少动效偏好时停止流动与旋转 */
+@media (prefers-reduced-motion: reduce) {
+  .lorenz-wrap, .lorenz-flow { animation: none; }
+}

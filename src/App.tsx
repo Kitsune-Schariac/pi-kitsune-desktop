@@ -5,6 +5,7 @@ import { MessageList } from "./components/MessageList";
 import { InputBar } from "./components/InputBar";
 import { Sidebar } from "./components/Sidebar";
 import { EmptyState } from "./components/EmptyState";
+import { ChaosLoader } from "./components/ChaosLoader";
 import { SettingsWindow } from "./components/settings/SettingsWindow";
 import { SkillsPanel } from "./components/panels/SkillsPanel";
 import { PackagesPanel } from "./components/panels/PackagesPanel";
@@ -17,6 +18,7 @@ export default function App() {
   const sessions = useSessionStore((s) => s.sessions);
   const active = activeSessionId ? sessions[activeSessionId] : null;
   const stopSession = useSessionStore((s) => s.stopSession);
+  const isSwitching = useSessionStore((s) => s.isSwitching);
   const loadProjects = useProjectsStore((s) => s.loadProjects);
   const [panel, setPanel] = useState<PanelKind>(null);
   // 空状态: 项目选择器的选中值 (InputBar 发送时自动建会话用)
@@ -34,7 +36,11 @@ export default function App() {
       {/* relative: 供底部悬浮输入框 absolute 定位
           不压缩滚动区: 消息可滑到输入卡后方 (半透明可见), 底部留白由 MessageList 内部 padding 承担 */}
       <main className="relative flex min-w-0 flex-1 flex-col">
-        {active ? (
+        {isSwitching ? (
+          <div className="flex flex-1 items-center justify-center">
+            <ChaosLoader />
+          </div>
+        ) : active ? (
           <>
             <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
               <div className="flex min-w-0 items-center gap-2">
