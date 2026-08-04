@@ -13,8 +13,9 @@ type PendingRequests = Arc<Mutex<HashMap<String, oneshot::Sender<serde_json::Val
 
 /// 一个 `pi --mode rpc` 子进程的封装
 pub struct PiRuntime {
-    #[allow(dead_code)] // M3 RuntimePool 会读取
-    pub session_id: String,
+    /// 事件流绑定的 sessionId: 可变, warm runtime 复用时 rebind 到真实会话
+    /// (预热时是 warm_xxx, 不复用则始终等于 spawn 传入值; 前端按此路由事件)
+    session_id: Arc<Mutex<String>>,
     child: Child,
     stdin: ChildStdin,
     pending: PendingRequests,
@@ -56,7 +57,10 @@ impl PiRuntime {
 
         // 后台 task: 按 \n 切帧读 stdout, 分流 response 和 event
         // 铁律: 严格按 \n 切, 不用会处理 U+2028/U+2029 的通用 line reader (Node readline 的坑, 这俩在 JSON 字符串里合法)
-        let sid = session_id.clone();
+        // sessionId 用 Arc<Mutex> 而非字符串值: warm runtime 被新会话复用时, 事件流必须能
+        // 改绑到真实会话 id, 否则前端按 sessionId 查不到 → 流式事件全部丢失
+        let sid = Arc::new(Mutex::new(session_id));
+        let sid_for_reader = sid.clone();
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout);
             let mut buf = Vec::with_capacity(8192);
@@ -64,8 +68,9 @@ impl PiRuntime {
                 buf.clear();
                 match reader.read_until(b'\n', &mut buf).await {
                     Ok(0) => {
+                        let sid = sid_for_reader.lock().await;
                         let _ = app.emit("pi_event", serde_json::json!({
-                            "sessionId": &sid,
+                            "sessionId": sid.as_str(),
                             "event": { "type": "pi_process_exit" }
                         }));
                         break;
@@ -94,9 +99,10 @@ impl PiRuntime {
                                     }
                                     // 没匹配到 pending 的 response fallthrough 走事件流 (过期/无 id)
                                 }
-                                // event 或无 id response → emit pi_event
+                                // event 或无 id response → emit pi_event (sessionId 读当前绑定值)
+                                let sid = sid_for_reader.lock().await;
                                 let _ = app.emit("pi_event", serde_json::json!({
-                                    "sessionId": &sid,
+                                    "sessionId": sid.as_str(),
                                     "event": frame,
                                 }));
                             }
@@ -133,12 +139,18 @@ impl PiRuntime {
         }
 
         Ok(PiRuntime {
-            session_id,
+            session_id: sid,
             child,
             stdin,
             pending,
             id_counter: Arc::new(AtomicU64::new(0)),
         })
+    }
+
+    /// warm runtime 被新会话复用时, 把事件流 sessionId 改绑到真实会话
+    /// (reader 每次 emit 前读当前值, 改绑对已在进行中的流式输出同样生效)
+    pub async fn rebind_session(&self, new_session_id: String) {
+        *self.session_id.lock().await = new_session_id;
     }
 
     /// fire-and-forget: 写命令到 pi stdin (JSON + \n), 不等响应 (prompt/abort 用, 真正回复走事件流)

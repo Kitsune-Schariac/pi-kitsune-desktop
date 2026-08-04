@@ -150,10 +150,16 @@ async fn start_session(
     };
 
     // 阶段 2 (无锁, 慢操作): spawn (或复用 warm) + switch_session
+    let reused_warm = warm_rt.is_some();
     let mut runtime = match warm_rt {
         Some(rt) => rt,
         None => PiRuntime::spawn(app.clone(), session_id.clone(), cwd.clone(), provider, model).await?,
     };
+    // warm 复用: 事件流的 sessionId 还停留在预热时的 warm_xxx, 必须 rebind 到真实会话,
+    // 否则前端按 sessionId 路由查不到 → 流式事件全部丢弃 → 客户端永远"思考中"
+    if reused_warm {
+        runtime.rebind_session(session_id.clone()).await;
+    }
     if let Some(path) = session_path {
         // 加载历史会话: 切换失败或被扩展取消时停掉 runtime, 防止僵尸 pi 进程
         match runtime.switch_session(path).await {
