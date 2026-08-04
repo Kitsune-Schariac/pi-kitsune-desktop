@@ -203,7 +203,10 @@ pub fn delete_session_file(session_path: String) -> Result<(), String> {
     if !target_abs.starts_with(&sessions_root) {
         return Err("拒绝删除 sessions 目录外的文件".into());
     }
-    std::fs::remove_file(&target_abs).map_err(|e| format!("删除失败: {e}"))
+    std::fs::remove_file(&target_abs).map_err(|e| format!("删除失败: {e}"))?;
+    // token 统计索引联动: 移除该文件条目, 防止统计虚高 (不要求索引已初始化)
+    crate::token_stats::remove_index_file(&target_abs);
+    Ok(())
 }
 
 /// 读取文件用于上下文引用: 图片 → base64, 文本 → 内容 (100KB 截断)

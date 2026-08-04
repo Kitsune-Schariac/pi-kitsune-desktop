@@ -319,6 +319,19 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(Mutex::new(RuntimePool::new())) as SharedRuntime)
+        .setup(|_app| {
+            // token 统计索引预热: 后台线程首次全量建索引 (1~2s), 不阻塞启动;
+            // 之后 get_token_stats 的增量守卫只 stat + 重扫变化文件
+            std::thread::Builder::new()
+                .name("token-index-prewarm".into())
+                .spawn(|| {
+                    let t = Instant::now();
+                    token_stats::prewarm();
+                    eprintln!("[token-stats] 索引预热完成: {:?}", t.elapsed());
+                })
+                .ok();
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             start_session, send_prompt, abort_session, stop_session,
             get_state, get_available_models, set_model, cycle_model,
