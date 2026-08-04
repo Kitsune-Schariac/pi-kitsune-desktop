@@ -116,6 +116,8 @@ export function ProjectList() {
   const startSession = useSessionStore((s) => s.startSession);
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
   const stopSession = useSessionStore((s) => s.stopSession);
+  const reattachSession = useSessionStore((s) => s.reattachSession);
+  const removeSessionState = useSessionStore((s) => s.removeSessionState);
   const renameSession = useSessionStore((s) => s.renameSession);
 
   const [ctx, setCtx] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
@@ -173,7 +175,11 @@ export function ProjectList() {
 
   // 移除虚拟项目 = 关闭该 cwd 下全部打开会话 (无磁盘记录可删, 会话关完项目自然消失)
   const stopAllCwdSessions = (cwd: string) => {
-    sessionOrder.filter((sid) => sessions[sid]?.cwd === cwd).forEach((sid) => stopSession(sid));
+    // 移除项目 = 关掉该 cwd 全部打开会话: 停进程 + 真删 state (不然 detached 会留在侧边栏)
+    sessionOrder.filter((sid) => sessions[sid]?.cwd === cwd).forEach((sid) => {
+      stopSession(sid);
+      removeSessionState(sid);
+    });
   };
 
   // 点击会话: 已打开 → 切换; 未打开 → 加载历史
@@ -181,9 +187,14 @@ export function ProjectList() {
   const handleOpenSession = async (projectPath: string, s: SessionNode) => {
     const openId = sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, s.session_path));
     if (openId) {
+      // 快路径: 同步切换 + 渲染缓存 entries (即使 detached 也先显示), detached 时后台 reattach
       setActiveSession(openId);
+      if (sessions[openId]?.detached) {
+        void reattachSession(openId, projectPath, s.session_path);
+      }
       return;
     }
+    // 慢路径: 无缓存首次打开 (UI 立即切 + loading 占位, 不阻塞 await)
     setStartingPath(s.session_path);
     try {
       await startSession(projectPath, { sessionPath: s.session_path });
@@ -206,7 +217,10 @@ export function ProjectList() {
   // 删除会话: 若正在使用则先停 runtime, 再删文件
   const handleDeleteSession = async (projectPath: string, s: SessionNode) => {
     const openId = sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, s.session_path));
-    if (openId) await stopSession(openId);
+    if (openId) {
+      await stopSession(openId); // 停进程 + detach
+      removeSessionState(openId); // 真删 state (磁盘文件要删, detached entries 留着无意义)
+    }
     await removeSession(projectPath, s.session_path);
   };
 
@@ -370,7 +384,7 @@ export function ProjectList() {
                         x: e.clientX, y: e.clientY,
                         items: [
                           { label: "打开", icon: FolderOpen, onClick: () => setActiveSession(sid) },
-                          { label: "删除会话", icon: Trash2, danger: true, onClick: () => stopSession(sid) },
+                          { label: "删除会话", icon: Trash2, danger: true, onClick: () => { stopSession(sid); removeSessionState(sid); } },
                         ],
                       });
                     }}
@@ -379,7 +393,7 @@ export function ProjectList() {
                     <span className="min-w-0 flex-1 truncate">{openSessionTitle(s)}</span>
                     <span className="shrink-0 text-[10px] text-neutral-400">新会话</span>
                     <button
-                      onClick={(e) => { e.stopPropagation(); stopSession(sid); }}
+                      onClick={(e) => { e.stopPropagation(); stopSession(sid); removeSessionState(sid); }}
                       className="hidden shrink-0 rounded p-0.5 text-neutral-400 transition hover:text-red-500 group-hover:block"
                       title="删除会话"
                     >

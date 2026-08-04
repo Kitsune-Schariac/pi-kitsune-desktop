@@ -6,7 +6,7 @@ use pi_runtime::PiRuntime;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 const POOL_CAPACITY: usize = 6;
@@ -81,7 +81,8 @@ impl RuntimePool {
     }
 
     /// 超过 capacity 时淘汰最久未活动的 runtime (graceful stop)
-    async fn evict_lru(&mut self) {
+    /// 淘汰后 emit session_evicted: 前端保留 entries 标记 detached, 切回时秒切 + reattach
+    async fn evict_lru(&mut self, app: &tauri::AppHandle) {
         while self.runtimes.len() > POOL_CAPACITY {
             // 先 clone 出 victim id, 结束 iter 不可变借用, 再 remove
             let victim = self
@@ -94,6 +95,8 @@ impl RuntimePool {
                 let _ = rt.stop().await;
             }
             self.last_active.remove(&id);
+            // 通知前端: pi 进程被 LRU 淘汰, entries 仍在内存, 切回走 reattach 而非报错
+            let _ = app.emit("session_evicted", serde_json::json!({ "sessionId": id }));
         }
     }
 
@@ -125,14 +128,15 @@ async fn start_session(
     provider: Option<String>,
     model: Option<String>,
     session_path: Option<String>,
+    session_id: Option<String>,
 ) -> Result<String, String> {
-    let session_id = format!(
-        "sess_{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| e.to_string())?
-            .as_millis()
-    );
+    // reattach 复用原 sessionId: 事件流 rebind 到原 id, 前端缓存 entries 不用迁移 key;
+    // 新建会话不传 → 生成新 id
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis();
+    let session_id = session_id.unwrap_or_else(|| format!("sess_{now_ms}"));
 
     // 阶段 1 (锁内, 快速): 取 warm / 丢弃不匹配 warm / 标记预热 (防并发重复)
     let warm_rt;
@@ -180,7 +184,7 @@ async fn start_session(
         let mut guard = state.lock().await;
         guard.runtimes.insert(session_id.clone(), runtime);
         guard.touch(&session_id);
-        guard.evict_lru().await;
+        guard.evict_lru(&app).await;
     }
     // 预热: spawn 同 cwd 的 pi 存槽 (spawn 本身 ~10ms, pi 的 3.5s 初始化在后台自然度过;
     // 预热不写 session 文件, 复用后 switch_session 绑定真实会话)
@@ -322,6 +326,7 @@ pub fn run() {
             get_entries, get_session_stats, set_session_name,
             session_fs::list_projects_and_sessions, session_fs::delete_session_file,
             session_fs::read_file_for_context, session_fs::list_skills_and_packages,
+            session_fs::get_session_file_mtime,
             token_stats::get_token_stats,
         ])
         .on_window_event(|window, event| {

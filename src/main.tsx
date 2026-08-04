@@ -13,6 +13,11 @@ listen<{ sessionId: string; event: Record<string, unknown> }>("pi_event", (e) =>
   useSessionStore.getState().handleEvent(e.payload);
 });
 
+// Rust 侧 LRU 淘汰 pi 进程时 emit: 标记 detached (entries 保留), 切回走 reattach 秒切
+listen<{ sessionId: string }>("session_evicted", (e) => {
+  useSessionStore.getState().markDetached(e.payload.sessionId);
+});
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />

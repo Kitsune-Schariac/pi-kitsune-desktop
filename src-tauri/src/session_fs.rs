@@ -280,9 +280,9 @@ pub fn list_skills_and_packages() -> Result<serde_json::Value, String> {
             let mut name = entry.file_name().to_string_lossy().to_string();
             let mut description = String::new();
             // frontmatter: ---\nname: xxx\ndescription: xxx\n---
-            if text.starts_with("---") {
-                if let Some(end) = text[3..].find("\n---") {
-                    let fm = &text[3..3 + end];
+            if let Some(rest) = text.strip_prefix("---") {
+                if let Some(end) = rest.find("\n---") {
+                    let fm = &rest[..end];
                     for line in fm.lines() {
                         if let Some(v) = line.strip_prefix("name:") {
                             name = v.trim().to_string();
@@ -340,4 +340,24 @@ pub fn list_skills_and_packages() -> Result<serde_json::Value, String> {
         "providers": providers,
         "defaults": defaults,
     }))
+}
+
+/// 获取会话 jsonl 文件修改时间 (ms 时间戳); 文件不存在或无路径返回 None
+/// 供前端 mtime 守卫: 切回会话时比对磁盘 mtime 与缓存 baseline, 没变就不重读 entries
+#[tauri::command]
+pub fn get_session_file_mtime(session_path: Option<String>) -> Result<Option<f64>, String> {
+    let Some(path) = session_path else { return Ok(None) };
+    let p = PathBuf::from(&path);
+    if !p.is_file() {
+        return Ok(None);
+    }
+    let modified = std::fs::metadata(&p)
+        .map_err(|e| format!("读取文件元数据失败: {e}"))?
+        .modified()
+        .map_err(|e| format!("读取修改时间失败: {e}"))?;
+    let ms = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("时间转换失败: {e}"))?
+        .as_millis() as f64;
+    Ok(Some(ms))
 }

@@ -5,6 +5,9 @@
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
+/// 按日聚合累加器: (input, output, cache_read, cache_write, total, cost, msg_count)
+type DayAgg = (u64, u64, u64, u64, u64, f64, u64);
+
 /// 规范化后的单条消息用量记录
 struct UsageRecord {
     timestamp: String, // 消息 ISO 时间戳 (UTC, 字典序可比)
@@ -21,6 +24,7 @@ struct UsageRecord {
 /// usage 双格式解析:
 /// - pi 原生: {input, output, cacheRead, cacheWrite, totalTokens, cost:{total}}
 /// - OpenAI 兼容: {prompt_tokens, completion_tokens, total_tokens} (无 cost, 记 0)
+///
 /// 未知结构返回 None (该行跳过)
 fn parse_usage(v: &Value) -> Option<(u64, u64, u64, u64, u64, f64)> {
     let num = |key: &str| v.get(key).and_then(|x| x.as_u64());
@@ -220,7 +224,7 @@ pub fn get_token_stats(
         total: 0,
         cost: 0.0,
     };
-    let mut by_day: std::collections::BTreeMap<String, (u64, u64, u64, u64, u64, f64, u64)> =
+    let mut by_day: std::collections::BTreeMap<String, DayAgg> =
         std::collections::BTreeMap::new();
     let mut sessions: Vec<SessionAgg> = Vec::new();
 

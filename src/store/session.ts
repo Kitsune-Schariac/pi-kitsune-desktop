@@ -45,6 +45,8 @@ export interface SessionState {
     assistantMessages: number;
     totalMessages: number;
   } | null;
+  detached: boolean;            // pi 进程已停但 entries 仍在内存 (秒切缓存), 切回走 reattach
+  lastEntryMtime: number | null; // jsonl 文件 mtime baseline (mtime 守卫: 没变就不重读 entries)
 }
 
 interface SessionStore {
@@ -67,8 +69,16 @@ interface SessionStore {
   loadSessionStats: (sessionId: string) => Promise<void>;
   loadEntries: (sessionId: string) => Promise<void>;
   renameSession: (sessionId: string, name: string) => Promise<void>;
+  reattachSession: (sessionId: string, cwd: string, sessionPath: string) => Promise<void>;
+  removeSessionState: (sessionId: string) => void;
+  markDetached: (sessionId: string) => void;
   handleEvent: (payload: { sessionId: string; event: Record<string, unknown> }) => void;
 }
+
+// reattach 防竞态: 每次递增, 异步完成时比对, 不一致则丢弃 (快速连切时旧 reattach 不串到当前会话)
+let reattachEpoch = 0;
+// detached 会话 entries 常驻上限, 超限清最久未访问 (防长期使用内存无限增长)
+const ENTRY_CACHE_LIMIT = 20;
 
 export const useSessionStore = create<SessionStore>((set, get) => {
   // 更新指定 session 的部分字段 (闭包 helper, handleEvent/actions 复用)
@@ -97,6 +107,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           [id]: {
             sessionId: id, cwd, sessionPath: opts?.sessionPath ?? null, sessionName: null,
             isStreaming: false, entries: [], currentAssistantId: null,
+            detached: false, lastEntryMtime: null,
             error: null, currentModel: null, thinkingLevel: "medium",
             availableModels: [], availableThinkingLevels: ["off"],
             steeringQueue: [], followUpQueue: [],
@@ -120,6 +131,31 @@ export const useSessionStore = create<SessionStore>((set, get) => {
 
     stopSession: async (sessionId) => {
       try { await invoke("stop_session", { sessionId }); } catch { /* ignore */ }
+      // detach: 停 pi 进程但保留 entries (秒切缓存); sessionOrder 保留让侧边栏 openId 仍命中快路径
+      patch(sessionId, { detached: true, isStreaming: false, currentAssistantId: null });
+      // activeSessionId 若是被停的, 切到下一个非自己会话 (detached 也能秒切, 允许切到 detached)
+      set((state) => {
+        if (state.activeSessionId !== sessionId) return state;
+        const next = state.sessionOrder.filter((sid) => sid !== sessionId).pop() ?? null;
+        return { activeSessionId: next };
+      });
+      // prune: detached 会话超上限时清最久未访问 (sessionOrder 开头最旧)
+      set((state) => {
+        const detachedIds = state.sessionOrder.filter((sid) => state.sessions[sid]?.detached);
+        if (detachedIds.length <= ENTRY_CACHE_LIMIT) return state;
+        const toRemove = detachedIds.slice(0, detachedIds.length - ENTRY_CACHE_LIMIT);
+        const sessions = { ...state.sessions };
+        toRemove.forEach((sid) => delete sessions[sid]);
+        const sessionOrder = state.sessionOrder.filter((sid) => !toRemove.includes(sid));
+        const activeSessionId = toRemove.includes(state.activeSessionId ?? "")
+          ? (sessionOrder[sessionOrder.length - 1] ?? null)
+          : state.activeSessionId;
+        return { sessions, sessionOrder, activeSessionId };
+      });
+    },
+
+    // 真删前端 state (不调 invoke): 删会话文件 / 移除项目 / 关新会话节点用, 进程已由 stopSession 停
+    removeSessionState: (sessionId) => {
       set((state) => {
         const sessions = { ...state.sessions };
         delete sessions[sessionId];
@@ -129,6 +165,45 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           : state.activeSessionId;
         return { sessions, sessionOrder, activeSessionId };
       });
+    },
+
+    // reattach: detached 会话切回时后台重建 pi 进程 (复用 warm), mtime 守卫决定是否重读 entries
+    reattachSession: async (sessionId, cwd, sessionPath) => {
+      const epoch = ++reattachEpoch;
+      // 复用 start_session 传原 sessionId: Rust 侧 rebind 事件流到原 id, 缓存 entries 不用迁移 key
+      try {
+        await invoke("start_session", {
+          cwd, provider: null, model: null, sessionPath, sessionId,
+        });
+      } catch (e) {
+        patch(sessionId, { error: `重连会话失败: ${String(e)}` });
+        return;
+      }
+      // 用户已切走 → 丢弃, 不 patch detached 避免串到当前会话
+      if (epoch !== reattachEpoch) return;
+      const cached = get().sessions[sessionId];
+      if (!cached) return; // 已被真删
+      // mtime 守卫: 磁盘没变就不 get_entries, 沿用缓存 entries (秒切核心), 只补 state/stats
+      let mtime: number | null = null;
+      try {
+        mtime = await invoke<number | null>("get_session_file_mtime", { sessionPath });
+      } catch { /* ignore */ }
+      if (epoch !== reattachEpoch) return;
+      const unchanged = mtime != null && cached.lastEntryMtime != null && mtime <= cached.lastEntryMtime;
+      if (unchanged) {
+        // 文件没变: 沿用缓存 entries, 只补 state/stats (pi 进程已 switch_session 内部就绪)
+        await Promise.all([get().loadState(sessionId), get().loadSessionStats(sessionId)]);
+      } else {
+        // 文件变了或无 baseline: 重新读 entries (loadEntries 内部会更新 lastEntryMtime)
+        await get().loadEntries(sessionId);
+      }
+      if (epoch !== reattachEpoch) return;
+      patch(sessionId, { detached: false });
+    },
+
+    // LRU 淘汰 / 进程异常退出通知: 标记 detached, entries 保留 (秒切缓存), 切回走 reattach
+    markDetached: (sessionId: string) => {
+      patch(sessionId, { detached: true, isStreaming: false, currentAssistantId: null });
     },
 
     setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
@@ -236,6 +311,14 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       try {
         const data = await invoke<{ entries: unknown[] }>("get_entries", { sessionId });
         patch(sessionId, { entries: mapHistoryEntries(data.entries || []) });
+        // 记录 mtime baseline: 下次切回走 mtime 守卫, 文件没变就不重读
+        const sp = get().sessions[sessionId]?.sessionPath;
+        if (sp) {
+          try {
+            const mtime = await invoke<number | null>("get_session_file_mtime", { sessionPath: sp });
+            patch(sessionId, { lastEntryMtime: mtime });
+          } catch { /* ignore */ }
+        }
       } catch (e) {
         patch(sessionId, { error: `历史加载失败: ${String(e)}` });
       }
