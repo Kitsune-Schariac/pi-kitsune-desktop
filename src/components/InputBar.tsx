@@ -111,6 +111,8 @@ export function InputBar({
   const setModel = useSessionStore((s) => s.setModel);
   const setThinkingLevel = useSessionStore((s) => s.setThinkingLevel);
   const sendPrompt = useSessionStore((s) => s.sendPrompt);
+  const sendSteer = useSessionStore((s) => s.sendSteer);
+  const sendFollowUp = useSessionStore((s) => s.sendFollowUp);
   const abort = useSessionStore((s) => s.abort);
   const startSession = useSessionStore((s) => s.startSession);
 
@@ -133,10 +135,16 @@ export function InputBar({
     }
   };
 
-  const handleSend = async () => {
-    if (!text.trim() || isStreaming) return;
-    // 无选中会话: 空状态流程 → 用已选项目自动建会话再发
+  // 三种发送模式共用组装逻辑: prompt (普通对话) / steer (运行中指导) / followUp (排队后续)
+  // steer/followUp 必须已有活跃会话 (队列是会话级状态), 只有 prompt 支持空状态自动建会话
+  const handleSend = async (mode: "prompt" | "steer" | "followUp" = "prompt") => {
+    if (!text.trim()) return;
     if (!activeSessionId) {
+      if (mode !== "prompt") {
+        setHint("请先打开一个会话再发送");
+        setTimeout(() => setHint(null), 2500);
+        return;
+      }
       if (!emptyProject) {
         setHint("请先在上方选择项目");
         setTimeout(() => setHint(null), 2500);
@@ -157,7 +165,10 @@ export function InputBar({
     const extra = textRefs.length
       ? "\n\n" + textRefs.map((r) => `[引用文件: ${r.fileName}]\n${r.content}`).join("\n\n")
       : "";
-    await sendPrompt(activeSessionId!, text.trim() + extra, images.length ? images : undefined);
+    const full = text.trim() + extra;
+    if (mode === "steer") await sendSteer(activeSessionId!, full, images.length ? images : undefined);
+    else if (mode === "followUp") await sendFollowUp(activeSessionId!, full, images.length ? images : undefined);
+    else await sendPrompt(activeSessionId!, full, images.length ? images : undefined);
     setText("");
     setRefs([]);
     textareaRef.current?.focus();
@@ -166,7 +177,10 @@ export function InputBar({
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      // 对齐 pi TUI 官方行为: 运行中 Alt+Enter 排队 followUp, 空闲时 Alt+Enter 与 Enter 等价直接发送
+      // (pi 的 followUp 队列只在下一次 turn 时投递, 空闲排队会造成消息悬挂不投递)
+      if (isStreaming) handleSend(e.altKey ? "followUp" : "steer");
+      else handleSend("prompt");
     }
   };
 
@@ -214,10 +228,9 @@ export function InputBar({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKey}
-          placeholder={isStreaming ? "等待回复…" : "输入消息, Enter 发送"}
-          disabled={isStreaming}
+          placeholder={isStreaming ? "运行中: Enter 发 steer 指导, Alt+Enter 排队后续" : "输入消息, Enter 发送"}
           rows={2}
-          className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-sm text-neutral-800 outline-none placeholder:text-neutral-500 disabled:opacity-60"
+          className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-sm text-neutral-800 outline-none placeholder:text-neutral-500"
         />
 
         {/* 输入框内底部工具行: 左上下文 / 右 context window + 选择器 + 发送 */}
@@ -304,13 +317,13 @@ export function InputBar({
               <button
                 onClick={() => activeSessionId && abort(activeSessionId)}
                 className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-100 text-red-500 transition hover:bg-red-200"
-                title="中止"
+                title="中止 (Enter 发 steer 指导)"
               >
                 <Square className="h-4 w-4" />
               </button>
             ) : (
               <button
-                onClick={handleSend}
+                onClick={() => handleSend("prompt")}
                 disabled={!text.trim()}
                 className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white shadow-sm shadow-orange-500/30 transition hover:bg-orange-600 disabled:opacity-40"
                 title="发送"

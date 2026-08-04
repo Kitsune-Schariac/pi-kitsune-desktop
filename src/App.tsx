@@ -10,6 +10,7 @@ import { SettingsWindow } from "./components/settings/SettingsWindow";
 import { SkillsPanel } from "./components/panels/SkillsPanel";
 import { PackagesPanel } from "./components/panels/PackagesPanel";
 import { NotificationToasts, UiRequestModal } from "./components/UiRequestModal";
+import { QueueIndicator } from "./components/QueueIndicator";
 import { Loader2, X } from "lucide-react";
 
 export type PanelKind = "skills" | "packages" | "settings" | null;
@@ -61,12 +62,15 @@ export default function App() {
                   </span>
                 )}
               </div>
-              <button
-                onClick={() => stopSession(activeSessionId!)}
-                className="shrink-0 rounded-md px-2 py-1 text-xs text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-600"
-              >
-                关闭会话
-              </button>
+              <div className="flex shrink-0 items-center gap-1">
+                <QueueIndicator steering={active.steeringQueue} followUp={active.followUpQueue} />
+                <button
+                  onClick={() => stopSession(activeSessionId!)}
+                  className="rounded-md px-2 py-1 text-xs text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-600"
+                >
+                  关闭会话
+                </button>
+              </div>
             </header>
             {/* 错误提示放 header 下方: 悬浮输入框会盖住底部区域, 放底部看不见 */}
             {active?.error && (

@@ -231,6 +231,33 @@ impl PiRuntime {
         self.send_command(serde_json::json!({ "type": "abort" })).await
     }
 
+    /// steer: agent 运行中排队指导消息 (当前 turn 工具执行完后、下次 LLM 调用前投递)
+    /// fire-and-forget: 投递与否由 queue_update 事件回推, 前端不依赖同步确认
+    pub async fn steer(
+        &mut self,
+        message: String,
+        images: Option<Vec<serde_json::Value>>,
+    ) -> Result<(), String> {
+        let mut cmd = serde_json::json!({ "type": "steer", "message": message });
+        if let Some(imgs) = images {
+            cmd["images"] = serde_json::Value::Array(imgs);
+        }
+        self.send_command(cmd).await
+    }
+
+    /// follow_up: agent 完全停止后排队的后续消息 (无更多工具调用或 steer 时投递)
+    pub async fn follow_up(
+        &mut self,
+        message: String,
+        images: Option<Vec<serde_json::Value>>,
+    ) -> Result<(), String> {
+        let mut cmd = serde_json::json!({ "type": "follow_up", "message": message });
+        if let Some(imgs) = images {
+            cmd["images"] = serde_json::Value::Array(imgs);
+        }
+        self.send_command(cmd).await
+    }
+
     /// extension_ui_response 帧写回 pi stdin (fire-and-forget: pi 按 id 匹配 pending
     /// 扩展请求后自行 resolve, 不会回 response 帧, 所以不能走 send_request 通道)
     /// payload 由前端拼好 (confirmed/value/cancelled), 这里只补 type+id 标识

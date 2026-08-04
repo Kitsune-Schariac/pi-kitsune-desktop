@@ -229,6 +229,32 @@ async fn abort_session(state: State<'_, SharedRuntime>, session_id: String) -> R
 }
 
 #[tauri::command]
+async fn send_steer(
+    state: State<'_, SharedRuntime>,
+    session_id: String,
+    message: String,
+    images: Option<Vec<serde_json::Value>>,
+) -> Result<(), String> {
+    let mut guard = state.lock().await;
+    guard.touch(&session_id);
+    let runtime = guard.runtimes.get_mut(&session_id).ok_or("session 不存在")?;
+    runtime.steer(message, images).await
+}
+
+#[tauri::command]
+async fn send_follow_up(
+    state: State<'_, SharedRuntime>,
+    session_id: String,
+    message: String,
+    images: Option<Vec<serde_json::Value>>,
+) -> Result<(), String> {
+    let mut guard = state.lock().await;
+    guard.touch(&session_id);
+    let runtime = guard.runtimes.get_mut(&session_id).ok_or("session 不存在")?;
+    runtime.follow_up(message, images).await
+}
+
+#[tauri::command]
 async fn stop_session(state: State<'_, SharedRuntime>, session_id: String) -> Result<(), String> {
     let mut guard = state.lock().await;
     if let Some(mut rt) = guard.runtimes.remove(&session_id) {
@@ -349,6 +375,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             start_session, send_prompt, abort_session, stop_session,
+            send_steer, send_follow_up,
             get_state, get_available_models, set_model, cycle_model,
             set_thinking_level, cycle_thinking_level, get_available_thinking_levels,
             get_entries, get_session_stats, set_session_name,

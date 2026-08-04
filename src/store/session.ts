@@ -62,6 +62,10 @@ interface SessionStore {
   stopSession: (sessionId: string) => Promise<void>;
   setActiveSession: (sessionId: string) => void;
   sendPrompt: (sessionId: string, text: string, images?: unknown[]) => Promise<void>;
+  // steer: agent 运行中排队指导消息; followUp: agent 停止后排队的后续消息
+  // 队列内容由 pi queue_update 事件权威回推 (元素为纯字符串), 这里不做乐观插入
+  sendSteer: (sessionId: string, text: string, images?: unknown[]) => Promise<void>;
+  sendFollowUp: (sessionId: string, text: string, images?: unknown[]) => Promise<void>;
   abort: (sessionId: string) => Promise<void>;
   setModel: (sessionId: string, provider: string, modelId: string) => Promise<void>;
   cycleModel: (sessionId: string) => Promise<void>;
@@ -243,6 +247,30 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         await invoke("send_prompt", { sessionId, message: text, images: images ?? null });
       } catch (e) {
         patch(sessionId, { isStreaming: false, error: String(e) });
+      }
+    },
+
+    // steer/followUp 共用的发送骨架: 校验 session/文本/进程存活后 invoke 对应 command
+    // detached 拒绝: 进程已停, 消息无处可投, 硬发只会悬挂 (写 error 让用户切回重连)
+    sendSteer: async (sessionId, text, images) => {
+      const s = get().sessions[sessionId];
+      if (!s || !text.trim()) return;
+      if (s.detached) { patch(sessionId, { error: "会话进程已停止, 请切回重连后再发送指导消息" }); return; }
+      try {
+        await invoke("send_steer", { sessionId, message: text.trim(), images: images ?? null });
+      } catch (e) {
+        patch(sessionId, { error: String(e) });
+      }
+    },
+
+    sendFollowUp: async (sessionId, text, images) => {
+      const s = get().sessions[sessionId];
+      if (!s || !text.trim()) return;
+      if (s.detached) { patch(sessionId, { error: "会话进程已停止, 请切回重连后再排队后续消息" }); return; }
+      try {
+        await invoke("send_follow_up", { sessionId, message: text.trim(), images: images ?? null });
+      } catch (e) {
+        patch(sessionId, { error: String(e) });
       }
     },
 
