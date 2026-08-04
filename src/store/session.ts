@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectsStore, pathEq } from "./projects";
+import type { UiNotification, UiRequest } from "../lib/pi";
 
 export interface ChatEntry {
   id: string;
@@ -37,6 +38,7 @@ export interface SessionState {
   availableThinkingLevels: string[];
   steeringQueue: string[];
   followUpQueue: string[];
+  uiRequests: UiRequest[];      // extension_ui_request dialog 类请求队列 (FIFO, 一次弹一个)
   contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } | null;
   tokenStats: {
     tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
@@ -75,6 +77,11 @@ interface SessionStore {
   removeSessionState: (sessionId: string) => void;
   markDetached: (sessionId: string) => void;
   handleEvent: (payload: { sessionId: string; event: Record<string, unknown> }) => void;
+  // extension_ui_request 响应: 乐观移出队列后写回 pi; 失败时 pi 侧超时自动解决, 不阻塞
+  resolveUiRequest: (sessionId: string, id: string, payload: Record<string, unknown>) => Promise<void>;
+  // notify 通知条 (全局, 跨会话展示)
+  notifications: UiNotification[];
+  dismissNotification: (id: string) => void;
 }
 
 // reattach 防竞态: 每次递增, 异步完成时比对, 不一致则丢弃 (快速连切时旧 reattach 不串到当前会话)
@@ -96,6 +103,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     activeSessionId: null,
     sessionOrder: [],
     isSwitching: false,
+    notifications: [],
 
     startSession: async (cwd, opts) => {
       // 切换中: 立即切掉旧消息内容, 消息区显示混沌 loading 动画 (startSession 慢操作期间不残留旧会话)
@@ -116,7 +124,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
               detached: false, lastEntryMtime: null, hasUnread: false,
               error: null, currentModel: null, thinkingLevel: "medium",
               availableModels: [], availableThinkingLevels: ["off"],
-              steeringQueue: [], followUpQueue: [],
+              steeringQueue: [], followUpQueue: [], uiRequests: [],
               contextUsage: null, tokenStats: null,
             },
           },
@@ -141,7 +149,8 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     stopSession: async (sessionId) => {
       try { await invoke("stop_session", { sessionId }); } catch { /* ignore */ }
       // detach: 停 pi 进程但保留 entries (秒切缓存); sessionOrder 保留让侧边栏 openId 仍命中快路径
-      patch(sessionId, { detached: true, isStreaming: false, currentAssistantId: null });
+      // uiRequests 同步清空: 进程没了 pi 侧 pending 自动 reject, 前端不能留悬挂弹窗
+      patch(sessionId, { detached: true, isStreaming: false, currentAssistantId: null, uiRequests: [] });
       // activeSessionId 若是被停的, 切到下一个非自己会话 (detached 也能秒切, 允许切到 detached)
       set((state) => {
         if (state.activeSessionId !== sessionId) return state;
@@ -212,7 +221,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
 
     // LRU 淘汰 / 进程异常退出通知: 标记 detached, entries 保留 (秒切缓存), 切回走 reattach
     markDetached: (sessionId: string) => {
-      patch(sessionId, { detached: true, isStreaming: false, currentAssistantId: null });
+      patch(sessionId, { detached: true, isStreaming: false, currentAssistantId: null, uiRequests: [] });
     },
 
     setActiveSession: (sessionId) => set((state) => {
@@ -429,9 +438,48 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           }
           break;
         case "pi_process_exit":
-          patch(sessionId, { isStreaming: false, currentAssistantId: null, error: "pi 进程已退出" });
+          patch(sessionId, { isStreaming: false, currentAssistantId: null, uiRequests: [], error: "pi 进程已退出" });
           break;
+        // 扩展 UI 请求: dialog 类 (confirm/select/input/editor) 入队等待用户响应;
+        // notify 是 fire-and-forget 信息条, 直接展示; 其余 (setStatus/setWidget/setTitle 等)
+        // 桌面端无承载 V1 忽略
+        case "extension_ui_request": {
+          const req = event as unknown as UiRequest;
+          const method = req.method;
+          if (method === "confirm" || method === "select" || method === "input" || method === "editor") {
+            const cur = get().sessions[sessionId];
+            if (!cur) break;
+            patch(sessionId, { uiRequests: [...cur.uiRequests, req] });
+          } else if (method === "notify") {
+            const n: UiNotification = {
+              id: (req.id as string) || crypto.randomUUID(),
+              message: (req.message as string) || "",
+              notifyType: (req.notifyType as UiNotification["notifyType"]) || "info",
+            };
+            if (n.message) {
+              set((state) => ({ notifications: [...state.notifications, n] }));
+            }
+          }
+          break;
+        }
       }
+    },
+
+    resolveUiRequest: async (sessionId, id, payload) => {
+      // 乐观移除: 先出队再发 invoke, 用户无感知; 失败时 pi 侧 timeout 自动解决 (不跟踪)
+      const cur = get().sessions[sessionId];
+      if (cur) {
+        patch(sessionId, { uiRequests: cur.uiRequests.filter((r) => r.id !== id) });
+      }
+      try {
+        await invoke("send_extension_ui_response", { sessionId, id, payload });
+      } catch (e) {
+        patch(sessionId, { error: `响应扩展请求失败: ${String(e)}` });
+      }
+    },
+
+    dismissNotification: (id) => {
+      set((state) => ({ notifications: state.notifications.filter((n) => n.id !== id) }));
     },
   };
 });

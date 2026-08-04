@@ -40,3 +40,23 @@ export interface AssistantMessageEvent {
   toolCall?: unknown;
   reason?: string;
 }
+
+/** extension_ui_request 请求 (pi 扩展 UI 子协议, 见 rpc.md Extension UI Protocol) */
+export interface UiRequest {
+  id: string;
+  method: "confirm" | "select" | "input" | "editor" | "notify" | string;
+  title?: string;
+  message?: string;
+  options?: string[];
+  placeholder?: string;
+  prefill?: string;
+  notifyType?: "info" | "warning" | "error";
+  timeout?: number;
+}
+
+/** notify 通知条 (fire-and-forget, 无需响应) */
+export interface UiNotification {
+  id: string;
+  message: string;
+  notifyType: "info" | "warning" | "error";
+}

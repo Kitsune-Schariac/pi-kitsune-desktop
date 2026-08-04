@@ -9,6 +9,7 @@ import { ChaosLoader } from "./components/ChaosLoader";
 import { SettingsWindow } from "./components/settings/SettingsWindow";
 import { SkillsPanel } from "./components/panels/SkillsPanel";
 import { PackagesPanel } from "./components/panels/PackagesPanel";
+import { NotificationToasts, UiRequestModal } from "./components/UiRequestModal";
 import { Loader2, X } from "lucide-react";
 
 export type PanelKind = "skills" | "packages" | "settings" | null;
@@ -20,6 +21,9 @@ export default function App() {
   const stopSession = useSessionStore((s) => s.stopSession);
   const isSwitching = useSessionStore((s) => s.isSwitching);
   const loadProjects = useProjectsStore((s) => s.loadProjects);
+  const resolveUiRequest = useSessionStore((s) => s.resolveUiRequest);
+  const notifications = useSessionStore((s) => s.notifications);
+  const dismissNotification = useSessionStore((s) => s.dismissNotification);
   const [panel, setPanel] = useState<PanelKind>(null);
   // 空状态: 项目选择器的选中值 (InputBar 发送时自动建会话用)
   const [emptyProject, setEmptyProject] = useState("");
@@ -77,6 +81,20 @@ export default function App() {
         )}
         <InputBar emptyProject={emptyProject} onHeightChange={setInputBarH} />
       </main>
+
+      {/* 扩展 UI 请求弹窗: 只渲染活跃会话的队头请求 (FIFO, 关闭后自动弹下一个) */}
+      {active && active.uiRequests.length > 0 && (
+        <UiRequestModal
+          request={active.uiRequests[0]}
+          onResolve={(id, payload) => resolveUiRequest(activeSessionId!, id, payload)}
+          onCancel={(id) => resolveUiRequest(activeSessionId!, id, { cancelled: true })}
+        />
+      )}
+
+      {/* 扩展 notify 通知条 (fire-and-forget, 右下角自动消失) */}
+      {notifications.length > 0 && (
+        <NotificationToasts notifications={notifications} onDismiss={dismissNotification} />
+      )}
 
       {/* 设置: 独立模态窗口 (与右侧 drawer 并存, 不冲突) */}
       {panel === "settings" && <SettingsWindow onClose={() => setPanel(null)} />}

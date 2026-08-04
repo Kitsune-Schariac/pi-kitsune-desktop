@@ -231,6 +231,18 @@ impl PiRuntime {
         self.send_command(serde_json::json!({ "type": "abort" })).await
     }
 
+    /// extension_ui_response 帧写回 pi stdin (fire-and-forget: pi 按 id 匹配 pending
+    /// 扩展请求后自行 resolve, 不会回 response 帧, 所以不能走 send_request 通道)
+    /// payload 由前端拼好 (confirmed/value/cancelled), 这里只补 type+id 标识
+    pub async fn send_extension_ui_response(&mut self, id: String, payload: serde_json::Value) -> Result<(), String> {
+        let mut frame = payload;
+        if let Some(obj) = frame.as_object_mut() {
+            obj.insert("type".into(), serde_json::json!("extension_ui_response"));
+            obj.insert("id".into(), serde_json::json!(id));
+        }
+        self.send_command(frame).await
+    }
+
     // --- request-response 命令 (同步返回 data) ---
 
     pub async fn get_state(&mut self) -> Result<serde_json::Value, String> {

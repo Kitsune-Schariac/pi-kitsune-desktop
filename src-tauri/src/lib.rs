@@ -314,6 +314,21 @@ async fn set_session_name(state: State<'_, SharedRuntime>, session_id: String, n
     runtime.set_session_name(name).await
 }
 
+// --- extension_ui_request 响应 (权限确认弹窗等 dialog 类请求的回复) ---
+
+#[tauri::command]
+async fn send_extension_ui_response(
+    state: State<'_, SharedRuntime>,
+    session_id: String,
+    id: String,
+    payload: serde_json::Value,
+) -> Result<(), String> {
+    let mut guard = state.lock().await;
+    guard.touch(&session_id);
+    let runtime = guard.runtimes.get_mut(&session_id).ok_or("session 不存在")?;
+    runtime.send_extension_ui_response(id, payload).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -337,6 +352,7 @@ pub fn run() {
             get_state, get_available_models, set_model, cycle_model,
             set_thinking_level, cycle_thinking_level, get_available_thinking_levels,
             get_entries, get_session_stats, set_session_name,
+            send_extension_ui_response,
             session_fs::list_projects_and_sessions, session_fs::delete_session_file,
             session_fs::read_file_for_context, session_fs::list_skills_and_packages,
             session_fs::get_session_file_mtime,
