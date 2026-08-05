@@ -1,3 +1,4 @@
+mod capture;
 mod pi_runtime;
 mod session_fs;
 mod token_stats;
@@ -370,6 +371,7 @@ async fn send_extension_ui_response(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Arc::new(Mutex::new(RuntimePool::new())) as SharedRuntime)
         .setup(|_app| {
             // token 统计索引预热: 后台线程首次全量建索引 (1~2s), 不阻塞启动;
@@ -394,6 +396,8 @@ pub fn run() {
             session_fs::list_projects_and_sessions, session_fs::delete_session_file,
             session_fs::read_file_for_context, session_fs::list_skills_and_packages,
             session_fs::get_session_file_mtime,
+            session_fs::list_dir, session_fs::read_session_entries_public,
+            capture::capture_screenshot,
             token_stats::get_token_stats,
         ])
         .on_window_event(|window, event| {

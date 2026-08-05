@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "主窗口默认权限: invoke 自定义 command + 监听事件",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "clipboard-manager:allow-read-text", "clipboard-manager:allow-read-image"]
 }

@@ -1,19 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/session";
 import {
-  Send, Square, Paperclip, FileText, Image as ImageIcon,
-  X, ChevronDown, Cpu, Layers, Brain,
+  Send, Square, Paperclip, X, ChevronDown, Cpu, Layers, Brain, Loader2,
 } from "lucide-react";
-
-interface FileRef {
-  kind: "image" | "text";
-  fileName: string;
-  data?: string;
-  mimeType?: string;
-  content?: string;
-}
+import { buildRefsParts, refIcon, refMetaText, type Ref } from "../lib/refs";
+import { RefsPopup } from "./refs/RefsPopup";
 
 // 紧凑下拉 (provider/model/thinking 共用)
 function MiniSelect({ label, icon: Icon, value, options, onChange, disabled }: {
@@ -71,8 +63,9 @@ export function InputBar({
   onHeightChange?: (h: number) => void;
 }) {
   const [text, setText] = useState("");
-  const [refs, setRefs] = useState<FileRef[]>([]);
+  const [refs, setRefs] = useState<Ref[]>([]);
   const [ctxOpen, setCtxOpen] = useState(false);
+  const [preview, setPreview] = useState<{ ref: Ref; content: string | null; loading: boolean } | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -123,15 +116,21 @@ export function InputBar({
   const selProvider = currentModel?.provider ?? providers[0] ?? "";
   const providerModels = availableModels.filter((m) => m.provider === selProvider);
 
-  // 引用文件: 图片 → base64 (走 pi images 字段), 文本 → 内容拼进消息
-  const handleAddFile = async () => {
-    try {
-      const sel = await open({ multiple: false, title: "引用文件" });
-      if (!sel || typeof sel !== "string") return;
-      const res = await invoke<FileRef>("read_file_for_context", { filePath: sel });
-      setRefs((prev) => [...prev, res]);
-    } catch (e) {
-      console.error("引用文件失败", e);
+  // 引用文件: 图片 → base64 (走 pi images 字段); 文本 → 只留路径+元信息 (路径模式, 内容不进上下文)
+  // chips 点击预览: 文件类异步读内容 (仅预览用, 不随消息发送); 内联/图像类直接用内存数据
+  const openPreview = async (r: Ref) => {
+    setPreview({ ref: r, content: null, loading: true });
+    if (r.kind === "file" || r.kind === "skill") {
+      try {
+        const res = await invoke<{ content: string }>("read_file_for_context", { filePath: r.path });
+        setPreview({ ref: r, content: res.content, loading: false });
+      } catch (e) {
+        setPreview({ ref: r, content: `读取失败: ${e}`, loading: false });
+      }
+    } else if (r.kind === "session" || r.kind === "clipboard-text") {
+      setPreview({ ref: r, content: r.content, loading: false });
+    } else {
+      setPreview({ ref: r, content: null, loading: false });
     }
   };
 
@@ -157,18 +156,13 @@ export function InputBar({
         return;
       }
     }
-    const images = refs
-      .filter((r): r is FileRef & { data: string; mimeType: string } => r.kind === "image" && !!r.data)
-      .map((r) => ({ type: "image", data: r.data, mimeType: r.mimeType }));
-    // 文本引用: 附加到消息末尾
-    const textRefs = refs.filter((r) => r.kind === "text" && r.content);
-    const extra = textRefs.length
-      ? "\n\n" + textRefs.map((r) => `[引用文件: ${r.fileName}]\n${r.content}`).join("\n\n")
-      : "";
-    const full = text.trim() + extra;
-    if (mode === "steer") await sendSteer(activeSessionId!, full, images.length ? images : undefined);
-    else if (mode === "followUp") await sendFollowUp(activeSessionId!, full, images.length ? images : undefined);
-    else await sendPrompt(activeSessionId!, full, images.length ? images : undefined);
+    // 组装发送载荷: 路径类引用 → [引用文件: path] 标记段; 内联类 → 标记+内容; 图像 → images 字段
+    const parts = buildRefsParts(refs);
+    const full = text.trim() + parts.textRefs;
+    const images = parts.images.length ? parts.images : undefined;
+    if (mode === "steer") await sendSteer(activeSessionId!, full, images);
+    else if (mode === "followUp") await sendFollowUp(activeSessionId!, full, images);
+    else await sendPrompt(activeSessionId!, full, images);
     setText("");
     setRefs([]);
     textareaRef.current?.focus();
@@ -198,30 +192,78 @@ export function InputBar({
         className="pointer-events-auto rounded-2xl border border-neutral-200 bg-white/80 shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition focus-within:border-orange-400"
       >
         <div className="px-4 pt-3">
-          {/* 引用文件 chips */}
+          {/* 引用 chips: 类型图标 + 标题 + 元信息, 点击预览, × 移除 */}
           {refs.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5">
-          {refs.map((r, i) => (
-            <span
-              key={i}
-              className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-xs text-orange-700"
-            >
-              {r.kind === "image" ? (
-                <ImageIcon className="h-3 w-3" />
-              ) : (
-                <FileText className="h-3 w-3" />
-              )}
-              <span className="max-w-[180px] truncate">{r.fileName}</span>
-              <button
-                onClick={() => setRefs((prev) => prev.filter((_, j) => j !== i))}
-                className="rounded p-0.5 transition hover:bg-orange-100"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
+              {refs.map((r, i) => {
+                const Icon = refIcon(r);
+                const meta = refMetaText(r);
+                return (
+                  <span
+                    key={i}
+                    className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-xs text-orange-700"
+                  >
+                    <Icon className="h-3 w-3" />
+                    <button
+                      onClick={() => openPreview(r)}
+                      className="max-w-[180px] truncate hover:underline"
+                      title="点击预览"
+                    >
+                      {r.title}
+                    </button>
+                    {meta && <span className="text-[10px] text-orange-400">{meta}</span>}
+                    <button
+                      onClick={() => setRefs((prev) => prev.filter((_, j) => j !== i))}
+                      className="rounded p-0.5 transition hover:bg-orange-100"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          {/* 引用预览 popover */}
+          {preview && (
+            <div className="relative">
+              <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-xl border border-neutral-200 bg-white shadow-xl">
+                <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-2">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-700">
+                    {(() => {
+                      const Icon = refIcon(preview.ref);
+                      return <Icon className="h-3.5 w-3.5 text-orange-500" />;
+                    })()}
+                    {preview.ref.title}
+                  </span>
+                  <button
+                    onClick={() => setPreview(null)}
+                    className="rounded p-1 text-neutral-400 transition hover:bg-neutral-100"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="max-h-64 overflow-auto p-3">
+                  {preview.loading ? (
+                    <div className="flex items-center gap-2 text-xs text-neutral-400">
+                      <Loader2 className="h-4 w-4 animate-spin" /> 加载预览…
+                    </div>
+                  ) : preview.ref.kind === "image" ||
+                    preview.ref.kind === "screenshot" ||
+                    preview.ref.kind === "clipboard-image" ? (
+                    <img
+                      src={`data:${preview.ref.mimeType};base64,${preview.ref.data}`}
+                      alt={preview.ref.title}
+                      className="max-h-56 rounded-lg border border-neutral-100"
+                    />
+                  ) : (
+                    <pre className="whitespace-pre-wrap text-xs leading-relaxed text-neutral-600">
+                      {preview.content ?? ""}
+                    </pre>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
         <textarea
           ref={textareaRef}
@@ -247,18 +289,11 @@ export function InputBar({
               上下文
             </button>
             {ctxOpen && (
-              <div className="absolute bottom-full left-0 z-50 mb-1 w-44 rounded-lg border border-neutral-200 bg-white py-1 shadow-xl">
-                <button
-                  onClick={() => { handleAddFile(); setCtxOpen(false); }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-600 transition hover:bg-neutral-100"
-                >
-                  <FileText className="h-3.5 w-3.5 text-neutral-400" />
-                  引用文件
-                </button>
-                <div className="px-3 py-1.5 text-[10px] text-neutral-300">
-                  图片/文本均可, 随消息发送
-                </div>
-              </div>
+              <RefsPopup
+                root={active?.cwd || emptyProject}
+                onPick={(rs) => setRefs((prev) => [...prev, ...rs])}
+                onClose={() => setCtxOpen(false)}
+              />
             )}
           </div>
 

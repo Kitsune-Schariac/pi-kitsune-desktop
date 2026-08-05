@@ -238,6 +238,68 @@ pub(crate) fn read_session_entries(path: &Path) -> Result<Vec<serde_json::Value>
     Ok(entries)
 }
 
+/// 目录项 (文件树懒加载用)
+#[derive(Serialize)]
+pub struct DirEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub size: Option<u64>,  // 文件大小字节 (目录为 None)
+    pub mtime: Option<u64>, // 修改时间戳秒 (不可得为 None)
+}
+
+/// Windows verbatim 前缀 (\\?\) 转普通路径: canonicalize 产物会带前缀,
+/// 但发给 agent 的引用路径必须是干净格式 (跨工具链兼容)
+fn to_plain_path(p: &Path) -> String {
+    let s = p.to_string_lossy();
+    s.strip_prefix(r"\\?\")
+        .map(|x| x.to_string())
+        .unwrap_or_else(|| s.to_string())
+}
+
+/// 列出目录内容 (文件树懒加载): 目录优先, 各自按名称排序
+/// root 参数用于越界校验: 只允许浏览 root 内的路径 (文件树从项目根起步)
+#[tauri::command]
+pub fn list_dir(root: String, path: String) -> Result<Vec<DirEntry>, String> {
+    let root_abs = std::fs::canonicalize(&root)
+        .unwrap_or_else(|_| PathBuf::from(&root));
+    let dir_abs = std::fs::canonicalize(&path)
+        .unwrap_or_else(|_| PathBuf::from(&path));
+    if !dir_abs.starts_with(&root_abs) {
+        return Err("拒绝浏览项目根目录外的路径".into());
+    }
+    let mut entries = Vec::new();
+    for item in std::fs::read_dir(&dir_abs).map_err(|e| format!("读取目录失败: {e}"))? {
+        let item = item.map_err(|e| format!("读取目录项失败: {e}"))?;
+        let meta = item.metadata().map_err(|e| format!("读取元信息失败: {e}"))?;
+        entries.push(DirEntry {
+            name: item.file_name().to_string_lossy().to_string(),
+            path: to_plain_path(&item.path()),
+            is_dir: meta.is_dir(),
+            size: if meta.is_file() { Some(meta.len()) } else { None },
+            mtime: meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs()),
+        });
+    }
+    // 目录优先, 各自按名称不区分大小写排序
+    entries.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    Ok(entries)
+}
+
+/// 读取历史会话 entries (前端「引用会话消息」用): 复用直读实现, 带路径安全校验
+#[tauri::command]
+pub fn read_session_entries_public(session_path: String) -> Result<Vec<serde_json::Value>, String> {
+    let abs = ensure_within_sessions(Path::new(&session_path))?;
+    read_session_entries(&abs)
+}
+
 /// 删除会话文件 (校验路径必须位于 sessions 根目录下, 防误删任意路径)
 #[tauri::command]
 pub fn delete_session_file(session_path: String) -> Result<(), String> {
@@ -285,18 +347,22 @@ pub fn read_file_for_context(file_path: String) -> Result<serde_json::Value, Str
             "fileName": file_name,
         }));
     }
-    // 文本: UTF-8 内容, 100KB 截断
+    // 文本: UTF-8 内容, 100KB 截断; 行数/大小供引用 chips 元信息展示
     let bytes = std::fs::read(&path).map_err(|e| format!("读取失败: {e}"))?;
-    let content = String::from_utf8_lossy(&bytes);
-    let content: String = if content.chars().count() > 100_000 {
-        content.chars().take(100_000).collect::<String>() + "\n…(内容过长已截断)"
+    let raw = String::from_utf8_lossy(&bytes);
+    let lines = raw.lines().count();
+    let content: String = if raw.chars().count() > 100_000 {
+        raw.chars().take(100_000).collect::<String>() + "\n…(内容过长已截断)"
     } else {
-        content.to_string()
+        raw.to_string()
     };
     Ok(serde_json::json!({
         "kind": "text",
         "content": content,
         "fileName": file_name,
+        "path": path.to_string_lossy(),
+        "size": bytes.len(),
+        "lines": lines,
     }))
 }
 
