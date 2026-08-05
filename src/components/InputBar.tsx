@@ -5,18 +5,29 @@ import {
   Send, Square, Paperclip, X, ChevronDown, Cpu, Layers, Brain, Loader2,
 } from "lucide-react";
 import { buildRefsParts, refIcon, refMetaText, type Ref } from "../lib/refs";
+import type { PaletteCommand } from "../lib/commands";
+import type { PathRef } from "../lib/refs";
 import { RefsPopup } from "./refs/RefsPopup";
+import { MentionPopup, type MentionPopupHandle } from "./refs/MentionPopup";
+import { CommandPalette, type CommandPaletteHandle } from "./CommandPalette";
 
 // 紧凑下拉 (provider/model/thinking 共用)
-function MiniSelect({ label, icon: Icon, value, options, onChange, disabled }: {
+function MiniSelect({ label, icon: Icon, value, options, onChange, disabled, openRef }: {
   label: string;
   icon: typeof Cpu;
   value: string;
   options: string[];
   onChange: (v: string) => void;
   disabled?: boolean;
+  // /model /thinking 命令的展开入口: 外部持有函数 ref, 调用即展开下拉
+  openRef?: React.MutableRefObject<(() => void) | null>;
 }) {
   const [openSel, setOpenSel] = useState(false);
+  // 同步最新展开函数, 卸载时置空防悬挂调用
+  useEffect(() => {
+    if (openRef) openRef.current = () => setOpenSel(true);
+    return () => { if (openRef) openRef.current = null; };
+  }, [openRef]);
   return (
     <div className="relative">
       <button
@@ -57,10 +68,13 @@ const TEXTAREA_MAX_HEIGHT = 12 * 20 + 16;
 export function InputBar({
   emptyProject,
   onHeightChange,
+  onOpenPanel,
 }: {
   emptyProject: string;
   // 卡片实际高度变化时回调 (App 据此调整消息区底部留白, 避免高输入框遮挡消息)
   onHeightChange?: (h: number) => void;
+  // /skills /packages 本地命令: 打开 App 级右侧面板
+  onOpenPanel?: (kind: "skills" | "packages") => void;
 }) {
   const [text, setText] = useState("");
   const [refs, setRefs] = useState<Ref[]>([]);
@@ -69,6 +83,31 @@ export function InputBar({
   const [hint, setHint] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // --- @引用 / /命令 触发状态机 ---
+  // popup: 当前打开的弹层 (mention=@ 引用, command=/ 命令) 与查询词
+  // triggerPosRef: 触发符在 text 里的位置 (删改/光标离开时失效)
+  // dismissedRef: Esc 防抖记录 (触发词快照, 同一触发词不重弹, 触发词变化自然失效)
+  const [popup, setPopup] = useState<{ kind: "mention" | "command"; query: string } | null>(null);
+  const triggerPosRef = useRef(-1);
+  const dismissedRef = useRef<string | null>(null);
+  const mentionRef = useRef<MentionPopupHandle>(null);
+  const paletteRef = useRef<CommandPaletteHandle>(null);
+  const modelSelectOpen = useRef<(() => void) | null>(null);
+  const thinkingSelectOpen = useRef<(() => void) | null>(null);
+  // 触发词终结/光标离开时的被动关闭: 不清 Esc 防抖标志 (触发词变了自然失效)
+  const closePopup = () => {
+    setPopup(null);
+    triggerPosRef.current = -1;
+  };
+  // Esc 关闭: 记录触发词防同一词立刻重弹; 用户继续输入改变触发词才允许重弹
+  const dismissPopup = () => {
+    if (!popup) return;
+    const tr = triggerPosRef.current;
+    dismissedRef.current = tr >= 0 ? text.slice(tr, tr + 1 + popup.query.length) : null;
+    closePopup();
+    textareaRef.current?.focus();
+  };
 
   // textarea 自动增高: 内容超过 rows 高度时拉高, 上限 12 行 (超出后内部滚动)
   useEffect(() => {
@@ -168,7 +207,167 @@ export function InputBar({
     textareaRef.current?.focus();
   };
 
+  // 输入变更: 驱动触发状态机 (词首 @ / / 检测 + 查询词维护 + 被动关闭)
+  // 输入变更: 驱动触发状态机 (词首 @ / / 检测 + 查询词维护 + 被动关闭)
+  // 中文输入法组合期 (isComposing) 也会派发 onChange: 文本照常更新,
+  // 但跳过触发状态机, 提交后的 onChange 自然纠正 (InputEvent.isComposing, 运行时断言)
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const t = e.target.value;
+    const sel = e.target.selectionStart ?? t.length;
+    setText(t);
+    if ((e.nativeEvent as InputEvent).isComposing) return;
+
+    // 弹层打开态: 校验触发符仍在且光标未离开触发词; mention 遇空白即终结 (路径含空格选中即变 chip),
+    // command 允许空白 (用户输参数) 但换行终结
+    if (popup) {
+      const tr = triggerPosRef.current;
+      const ch = popup.kind === "mention" ? "@" : "/";
+      if (tr < 0 || tr >= t.length || t[tr] !== ch || sel <= tr) { closePopup(); return; }
+      for (let i = tr + 1; i < sel; i++) {
+        if (popup.kind === "mention" ? /\s/.test(t[i]) : t[i] === "\n") { closePopup(); return; }
+      }
+      setPopup({ kind: popup.kind, query: t.slice(tr + 1, sel) });
+      return;
+    }
+
+    // 弹层关闭态: 光标前字符是 @ 或 / 且其前为行首/空白 → 触发; 邮箱 (abc@def) 前有字母不触发
+    if (sel >= 1 && (t[sel - 1] === "@" || t[sel - 1] === "/")) {
+      const prevOk = sel < 2 || /\s/.test(t[sel - 2]);
+      if (prevOk) {
+        const isCmd = t[sel - 1] === "/";
+        // 触发词 = 触发符到词尾: mention 到下一空白, command 到行尾 (参数可含空格)
+        let end = sel;
+        while (end < t.length && (isCmd ? t[end] !== "\n" : !/\s/.test(t[end]))) end++;
+        const triggerWord = t.slice(sel - 1, end);
+        // Esc 防抖: 触发词不变时 delete 类输入 (删字回到触发位) 不重弹;
+        // insert 类输入 (用户主动重新打字/粘贴) 无条件允许重弹, 避免误拦重新输入 @ 的场景
+        // (React 19 的 ChangeEvent.nativeEvent 类型是 Event, 运行时实为 InputEvent, 断言取 inputType)
+        const inputType = (e.nativeEvent as InputEvent).inputType;
+        if (dismissedRef.current !== triggerWord || inputType?.startsWith("insert")) {
+          triggerPosRef.current = sel - 1;
+          setPopup({ kind: isCmd ? "command" : "mention", query: t.slice(sel, end) });
+        }
+      }
+    }
+  };
+
+  // 光标移动后检查是否离开触发词 (键盘移动与鼠标点击共用)
+  const handleCursorMove = () => {
+    if (!popup) return;
+    const el = textareaRef.current;
+    const tr = triggerPosRef.current;
+    if (!el || tr < 0) return;
+    const sel = el.selectionStart;
+    const ch = popup.kind === "mention" ? "@" : "/";
+    if (sel <= tr || tr >= el.value.length || el.value[tr] !== ch) {
+      // 光标离开触发位: 重置防抖, 移回同一触发词允许重弹
+      dismissedRef.current = null;
+      closePopup();
+    }
+  };
+
+  // 光标纯移动 (方向键/Home/End) 不触发 onChange: keyUp 后检查光标是否离开触发词
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Home" && e.key !== "End") return;
+    handleCursorMove();
+  };
+
+  // @ 选中: 删除触发文本 (触发符到词尾) + 追加 PathRef chip, 与「上下文」按钮同构
+  const handlePickMention = (r: PathRef) => {
+    const tr = triggerPosRef.current;
+    if (tr < 0) { closePopup(); return; }
+    let end = tr + 1;
+    while (end < text.length && !/\s/.test(text[end])) end++;
+    setText(text.slice(0, tr) + text.slice(end));
+    // 光标定位回删除点, 便于继续输入
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) { el.focus(); el.setSelectionRange(tr, tr); }
+    });
+    setRefs((prev) => [...prev, r]);
+    dismissedRef.current = null; // 选中是主动操作: 下次 @ 正常重弹
+    closePopup();
+  };
+
+  // / 命令执行: 本地动作调 store / 全局 UI; 透传原样 send_prompt("/name args")
+  const handleExecuteCommand = async (cmd: PaletteCommand) => {
+    const q = popup?.query ?? "";
+    const first = q.split(/\s+/)[0] ?? "";
+    // 参数只属于查询词首词对应的命令 (选中其它命令时丢弃, 用户没为它输参)
+    const args = first === cmd.name ? q.slice(first.length).trim() : "";
+    setPopup(null);
+    triggerPosRef.current = -1;
+    dismissedRef.current = null;
+
+    if (cmd.source === "local") {
+      const ok = await runLocalCommand(cmd.name);
+      if (!ok) return; // 失败: hint 已显示, 保留输入框内容
+    } else {
+      // 透传: 原样发给 pi 解析执行 (扩展命令立即执行; 技能/模板按 pi 语义展开)
+      if (!activeSessionId) {
+        setHint("请先打开一个会话再执行命令");
+        setTimeout(() => setHint(null), 2500);
+        return;
+      }
+      await sendPrompt(activeSessionId, "/" + cmd.name + (args ? " " + args : ""));
+    }
+    setText("");
+    textareaRef.current?.focus();
+  };
+
+  // 本地白名单执行器: 返回 false = 执行失败 (hint 已提示, 输入框内容保留)
+  const runLocalCommand = async (name: string): Promise<boolean> => {
+    const showHint = (msg: string) => { setHint(msg); setTimeout(() => setHint(null), 2500); };
+    switch (name) {
+      case "new": {
+        // 新建会话: 当前项目 (活跃会话 cwd 优先, 空状态用选择器值); 无项目给提示
+        const cwd = active?.cwd || emptyProject;
+        if (!cwd) { showHint("请先在上方选择项目"); return false; }
+        try { await startSession(cwd); return true; }
+        catch (e) { showHint(`新建会话失败: ${e}`); return false; }
+      }
+      case "model":
+        if (!activeSessionId) { showHint("请先打开一个会话"); return false; }
+        modelSelectOpen.current?.();
+        return true;
+      case "thinking":
+        if (!activeSessionId) { showHint("请先打开一个会话"); return false; }
+        thinkingSelectOpen.current?.();
+        return true;
+      case "stop":
+        if (!activeSessionId || !isStreaming) { showHint("当前没有运行中的任务"); return false; }
+        await abort(activeSessionId);
+        return true;
+      case "skills":
+        onOpenPanel?.("skills");
+        return true;
+      case "packages":
+        onOpenPanel?.("packages");
+        return true;
+      default:
+        return false;
+    }
+  };
+
   const handleKey = (e: React.KeyboardEvent) => {
+    // 弹层打开: 键盘全部路由给弹层 (Enter 确认 / ↑↓ 导航 / Esc 关闭), 不进入发送逻辑
+    if (popup) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        (popup.kind === "mention" ? mentionRef : paletteRef).current?.move(1);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        (popup.kind === "mention" ? mentionRef : paletteRef).current?.move(-1);
+      } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+        e.preventDefault();
+        if (popup.kind === "mention") mentionRef.current?.confirm();
+        else paletteRef.current?.confirm();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        dismissPopup();
+      }
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       // 对齐 pi TUI 官方行为: 运行中 Alt+Enter 排队 followUp, 空闲时 Alt+Enter 与 Enter 等价直接发送
@@ -192,6 +391,28 @@ export function InputBar({
         className="pointer-events-auto rounded-2xl border border-neutral-200 bg-white/80 shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition focus-within:border-orange-400"
       >
         <div className="px-4 pt-3">
+          {/* @引用 / /命令 浮层: 悬浮在输入卡上方 (与 RefsPopup 同模式), 不占卡片布局 */}
+          <div className="relative">
+            {popup?.kind === "mention" && (
+              <MentionPopup
+                root={active?.cwd || emptyProject}
+                query={popup.query}
+                onPick={handlePickMention}
+                onClose={dismissPopup}
+                ref={mentionRef}
+              />
+            )}
+            {popup?.kind === "command" && (
+              <CommandPalette
+                sessionId={activeSessionId}
+                streaming={isStreaming}
+                query={popup.query}
+                onExecute={handleExecuteCommand}
+                onClose={dismissPopup}
+                ref={paletteRef}
+              />
+            )}
+          </div>
           {/* 引用 chips: 类型图标 + 标题 + 元信息, 点击预览, × 移除 */}
           {refs.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5">
@@ -268,9 +489,11 @@ export function InputBar({
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={handleChange}
           onKeyDown={handleKey}
-          placeholder={isStreaming ? "运行中: Enter 发 steer 指导, Alt+Enter 排队后续" : "输入消息, Enter 发送"}
+          onKeyUp={handleKeyUp}
+          onMouseUp={handleCursorMove}
+          placeholder={isStreaming ? "运行中: Enter 发 steer 指导, Alt+Enter 排队后续" : "输入消息, Enter 发送 (@ 引用文件/技能, / 命令)"}
           rows={2}
           className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-sm text-neutral-800 outline-none placeholder:text-neutral-500"
         />
@@ -338,6 +561,7 @@ export function InputBar({
                 if (activeSessionId && m) setModel(activeSessionId, selProvider, m.id);
               }}
               disabled={!activeSessionId || providerModels.length === 0}
+              openRef={modelSelectOpen}
             />
             <MiniSelect
               label="Thinking"
@@ -346,6 +570,7 @@ export function InputBar({
               options={availableThinkingLevels}
               onChange={(lv) => activeSessionId && setThinkingLevel(activeSessionId, lv)}
               disabled={!activeSessionId || availableThinkingLevels.length <= 1}
+              openRef={thinkingSelectOpen}
             />
 
             {isStreaming ? (

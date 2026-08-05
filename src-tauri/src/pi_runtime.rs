@@ -327,6 +327,11 @@ impl PiRuntime {
         Ok(())
     }
 
+    /// 动态拉取可透传的 /命令 候选 (扩展命令/技能/prompt 模板), 供前端命令面板合并展示
+    pub async fn get_commands(&mut self) -> Result<serde_json::Value, String> {
+        Self::extract_data(self.send_request(serde_json::json!({ "type": "get_commands" })).await?)
+    }
+
     /// 停止 pi 子进程; Windows 上 taskkill /T 杀整个进程树 (cmd /c 派生的 node 进程也要带走)
     pub async fn stop(&mut self) -> Result<(), String> {
         #[cfg(windows)]

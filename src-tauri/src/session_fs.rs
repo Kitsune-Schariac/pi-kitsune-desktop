@@ -293,6 +293,65 @@ pub fn list_dir(root: String, path: String) -> Result<Vec<DirEntry>, String> {
     Ok(entries)
 }
 
+/// 常见重目录递归扫描时跳过: 与前端 FileTreePicker 的 HIDDEN_DIRS 对齐,
+/// 避免 node_modules/.git 等目录把 @ 引用候选列表撑爆/拖慢扫描
+const SKIP_DIRS: &[&str] = &[
+    "node_modules", ".git", "dist", "target", ".next", ".turbo",
+    "build", ".cache", "__pycache__", ".venv", "venv", ".trellis",
+];
+
+/// 递归扫描项目全部文件 (@ 引用文件源): 手写 std::fs, 只收文件不收目录,
+/// 跳过重目录, 目录序遍历按名称排序保证输出稳定; 大项目由前端异步 loading 态承接
+#[tauri::command]
+pub fn list_files_recursive(root: String) -> Result<Vec<DirEntry>, String> {
+    let root_path = PathBuf::from(&root);
+    let meta = std::fs::metadata(&root_path).map_err(|e| format!("项目目录不可读: {e}"))?;
+    if !meta.is_dir() {
+        return Err("项目根不是目录".into());
+    }
+
+    fn walk(dir: &Path, out: &mut Vec<DirEntry>) -> Result<(), String> {
+        let mut items: Vec<(std::ffi::OsString, std::fs::Metadata)> = Vec::new();
+        for item in std::fs::read_dir(dir).map_err(|e| format!("读取目录失败: {e}"))? {
+            // 单条目读失败 (权限/占用/OneDrive 占位) 直接跳过: @ 引用是低风险功能, 一颗老鼠屎不坏一锅汤
+            let Ok(item) = item else { continue; };
+            // metadata() 不跟随 symlink: symlink 的 is_dir/is_file 均 false → 静默跳过,
+            // 恰好防符号链接循环 + 防越出项目根 (指向文件的链接也因此不进候选, 已知取舍)
+            let Ok(meta) = item.metadata() else { continue; };
+            items.push((item.file_name(), meta));
+        }
+        // 先收集再按名称排序: 保证输出顺序稳定 (子目录递归顺序确定)
+        items.sort_by(|a, b| a.0.to_string_lossy().to_lowercase().cmp(&b.0.to_string_lossy().to_lowercase()));
+        for (name, meta) in items {
+            let path = dir.join(&name);
+            let name_str = name.to_string_lossy();
+            if meta.is_dir() {
+                if !SKIP_DIRS.contains(&name_str.as_ref()) {
+                    // 子目录不可读仅跳过该目录, 不中断整个扫描 (与单条目容错同理)
+                    let _ = walk(&path, out);
+                }
+            } else if meta.is_file() {
+                out.push(DirEntry {
+                    name: name_str.to_string(),
+                    path: to_plain_path(&path),
+                    is_dir: false,
+                    size: Some(meta.len()),
+                    mtime: meta
+                        .modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs()),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    let mut files = Vec::new();
+    walk(&root_path, &mut files)?;
+    Ok(files)
+}
+
 /// 读取历史会话 entries (前端「引用会话消息」用): 复用直读实现, 带路径安全校验
 #[tauri::command]
 pub fn read_session_entries_public(session_path: String) -> Result<Vec<serde_json::Value>, String> {

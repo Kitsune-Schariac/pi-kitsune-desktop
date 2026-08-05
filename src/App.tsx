@@ -83,7 +83,7 @@ export default function App() {
         ) : (
           <EmptyState project={emptyProject} onProjectChange={setEmptyProject} />
         )}
-        <InputBar emptyProject={emptyProject} onHeightChange={setInputBarH} />
+        <InputBar emptyProject={emptyProject} onHeightChange={setInputBarH} onOpenPanel={setPanel} />
       </main>
 
       {/* 扩展 UI 请求弹窗: 只渲染活跃会话的队头请求 (FIFO, 关闭后自动弹下一个) */}

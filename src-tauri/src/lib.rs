@@ -367,6 +367,17 @@ async fn send_extension_ui_response(
     runtime.send_extension_ui_response(id, payload).await
 }
 
+/// 动态拉取可透传的 /命令 候选 (扩展/技能/prompt 模板), 供前端命令面板合并
+/// 无活跃会话时返回空列表而非报错: 前端面板降级为仅本地命令, 不弹错误打断输入
+#[tauri::command]
+async fn get_commands(state: State<'_, SharedRuntime>, session_id: String) -> Result<serde_json::Value, String> {
+    let mut guard = state.lock().await;
+    match guard.runtimes.get_mut(&session_id) {
+        Some(runtime) => runtime.get_commands().await,
+        None => Ok(serde_json::json!({ "commands": [] })),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -392,11 +403,12 @@ pub fn run() {
             get_state, get_available_models, set_model, cycle_model,
             set_thinking_level, cycle_thinking_level, get_available_thinking_levels,
             get_entries, get_session_stats, set_session_name,
-            send_extension_ui_response,
+            send_extension_ui_response, get_commands,
             session_fs::list_projects_and_sessions, session_fs::delete_session_file,
             session_fs::read_file_for_context, session_fs::list_skills_and_packages,
             session_fs::get_session_file_mtime,
             session_fs::list_dir, session_fs::read_session_entries_public,
+            session_fs::list_files_recursive,
             capture::capture_screenshot,
             token_stats::get_token_stats,
         ])
