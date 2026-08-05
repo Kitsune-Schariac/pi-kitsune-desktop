@@ -113,18 +113,25 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       // 切换中: 立即切掉旧消息内容, 消息区显示混沌 loading 动画 (startSession 慢操作期间不残留旧会话)
       set({ isSwitching: true });
       try {
-        const id = await invoke<string>("start_session", {
+        // Rust 首帧直读: 历史会话 entries 随 start_session 一并返回 (契约对齐 pi get_entries, 过滤 session 头),
+        // 前端直接渲染, 不再等 get_entries RPC
+        const sessionPath = opts?.sessionPath ?? null;
+        const data = await invoke<{ sessionId: string; entries?: unknown[] }>("start_session", {
           cwd,
           provider: opts?.provider ?? null,
           model: opts?.model ?? null,
-          sessionPath: opts?.sessionPath ?? null,
+          sessionPath,
         });
+        const id = data.sessionId;
+        // Array.isArray 守卫直接收窄类型 (布尔中间变量无法把收窄传给后续使用)
+        const rawEntries = Array.isArray(data.entries) ? data.entries : null;
+        const entries = rawEntries ? mapHistoryEntries(rawEntries) : [];
         set((state) => ({
           sessions: {
             ...state.sessions,
             [id]: {
-              sessionId: id, cwd, sessionPath: opts?.sessionPath ?? null, sessionName: null,
-              isStreaming: false, entries: [], currentAssistantId: null,
+              sessionId: id, cwd, sessionPath, sessionName: null,
+              isStreaming: false, entries, currentAssistantId: null,
               detached: false, lastEntryMtime: null, hasUnread: false,
               error: null, currentModel: null, thinkingLevel: "medium",
               availableModels: [], availableThinkingLevels: ["off"],
@@ -141,8 +148,17 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           get().loadThinkingLevels(id),
           get().loadSessionStats(id),
         ];
-        // 历史会话: 加载条目 (长文件较慢, 不阻塞其它初始化)
-        if (opts?.sessionPath) tasks.push(get().loadEntries(id));
+        // 直读路径同步 mtime baseline: reattach 的 mtime 守卫依赖它 (文件没变不重读)
+        if (sessionPath) {
+          tasks.push((async () => {
+            try {
+              const mtime = await invoke<number | null>("get_session_file_mtime", { sessionPath });
+              patch(id, { lastEntryMtime: mtime });
+            } catch { /* ignore */ }
+          })());
+        }
+        // 历史会话兜底: Rust 直读 entries 意外缺失 (契约外) → 退回 get_entries 路径
+        if (sessionPath && !rawEntries) tasks.push(get().loadEntries(id));
         await Promise.all(tasks);
         return id;
       } finally {

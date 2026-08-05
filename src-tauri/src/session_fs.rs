@@ -28,6 +28,13 @@ pub(crate) fn agent_dir() -> Result<PathBuf, String> {
     Ok(PathBuf::from(home).join(".pi").join("agent"))
 }
 
+/// sessions 根目录 (canonicalize 失败时回退原始路径, 供路径越界校验用)
+/// agent_dir 失败必须上抛: 回退空路径会让 starts_with("") 恒真 → 越界校验 fail-open (安全回归)
+fn sessions_root() -> Result<PathBuf, String> {
+    let sessions = agent_dir()?.join("sessions");
+    Ok(sessions.canonicalize().unwrap_or(sessions))
+}
+
 /// 目录名有损反解 (回退方案): pi 编码是 replace(/[/\\:]/g,"-"), `-` 无法区分分隔符和字面量
 /// 权威路径来自会话文件首行 cwd, 这里只做近似: 首段补盘符冒号, 其余按字面量保留
 fn decode_project_dir(dir_name: &str) -> String {
@@ -194,15 +201,47 @@ pub fn list_projects_and_sessions() -> Result<Vec<ProjectInfo>, String> {
     Ok(projects)
 }
 
+/// 路径安全校验: 校验 path 位于 sessions 根目录内, 返回 canonicalize 后的绝对路径
+/// 命令层职责 (解析函数本身不做校验, 便于纯解析测试用任意路径)
+pub(crate) fn ensure_within_sessions(path: &Path) -> Result<PathBuf, String> {
+    let target_abs = path.canonicalize().map_err(|e| format!("会话文件不存在: {e}"))?;
+    if !target_abs.starts_with(sessions_root()?) {
+        return Err("拒绝读取 sessions 目录外的文件".into());
+    }
+    Ok(target_abs)
+}
+
+/// 解析会话 jsonl 为 entries (零 pi 进程依赖, ~1ms):
+/// 逐行解析, 空行/坏行跳过, 过滤 session 头, 其余原样 JSON 透传
+/// 契约对齐 pi get_entries (getEntries = fileEntries.filter(e => e.type !== "session")), 前端 mapHistoryEntries 可零改动复用
+/// 注意: 调用方须先做路径安全校验 (ensure_within_sessions)
+pub(crate) fn read_session_entries(path: &Path) -> Result<Vec<serde_json::Value>, String> {
+    let file = std::fs::File::open(path).map_err(|e| format!("读取会话文件失败: {e}"))?;
+    use std::io::BufRead;
+    let reader = std::io::BufReader::new(file);
+    let mut entries = Vec::new();
+    for line in reader.lines() {
+        let line = line.map_err(|e| format!("读取会话文件失败: {e}"))?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        // 坏行容错: 单行 JSON 解析失败跳过 (文件追加中读到半行、手改坏行等)
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else {
+            continue;
+        };
+        // 过滤 session 头: 首行 type=="session" (pi getEntries 同样过滤)
+        if v.get("type").and_then(|t| t.as_str()) == Some("session") {
+            continue;
+        }
+        entries.push(v);
+    }
+    Ok(entries)
+}
+
 /// 删除会话文件 (校验路径必须位于 sessions 根目录下, 防误删任意路径)
 #[tauri::command]
 pub fn delete_session_file(session_path: String) -> Result<(), String> {
-    let sessions_root = agent_dir()?.join("sessions").canonicalize().unwrap_or_else(|_| agent_dir().unwrap().join("sessions"));
-    let target = PathBuf::from(&session_path);
-    let target_abs = target.canonicalize().map_err(|e| format!("会话文件不存在: {e}"))?;
-    if !target_abs.starts_with(&sessions_root) {
-        return Err("拒绝删除 sessions 目录外的文件".into());
-    }
+    let target_abs = ensure_within_sessions(&PathBuf::from(&session_path))?;
     std::fs::remove_file(&target_abs).map_err(|e| format!("删除失败: {e}"))?;
     // token 统计索引联动: 移除该文件条目, 防止统计虚高 (不要求索引已初始化)
     crate::token_stats::remove_index_file(&target_abs);
@@ -363,4 +402,63 @@ pub fn get_session_file_mtime(session_path: Option<String>) -> Result<Option<f64
         .map_err(|e| format!("时间转换失败: {e}"))?
         .as_millis() as f64;
     Ok(Some(ms))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造临时 jsonl: session 头 + 3 条有效行 (user/assistant含toolCall/model_change) + 坏行 + 空行
+    fn write_fixture(dir: &Path) -> PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
+        let p = dir.join("fixture.jsonl");
+        let lines = [
+            r#"{"type":"session","version":3,"id":"sess-1","cwd":"C:\\workspace\\demo"}"#,
+            r#"{"type":"message","id":"m1","parentId":null,"timestamp":"2026-08-05T00:00:00.000Z","message":{"role":"user","content":[{"type":"text","text":"你好"}]}}"#,
+            r#"{"type":"message","id":"m2","parentId":"m1","timestamp":"2026-08-05T00:00:01.000Z","message":{"role":"assistant","provider":"huoshan","model":"glm-5.2","content":[{"type":"thinking","thinking":"想"},{"type":"text","text":"回复"},{"type":"toolCall","id":"t1","name":"bash","arguments":{"command":"ls"}}]}}"#,
+            r#"{"type":"model_change","id":"mc1","parentId":null,"timestamp":"2026-08-05T00:00:02.000Z","provider":"huoshan","modelId":"glm-5.2"}"#,
+            "this is not json",
+            "",
+        ];
+        std::fs::write(&p, lines.join("\n")).unwrap();
+        p
+    }
+
+    /// 契约对齐 pi getEntries: 过滤 session 头 + 坏行/空行跳过 + 其余原样透传
+    #[test]
+    fn parses_entries_aligned_with_pi_contract() {
+        let dir = std::env::temp_dir().join(format!("sfe_parse_{}", std::process::id()));
+        let p = write_fixture(&dir);
+        let entries = read_session_entries(&p).unwrap();
+        // session 头被过滤, 坏行/空行跳过 → 剩 3 条 (m1/m2/mc1)
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0]["type"], "message");
+        assert_eq!(entries[0]["id"], "m1");
+        // message 内部结构原样透传 (前端 mapHistoryEntries 依赖的字段)
+        let msg = &entries[1]["message"];
+        assert_eq!(msg["role"], "assistant");
+        assert_eq!(msg["content"][0]["type"], "thinking");
+        assert_eq!(msg["content"][2]["type"], "toolCall");
+        assert_eq!(msg["content"][2]["arguments"]["command"], "ls");
+        assert_eq!(entries[2]["type"], "model_change");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 路径越界拒绝: 系统临时目录必然不在 ~/.pi/agent/sessions 内
+    #[test]
+    fn rejects_path_outside_sessions_root() {
+        let outside = std::env::temp_dir().join(format!("sfe_outside_{}.jsonl", std::process::id()));
+        std::fs::write(&outside, "{}").unwrap();
+        let err = ensure_within_sessions(&outside).unwrap_err();
+        assert!(err.contains("拒绝"), "错误信息应说明拒绝读取: {err}");
+        std::fs::remove_file(&outside).ok();
+    }
+
+    /// 文件不存在 → 明确错误
+    #[test]
+    fn rejects_missing_file() {
+        let p = std::env::temp_dir().join(format!("sfe_missing_{}.jsonl", std::process::id()));
+        let err = read_session_entries(&p).unwrap_err();
+        assert!(err.contains("读取会话文件失败"), "错误信息应带定位: {err}");
+    }
 }

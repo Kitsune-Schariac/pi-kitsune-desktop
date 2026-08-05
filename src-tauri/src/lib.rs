@@ -129,7 +129,7 @@ async fn start_session(
     model: Option<String>,
     session_path: Option<String>,
     session_id: Option<String>,
-) -> Result<String, String> {
+) -> Result<serde_json::Value, String> {
     // reattach 复用原 sessionId: 事件流 rebind 到原 id, 前端缓存 entries 不用迁移 key;
     // 新建会话不传 → 生成新 id
     let now_ms = std::time::SystemTime::now()
@@ -137,6 +137,17 @@ async fn start_session(
         .map_err(|e| e.to_string())?
         .as_millis();
     let session_id = session_id.unwrap_or_else(|| format!("sess_{now_ms}"));
+
+    // 首帧直读: 历史会话 entries 由 Rust 直接解析 jsonl (零 pi 进程依赖, ~1ms, 锁外),
+    // 随返回值一并交付, 前端立即渲染, 不再等 get_entries RPC
+    // 路径安全校验是命令层职责 (ensure_within_sessions, 拒绝 sessions 根外路径)
+    let entries = match &session_path {
+        Some(path) => {
+            let abs = crate::session_fs::ensure_within_sessions(std::path::Path::new(path))?;
+            crate::session_fs::read_session_entries(&abs)?
+        }
+        None => Vec::new(),
+    };
 
     // 阶段 1 (锁内, 快速): 取 warm / 丢弃不匹配 warm / 标记预热 (防并发重复)
     let warm_rt;
@@ -205,7 +216,7 @@ async fn start_session(
             guard.finish_warming(cwd2, rt);
         });
     }
-    Ok(session_id)
+    Ok(serde_json::json!({"sessionId": session_id, "entries": entries}))
 }
 
 #[tauri::command]
