@@ -209,13 +209,13 @@ export function InputBar({
 
   // 输入变更: 驱动触发状态机 (词首 @ / / 检测 + 查询词维护 + 被动关闭)
   // 输入变更: 驱动触发状态机 (词首 @ / / 检测 + 查询词维护 + 被动关闭)
-  // 中文输入法组合期 (isComposing) 也会派发 onChange: 文本照常更新,
-  // 但跳过触发状态机, 提交后的 onChange 自然纠正 (InputEvent.isComposing, 运行时断言)
+  // 组合期 (isComposing) 照常更新弹层: 拼音中间态过滤成空是正确响应, 上屏后自然纠正;
+  // 无需守卫——组合期插入的是拼音/汉字不会误触发 @ /, 中文输入法空格选词不上屏,
+  // Enter 选字已被 handleKey 的 isComposing 守卫拦截 (不会误发送)
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const t = e.target.value;
     const sel = e.target.selectionStart ?? t.length;
     setText(t);
-    if ((e.nativeEvent as InputEvent).isComposing) return;
 
     // 弹层打开态: 校验触发符仍在且光标未离开触发词; mention 遇空白即终结 (路径含空格选中即变 chip),
     // command 允许空白 (用户输参数) 但换行终结
