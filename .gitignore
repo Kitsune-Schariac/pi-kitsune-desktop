@@ -27,7 +27,7 @@ src-tauri/gen/
 target/
 
 # ===== Tauri sidecar 二进制 (pi 编译产物, 打包时再处理) =====
-src-taurisidecar-bin/
+src-tauri/sidecar-bin/
 *.exe.bak
 
 # ===== 系统/编辑器 =====
