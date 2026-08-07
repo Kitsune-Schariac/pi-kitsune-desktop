@@ -2,7 +2,7 @@
 // 键盘路由由 InputBar 统一处理 (↑↓/Enter/Esc), 本组件经 ref 暴露 move/confirm 供其调用
 // 选中回调 PathRef, 与「上下文」按钮同构 (chips 渲染/预览/移除全复用)
 
-import { useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { FileText, Sparkles, Loader2, AlertCircle, X } from "lucide-react";
 import type { PathRef } from "../../lib/refs";
@@ -36,15 +36,21 @@ export interface MentionPopupHandle {
 }
 
 /**
- * 匹配分: basename 前缀 4 > basename 子串 3 > 路径子串 1, 不匹配 -1
+ * 匹配分: basename 前缀 4 > basename 子串 3 > 路径段对齐命中 2 > 路径子串 1, 不匹配 -1
  * 排序: 分高在前, 同分名称短者优先 (文件名越短越像用户要找的)
+ *
+ * 归一化关键: Windows 路径是反斜杠 (C:\...\yfz\index.vue), 用户输入正斜杠 (yfz/index),
+ * 分隔符不统一会导致多级路径片段永远匹配不上 —— 两侧统一成小写 + 正斜杠再比对
  */
 function score(title: string, path: string, query: string): number {
-  const q = query.toLowerCase();
-  const base = title.toLowerCase();
-  const full = path.toLowerCase();
+  const norm = (s: string) => s.toLowerCase().replace(/\\/g, "/");
+  const q = norm(query);
+  const base = norm(title);
+  const full = norm(path);
   if (base.startsWith(q)) return 4;
   if (base.includes(q)) return 3;
+  // 路径段对齐: query 含多级路径段 (yfz/index) 且整段命中归一化路径 → 优于单段路径子串
+  if (q.includes("/") && full.includes(q)) return 2;
   if (full.includes(q)) return 1;
   return -1;
 }
@@ -107,6 +113,13 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
   const [skills, setSkills] = useState<SkillInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
+  // Everything 搜索层: searchResults 有值则作为文件源; searchDegraded 为 true 后不再重试
+  // (es 缺失/超时会重复触发 500ms 超时, 降级一次后直接用全量扫描, 避免每次击键都卡)
+  const [searchResults, setSearchResults] = useState<FileEntry[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchDegraded, setSearchDegraded] = useState(false);
+  // 搜索请求竞态保护: 快速连续输入只采纳最后一次响应 (hook-guidelines reqId 模式)
+  const searchReqId = useRef(0);
 
   // 文件源: 无项目 (root 空) 直接空数组 → 前端显示空态; 有缓存且 root 未变则复用
   useEffect(() => {
@@ -133,10 +146,39 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
     return () => { cancelled = true; };
   }, []);
 
-  const loading = files === null || skills === null;
+  // Everything 搜索源: query 非空时走 search_files (毫秒级), 结果替代全量扫描;
+  // 失败静默降级 (不弹错误条) —— 增强层不允许打断 @ 引用主流程
+  useEffect(() => {
+    const q = query.trim();
+    // query/root 变化先清掉上次结果, 防止新 query 搜索返回前误显示旧匹配;
+    // 空 query 时递增 reqId 作废在途请求, 避免旧回调污染 state
+    searchReqId.current++;
+    setSearchResults(null);
+    setSearching(false);
+    if (!q || searchDegraded) return;
+    const id = ++searchReqId.current;
+    setSearching(true);
+    invoke<FileEntry[]>("search_files", { query: q, root })
+      .then((list) => {
+        if (searchReqId.current !== id) return;
+        setSearchResults(list);
+        setSearching(false);
+      })
+      .catch(() => {
+        if (searchReqId.current !== id) return;
+        // es 不可用/超时: 记下降级, 后续 query 变更直接走全量 files, 不再重试 es
+        setSearchDegraded(true);
+        setSearchResults(null);
+        setSearching(false);
+      });
+  }, [query, root, searchDegraded]);
+
+  // 加载态判定: 全量未到且无搜索兜底才 loading; es 挂起/搜索中时若全量已就绪,
+  // 直接展示全量过滤结果, 搜索返回后无缝切换 (避免每次击键都闪 spinner)
+  const loading = skills === null || (files === null && !(query.trim() && searchResults));
   const candidates = useMemo(
-    () => filterMentionCandidates(files ?? [], skills ?? [], root, query),
-    [files, skills, root, query]
+    () => filterMentionCandidates(query.trim() && searchResults ? searchResults : files ?? [], skills ?? [], root, query),
+    [files, skills, root, query, searchResults]
   );
 
   // 过滤词/数据变化后选中索引回到顶部, 避免高亮项落到不可见处
@@ -186,7 +228,7 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
 
       {loading ? (
         <div className="flex h-28 items-center justify-center gap-2 text-xs text-neutral-400">
-          <Loader2 className="h-4 w-4 animate-spin" /> 扫描项目文件…
+          <Loader2 className="h-4 w-4 animate-spin" /> {searching ? "搜索中…" : "扫描项目文件…"}
         </div>
       ) : (
         <div className="max-h-72 overflow-auto">

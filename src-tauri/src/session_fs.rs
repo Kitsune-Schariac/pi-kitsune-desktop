@@ -294,8 +294,9 @@ pub fn list_dir(root: String, path: String) -> Result<Vec<DirEntry>, String> {
 }
 
 /// 常见重目录递归扫描时跳过: 与前端 FileTreePicker 的 HIDDEN_DIRS 对齐,
-/// 避免 node_modules/.git 等目录把 @ 引用候选列表撑爆/拖慢扫描
-const SKIP_DIRS: &[&str] = &[
+/// 避免 node_modules/.git 等目录把 @ 引用候选列表撑爆/拖慢扫描;
+/// pub(crate) 供 search.rs (Everything 搜索) 复用同一份重目录清单
+pub(crate) const SKIP_DIRS: &[&str] = &[
     "node_modules", ".git", "dist", "target", ".next", ".turbo",
     "build", ".cache", "__pycache__", ".venv", "venv", ".trellis",
 ];

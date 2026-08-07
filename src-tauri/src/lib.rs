@@ -1,5 +1,6 @@
 mod capture;
 mod pi_runtime;
+mod search;
 mod session_fs;
 mod token_stats;
 
@@ -409,6 +410,7 @@ pub fn run() {
             session_fs::get_session_file_mtime,
             session_fs::list_dir, session_fs::read_session_entries_public,
             session_fs::list_files_recursive,
+            search::search_files,
             capture::capture_screenshot,
             token_stats::get_token_stats,
         ])
