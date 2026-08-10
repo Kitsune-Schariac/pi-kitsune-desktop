@@ -1,13 +1,83 @@
 import { memo } from "react";
+import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { createHighlighter } from "shiki";
+import type { Highlighter } from "shiki";
 
-// Markdown 渲染封装: react-markdown + GFM(表格/删除线/任务列表)
+// Markdown 渲染封装: react-markdown + GFM(表格/删除线/任务列表) + Shiki 语法高亮
+// Shiki 使用 VS Code 同款 TextMate 语法, 对真实代码(注解/泛型/lambda/链式调用)识别率远高于 highlight.js
+// react-markdown 管线是同步的, 所以不能直接用异步 rehype 插件:
+// 改为模块级预热 highlighter + 自定义 pre 组件同步高亮, 未就绪时回退纯文本
+
+// 常用语言清单(覆盖真实会话数据的高频标记, 其余未知标记回退为纯文本)
+const LANGS = [
+  "java", "javascript", "typescript", "tsx", "jsx", "bash", "shell", "sh",
+  "python", "go", "rust", "json", "xml", "yaml", "sql", "css", "html",
+  "markdown", "dart", "powershell", "kotlin", "swift", "csharp", "cpp",
+  "c", "php", "ruby", "vue", "properties", "toml", "ini", "diff",
+  "makefile", "lua", "perl", "less", "scss", "graphql", "wasm", "http",
+  "jsonc", "dockerfile", "bat", "batch", "objc", "nginx", "regex",
+];
+
+// highlighter 预热: 应用启动即后台加载, 用户看到第一条消息时通常已就绪
+let highlighter: Highlighter | null = null;
+void createHighlighter({ langs: LANGS, themes: ["github-light"] }).then((h) => {
+  highlighter = h;
+});
+
+// 高亮结果缓存: 流式更新时同一代码块只重新高亮一次, 避免每帧重复解析
+// 带容量上限的 FIFO 淘汰, 防止长时间会话内存膨胀
+const CACHE_LIMIT = 500;
+class BoundedCache<K, V> extends Map<K, V> {
+  set(key: K, value: V) {
+    super.set(key, value);
+    if (this.size > CACHE_LIMIT) {
+      const oldest = this.keys().next().value;
+      if (oldest !== undefined) this.delete(oldest);
+    }
+    return this;
+  }
+}
+const highlightCache = new BoundedCache<string, string>();
+
+// 代码块渲染: 从 pre 代理 code 的 props, 同步调用 shiki 高亮
+// lang 未知或 highlighter 未就绪时回退到默认 pre/code 渲染(纯文本)
+function CodeBlock({ children }: { children?: ReactNode }) {
+  const codeEl = children as
+    | { props?: { className?: string; children?: ReactNode } }
+    | undefined;
+  const className = codeEl?.props?.className;
+  const lang = /language-(\w+)/.exec(className ?? "")?.[1];
+  const raw = codeEl?.props?.children;
+
+  if (lang && typeof raw === "string" && highlighter) {
+    const code = raw.replace(/\n$/, "");
+    const cacheKey = `${lang}\u0000${code}`;
+    let html = highlightCache.get(cacheKey);
+    if (!html) {
+      try {
+        html = highlighter.codeToHtml(code, { lang, theme: "github-light" });
+      } catch {
+        return <pre>{children}</pre>;
+      }
+      highlightCache.set(cacheKey, html);
+    }
+    return <div dangerouslySetInnerHTML={{ __html: html }} />;
+  }
+  return <pre>{children}</pre>;
+}
+
 // memo 保证流式更新时只有文本变化的条目重新解析, 其余条目跳过重渲染
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
   return (
     <div className="markdown-body">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{ pre: CodeBlock }}
+      >
+        {text}
+      </ReactMarkdown>
     </div>
   );
 });

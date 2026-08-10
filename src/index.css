@@ -122,6 +122,15 @@ body,
   color: inherit;
 }
 
+/* Shiki 高亮代码块: 覆盖主题默认白色背景, 与聊天区浅灰底色统一 */
+.markdown-body .shiki {
+  background: #f8f8f8 !important;
+}
+.markdown-body .shiki code {
+  font-family: inherit;
+  color: inherit;
+}
+
 /* 行内代码 */
 .markdown-body code {
   padding: 0.15em 0.4em;
