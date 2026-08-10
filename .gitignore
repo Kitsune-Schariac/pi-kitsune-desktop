@@ -37,3 +37,5 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+# 皮肤素材源 (正式资源打包进 src-tauri/resources/skins/)
+skin-files/

@@ -4,7 +4,7 @@
 
 :root {
   color-scheme: light;
-  /* 主题色 (淡天蓝 sky 色阶): 换主题只需改这里一组 RGB 通道值 */
+  /* 主题色 (淡天蓝 sky 色阶): 皮肤切换时由 ThemeStore 运行时覆盖 */
   --primary-50: 240 249 255;
   --primary-100: 224 242 254;
   --primary-200: 186 230 253;
@@ -15,6 +15,70 @@
   --primary-700: 3 105 161;
   --primary-800: 7 89 133;
   --primary-900: 12 74 110;
+
+  /* 中性色阶: tailwind neutral-* 映射到这些变量, 皮肤 base=dark 时整组反转
+     浅色值 = Tailwind 默认 neutral, 保证现有组件零视觉变化 */
+  --neutral-50: 250 250 250;
+  --neutral-100: 245 245 245;
+  --neutral-200: 229 229 229;
+  --neutral-300: 212 212 212;
+  --neutral-400: 163 163 163;
+  --neutral-500: 115 115 115;
+  --neutral-600: 82 82 82;
+  --neutral-700: 64 64 64;
+  --neutral-800: 38 38 38;
+  --neutral-900: 23 23 23;
+  --neutral-950: 10 10 10;
+
+  /* markdown 语义色: 浅色值 = 原硬编码值 (见下方 markdown 样式引用处) */
+  --text-strong: 26 26 26;    /* 标题 #1a1a1a */
+  --text-muted: 102 102 102;  /* blockquote 正文 #666 */
+  --text-link: 37 99 235;     /* 链接 #2563eb */
+  --border-soft: 208 208 208; /* blockquote 边 #d0d0d0 */
+  --border: 212 212 212;      /* 表格边 #d4d4d4 */
+  --table-head: 245 245 245;  /* th 底 #f5f5f5 */
+  --divider: 224 224 224;     /* hr #e0e0e0 */
+  --code-bg: 240 240 240;     /* 代码块底 #f0f0f0 */
+  --code-text: 214 51 132;    /* 行内代码 #d63384 */
+  --shiki-bg: 248 248 248;    /* shiki 覆盖底 #f8f8f8 */
+
+  /* 容器底色 + 不透明率 (皮肤/slider 运行时覆盖, 持久化) */
+  --surface: 255 255 255;       /* main 区底 */
+  --sidebar-surface: 255 255 255;
+  --chat-opacity: 0.75;         /* 会话区不透明率 (40%–95%) */
+  --sidebar-opacity: 0.6;       /* 侧边栏不透明率 (20%–90%) */
+  --bubble-bg: 255 255 255;     /* 消息气泡底色, 皮肤可覆盖 */
+  --bubble-opacity: 0.55;       /* 气泡不透明率 (30%–90%) */
+}
+
+/* 暗色方向: 皮肤 base=dark 时挂在 <html data-base="dark"> 上
+   中性色阶反转 (深底浅字), 容器底色取暗色默认值 (皮肤可覆盖) */
+[data-base="dark"] {
+  color-scheme: dark;
+  --neutral-50: 9 9 11;
+  --neutral-100: 24 24 27;
+  --neutral-200: 39 39 42;
+  --neutral-300: 63 63 70;
+  --neutral-400: 113 113 122;
+  --neutral-500: 161 161 170;
+  --neutral-600: 212 212 216;
+  --neutral-700: 228 228 231;
+  --neutral-800: 244 244 245;
+  --neutral-900: 250 250 250;
+  --neutral-950: 255 255 255;
+  --text-strong: 250 250 250;
+  --text-muted: 161 161 170;
+  --text-link: 96 165 250;
+  --border-soft: 63 63 70;
+  --border: 63 63 70;
+  --table-head: 39 39 42;
+  --divider: 63 63 70;
+  --code-bg: 24 24 27;
+  --code-text: 244 114 182;
+  --shiki-bg: 13 17 23;         /* 与 github-dark 自带底色一致, 避免覆盖冲突 */
+  --surface: 10 5 20;           /* 深渊黑蓝底 */
+  --sidebar-surface: 10 5 20;
+  --bubble-bg: 10 5 20;
 }
 
 body {
