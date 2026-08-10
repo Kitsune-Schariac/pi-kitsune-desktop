@@ -102,7 +102,7 @@ export function TokenStatsPanel() {
       <div className="space-y-2.5 rounded-xl border border-neutral-200 bg-neutral-50/60 p-3">
         <div className="flex flex-wrap items-center gap-2">
           {/* 时间快捷 */}
-          <div className="flex overflow-hidden rounded-lg border border-neutral-200 bg-white text-xs">
+          <div className="flex overflow-hidden rounded-lg border border-neutral-200 bg-panel text-xs">
             {([["today", "今天"], ["7d", "近 7 天"], ["30d", "近 30 天"], ["all", "全部"]] as [TimeRange, string][]).map(([r, label]) => (
               <button
                 key={r}
@@ -121,13 +121,13 @@ export function TokenStatsPanel() {
           <div className="flex items-center gap-1.5 text-xs text-neutral-500">
             <input
               type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)}
-              className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
+              className="rounded-lg border border-neutral-200 bg-panel px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
               title="自定义开始日期"
             />
             <span>至</span>
             <input
               type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)}
-              className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
+              className="rounded-lg border border-neutral-200 bg-panel px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
               title="自定义结束日期"
             />
           </div>
@@ -136,7 +136,7 @@ export function TokenStatsPanel() {
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <select
             value={project} onChange={(e) => setProject(e.target.value)}
-            className="max-w-[220px] rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
+            className="max-w-[220px] rounded-lg border border-neutral-200 bg-panel px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
             title="按项目筛选"
           >
             <option value="">全部项目</option>
@@ -146,7 +146,7 @@ export function TokenStatsPanel() {
           </select>
           <select
             value={provider} onChange={(e) => setProvider(e.target.value)}
-            className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
+            className="rounded-lg border border-neutral-200 bg-panel px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
             title="按供应商筛选"
           >
             <option value="">全部供应商</option>
@@ -156,7 +156,7 @@ export function TokenStatsPanel() {
           </select>
           <select
             value={model} onChange={(e) => setModel(e.target.value)}
-            className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
+            className="rounded-lg border border-neutral-200 bg-panel px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
             title="按模型筛选"
           >
             <option value="">全部模型</option>
@@ -179,7 +179,7 @@ export function TokenStatsPanel() {
             { label: "消息数", value: fmt(summary.messageCount), icon: MessageSquare },
             { label: "会话数", value: fmt(summary.sessionCount), icon: FolderKanban },
           ].map(({ label, value, icon: Icon }) => (
-            <div key={label} className="rounded-xl border border-neutral-200 bg-white p-3">
+            <div key={label} className="rounded-xl border border-neutral-200 bg-panel p-3">
               <div className="mb-1 flex items-center gap-1 text-xs text-neutral-400">
                 <Icon className="h-3.5 w-3.5 text-primary-500" />
                 {label}
@@ -192,7 +192,7 @@ export function TokenStatsPanel() {
 
       {/* 按天趋势 (纯 CSS bar, 高度按当日总量归一化) */}
       {byDay.length > 0 && (
-        <section className="rounded-xl border border-neutral-200 bg-white p-4">
+        <section className="rounded-xl border border-neutral-200 bg-panel p-4">
           <div className="mb-3 flex items-baseline justify-between">
             <h3 className="text-sm font-medium text-neutral-700">按天趋势</h3>
             <span className="text-xs text-neutral-400">
@@ -219,7 +219,7 @@ export function TokenStatsPanel() {
 
       {/* 会话明细 */}
       {sessions.length > 0 && (
-        <section className="rounded-xl border border-neutral-200 bg-white">
+        <section className="rounded-xl border border-neutral-200 bg-panel">
           <h3 className="border-b border-neutral-100 px-4 py-3 text-sm font-medium text-neutral-700">
             会话明细 ({sessions.length})
           </h3>
