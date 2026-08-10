@@ -68,13 +68,13 @@ export function UiRequestModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       onMouseDown={(e) => {
         // 点遮罩本身 = 取消 (不拦截卡片内部点击)
         if (e.target === e.currentTarget) onCancel(request.id);
       }}
     >
-      <div className="w-[420px] max-w-[90vw] rounded-2xl border border-neutral-200 bg-white shadow-2xl">
+      <div className="w-[420px] max-w-[90vw] rounded-2xl border border-neutral-200 bg-panel shadow-2xl">
         <div className="flex items-center gap-2.5 border-b border-neutral-200 px-5 py-3.5">
           {icon}
           <span className="flex-1 truncate text-sm font-semibold text-neutral-800">
@@ -199,7 +199,7 @@ function NotificationToast({
       ? "border-red-200 bg-red-50 text-red-700"
       : n.notifyType === "warning"
         ? "border-primary-200 bg-primary-50 text-primary-700"
-        : "border-neutral-200 bg-white text-neutral-700";
+        : "border-neutral-200 bg-panel text-neutral-700";
   const Icon =
     n.notifyType === "error" ? XCircle : n.notifyType === "warning" ? AlertTriangle : Info;
 

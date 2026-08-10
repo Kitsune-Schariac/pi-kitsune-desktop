@@ -32,6 +32,8 @@ export default {
           900: "rgb(var(--neutral-900) / <alpha-value>)",
           950: "rgb(var(--neutral-950) / <alpha-value>)",
         },
+        // 浮层/卡片实心底 (popup/弹窗/设置窗口), 皮肤可覆盖 --panel
+        panel: "rgb(var(--panel) / <alpha-value>)",
       },
     },
   },

@@ -8,7 +8,7 @@ function greeting(): string {
   if (h >= 5 && h < 11) return "早上好，今天想做什么?";
   if (h >= 11 && h < 14) return "中午好，有什么想琢磨的?";
   if (h >= 14 && h < 18) return "下午好，继续搞点事情?";
-  return "晚上好，想聊点什么?";
+  return "晚上好HMR★，想聊点什么?";
 }
 
 // 项目选择小卡片: 渲染在输入卡容器底层 (absolute -top-3 bottom-0),
@@ -39,7 +39,7 @@ export function ProjectCard({ project, onProjectChange }: {
       </button>
       {/* 项目列表弹层: 在卡片上方展开, z-50 压过输入卡 */}
       {open && (
-        <div className="absolute bottom-full left-4 z-50 mb-1 max-h-56 w-[40%] overflow-auto rounded-xl border border-neutral-200 bg-white py-1 shadow-xl">
+        <div className="absolute bottom-full left-4 z-50 mb-1 max-h-56 w-[40%] overflow-auto rounded-xl border border-neutral-200 bg-panel py-1 shadow-xl">
           {projects.length === 0 ? (
             <div className="px-3 py-2 text-xs text-neutral-400">暂无项目</div>
           ) : (

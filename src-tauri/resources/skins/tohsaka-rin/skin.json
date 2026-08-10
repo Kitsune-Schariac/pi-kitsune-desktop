@@ -17,7 +17,8 @@
     "primary-800": "54 72 147",
     "primary-900": "48 63 119",
     "accent": "217 43 43",
-    "bubble-bg": "255 255 255"
+    "bubble-bg": "255 255 255",
+    "panel": "35 28 54"
   },
   "background": "bg.jpg",
   "preview": "preview.jpg",

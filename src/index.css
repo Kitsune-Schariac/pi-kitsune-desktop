@@ -41,6 +41,10 @@
   --code-bg: 240 240 240;     /* 代码块底 #f0f0f0 */
   --code-text: 214 51 132;    /* 行内代码 #d63384 */
   --shiki-bg: 248 248 248;    /* shiki 覆盖底 #f8f8f8 */
+  --text-user: 29 78 216;     /* 无气泡模式 user 消息色 (blue-700 同值) */
+  --text-on-bubble: 38 38 38; /* 气泡内文字 (默认气泡为浅底深字, 皮肤可覆盖) */
+  --panel: 255 255 255;       /* 浮层/卡片/输入框实心底 (popup/弹窗/设置窗口) */
+  --scrollbar: 120 120 120;   /* 滚动条滑块色 */
 
   /* 容器底色 + 不透明率 (皮肤/slider 运行时覆盖, 持久化) */
   --surface: 255 255 255;       /* main 区底 */
@@ -52,7 +56,8 @@
 }
 
 /* 暗色方向: 皮肤 base=dark 时挂在 <html data-base="dark"> 上
-   中性色阶反转 (深底浅字), 容器底色取暗色默认值 (皮肤可覆盖) */
+   中性色阶反转 (深底浅字), 容器底色取暗色默认值 (皮肤可覆盖)
+   同时覆盖根容器浅色渐变: 暗色皮肤无背景图时露出 body 暗底色 */
 [data-base="dark"] {
   color-scheme: dark;
   --neutral-50: 9 9 11;
@@ -76,15 +81,24 @@
   --code-bg: 24 24 27;
   --code-text: 244 114 182;
   --shiki-bg: 13 17 23;         /* 与 github-dark 自带底色一致, 避免覆盖冲突 */
+  --text-user: 147 197 253;     /* 暗色下 user 消息用亮蓝 */
+  --text-on-bubble: 38 38 38;
+  --panel: 24 24 27;
+  --scrollbar: 160 160 160;
   --surface: 10 5 20;           /* 深渊黑蓝底 */
   --sidebar-surface: 10 5 20;
   --bubble-bg: 10 5 20;
 }
 
+/* 暗色下覆盖根容器浅色渐变: 无背景图时露 body 暗底, 有背景图时背景层 (z-0) 盖住渐变 */
+[data-base="dark"] #app-root {
+  background-image: none;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
-  background: #ffffff;
+  background: rgb(var(--surface));
 }
 
 /* 锁死页面级滚动: 只允许内部滚动容器滚动, 避免整个窗口像浏览器一样被拖动 */
@@ -105,11 +119,11 @@ body,
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(120, 120, 120, 0.25);
+  background: rgb(var(--scrollbar) / 0.25);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(120, 120, 120, 0.45);
+  background: rgb(var(--scrollbar) / 0.45);
 }
 
 /* Markdown 渲染样式: 浅色主题, 与消息气泡风格一致 */
@@ -137,7 +151,7 @@ body,
   margin: 1em 0 0.5em;
   font-weight: 600;
   line-height: 1.35;
-  color: #1a1a1a;
+  color: rgb(var(--text-strong));
 }
 .markdown-body h1 { font-size: 1.4em; }
 .markdown-body h2 { font-size: 1.2em; }
@@ -177,7 +191,7 @@ body,
 }
 .markdown-body input[type="checkbox"] {
   margin-right: 0.4em;
-  accent-color: #3b82f6;
+  accent-color: rgb(var(--primary-500));
 }
 
 /* 代码块 */
@@ -185,7 +199,7 @@ body,
   margin: 0.6em 0;
   padding: 0.9em 1em;
   border-radius: 8px;
-  background: #f0f0f0;
+  background: rgb(var(--code-bg));
   overflow-x: auto;
   font-size: 0.88em;
   line-height: 1.5;
@@ -197,9 +211,9 @@ body,
   color: inherit;
 }
 
-/* Shiki 高亮代码块: 覆盖主题默认白色背景, 与聊天区浅灰底色统一 */
+/* Shiki 高亮代码块: 覆盖主题自带背景, 与聊天区底色统一 (值随 base 方向) */
 .markdown-body .shiki {
-  background: #f8f8f8 !important;
+  background: rgb(var(--shiki-bg)) !important;
 }
 .markdown-body .shiki code {
   font-family: inherit;
@@ -210,17 +224,17 @@ body,
 .markdown-body code {
   padding: 0.15em 0.4em;
   border-radius: 4px;
-  background: #f0f0f0;
+  background: rgb(var(--code-bg));
   font-size: 0.88em;
-  color: #d63384;
+  color: rgb(var(--code-text));
 }
 
 /* 引用 */
 .markdown-body blockquote {
   margin: 0.5em 0;
   padding: 0.3em 0.8em;
-  border-left: 3px solid #d0d0d0;
-  color: #666;
+  border-left: 3px solid rgb(var(--border-soft));
+  color: rgb(var(--text-muted));
 }
 .markdown-body blockquote p:last-child {
   margin-bottom: 0;
@@ -236,17 +250,17 @@ body,
 .markdown-body th,
 .markdown-body td {
   padding: 0.4em 0.7em;
-  border: 1px solid #d4d4d4;
+  border: 1px solid rgb(var(--border));
   text-align: left;
 }
 .markdown-body th {
-  background: #f5f5f5;
+  background: rgb(var(--table-head));
   font-weight: 600;
 }
 
 /* 链接 */
 .markdown-body a {
-  color: #2563eb;
+  color: rgb(var(--text-link));
   text-decoration: none;
 }
 .markdown-body a:hover {
@@ -257,7 +271,7 @@ body,
 .markdown-body hr {
   margin: 1em 0;
   border: none;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid rgb(var(--divider));
 }
 
 /* 图片 */
@@ -265,6 +279,16 @@ body,
   max-width: 100%;
   border-radius: 6px;
   margin: 0.5em 0;
+}
+
+/* 消息气泡框: 皮肤 --bubble-bg 底色 + slider 不透明率 + 轻阴影
+   不加 backdrop-filter (WebView2 大面积 blur 有内容消失 bug; 背景层已自带 blur, 透出即是毛玻璃)
+   由 MessageItem 开关控制 (开 = 套 .bubble, 关 = 原平铺) */
+.bubble {
+  background: rgb(var(--bubble-bg) / var(--bubble-opacity));
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  padding: 0.6em 0.9em;
 }
 
 /* 洛伦兹吸引子 loading (会话切换中): 混沌系统蝴蝶轨迹, 流动光沿轨道跑 + 整体慢旋 */
