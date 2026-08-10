@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { createHighlighter } from "shiki";
 import type { Highlighter } from "shiki";
+import { useThemeStore } from "../store/theme";
 
 // Markdown 渲染封装: react-markdown + GFM(表格/删除线/任务列表) + Shiki 语法高亮
 // Shiki 使用 VS Code 同款 TextMate 语法, 对真实代码(注解/泛型/lambda/链式调用)识别率远高于 highlight.js
@@ -21,12 +22,15 @@ const LANGS = [
 ];
 
 // highlighter 预热: 应用启动即后台加载, 用户看到第一条消息时通常已就绪
+// 双主题预加载: 皮肤 base=dark 时切 github-dark (浅色保持 github-light)
 let highlighter: Highlighter | null = null;
-void createHighlighter({ langs: LANGS, themes: ["github-light"] }).then((h) => {
+let currentTheme: "github-light" | "github-dark" = "github-light";
+void createHighlighter({ langs: LANGS, themes: ["github-light", "github-dark"] }).then((h) => {
   highlighter = h;
 });
 
 // 高亮结果缓存: 流式更新时同一代码块只重新高亮一次, 避免每帧重复解析
+// key 含主题: 切皮肤后旧主题缓存不命中, 重新高亮 (防缓存串主题)
 // 带容量上限的 FIFO 淘汰, 防止长时间会话内存膨胀
 const CACHE_LIMIT = 500;
 class BoundedCache<K, V> extends Map<K, V> {
@@ -53,11 +57,11 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 
   if (lang && typeof raw === "string" && highlighter) {
     const code = raw.replace(/\n$/, "");
-    const cacheKey = `${lang}\u0000${code}`;
+    const cacheKey = `${currentTheme}\u0000${lang}\u0000${code}`;
     let html = highlightCache.get(cacheKey);
     if (!html) {
       try {
-        html = highlighter.codeToHtml(code, { lang, theme: "github-light" });
+        html = highlighter.codeToHtml(code, { lang, theme: currentTheme });
       } catch {
         return <pre>{children}</pre>;
       }
@@ -69,7 +73,11 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 }
 
 // memo 保证流式更新时只有文本变化的条目重新解析, 其余条目跳过重渲染
+// 内部订阅 activeBase: 皮肤 base 变化时 store 通知 → 组件重渲染 (不受 memo props 比较限制)
+// → CodeBlock 重跑 codeToHtml 用新主题
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
+  const base = useThemeStore((s) => s.activeBase);
+  currentTheme = base === "dark" ? "github-dark" : "github-light";
   return (
     <div className="markdown-body">
       <ReactMarkdown

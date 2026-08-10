@@ -60,12 +60,21 @@ fn user_skins_dir() -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// 内置皮肤目录 (打包资源 resource_dir/skins)
+/// 内置皮肤目录: dev 模式 resource_dir=target/debug 且资源复制到 {rd}/resources/skins,
+/// 打包后 Windows resource_dir=exe 目录, 资源同样在 {rd}/resources/skins — 取第一个存在的候选
 fn bundled_skins_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    app.path()
+    let rd = app
+        .path()
         .resource_dir()
-        .map(|p| p.join("skins"))
-        .map_err(|e| format!("定位内置皮肤目录失败: {e}"))
+        .map_err(|e| format!("定位内置皮肤目录失败: {e}"))?;
+    let candidates = [rd.join("resources").join("skins"), rd.join("skins")];
+    for c in &candidates {
+        if c.is_dir() {
+            return Ok(c.clone());
+        }
+    }
+    // 都不存在时返回第一个候选: 调用方 read_dir 失败跳过, 不影响用户皮肤扫描
+    Ok(candidates[0].clone())
 }
 
 /// 解析单个皮肤目录 → SkinMeta; 目录无有效 skin.json 或 base 非法时返回 None (跳过)
@@ -96,6 +105,8 @@ fn parse_skin(dir: &Path) -> Option<SkinMeta> {
 /// 合并两处皮肤列表: id 冲突时内置优先 (用户皮肤被覆盖), 按 id 排序稳定展示
 #[tauri::command]
 pub fn list_skins(app: tauri::AppHandle) -> Result<Vec<SkinMeta>, String> {
+    let bdir = bundled_skins_dir(&app)?;
+    eprintln!("[skins] bdir = {}", bdir.display());
     let mut map: HashMap<String, SkinMeta> = HashMap::new();
     let bdir = bundled_skins_dir(&app)?;
     if let Ok(entries) = std::fs::read_dir(&bdir) {

@@ -78,7 +78,7 @@ export function SessionPicker({ onPick, onDone }: {
   return (
     <div className="flex h-72 gap-2">
       {/* 左: 会话列表 */}
-      <div className="w-1/2 overflow-auto rounded-lg border border-neutral-200 bg-white p-1.5">
+      <div className="w-1/2 overflow-auto rounded-lg border border-neutral-200 bg-panel p-1.5">
         {!projects ? (
           <div className="flex h-full items-center justify-center gap-2 text-xs text-neutral-400">
             <Loader2 className="h-4 w-4 animate-spin" /> 加载中…
@@ -110,7 +110,7 @@ export function SessionPicker({ onPick, onDone }: {
       </div>
       {/* 右: 消息列表 (单选) */}
       <div className="flex w-1/2 flex-col">
-        <div className="flex-1 overflow-auto rounded-lg border border-neutral-200 bg-white p-1.5">
+        <div className="flex-1 overflow-auto rounded-lg border border-neutral-200 bg-panel p-1.5">
           {!selSession ? (
             <div className="flex h-full items-center justify-center text-xs text-neutral-300">
               先选一个会话

@@ -11,6 +11,7 @@ import { SkillsPanel } from "./components/panels/SkillsPanel";
 import { PackagesPanel } from "./components/panels/PackagesPanel";
 import { NotificationToasts, UiRequestModal } from "./components/UiRequestModal";
 import { QueueIndicator } from "./components/QueueIndicator";
+import { useThemeStore } from "./store/theme";
 import { Loader2, X } from "lucide-react";
 
 export type PanelKind = "skills" | "packages" | "settings" | null;
@@ -33,14 +34,26 @@ export default function App() {
   // 启动即加载侧边栏数据 (无连接面板, 直接进主界面)
   useEffect(() => {
     loadProjects();
+    // 主题皮肤系统: 拉皮肤列表 + 恢复持久化 + 应用当前主题 (模块级防重入)
+    useThemeStore.getState().init();
   }, [loadProjects]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-gradient-to-b from-white to-primary-100 text-neutral-900">
+    <>
+      {/* 背景层: 皮肤背景图铺这里 (自身 blur 模拟毛玻璃底, 不用 backdrop-filter — WebView2 大面积 backdrop-filter 有内容消失 bug)
+          浅色时 --bg-image 为 none, 透出根容器渐变 */}
+      <div
+        className="app-bg absolute inset-0 z-0 bg-cover bg-center [background-image:var(--bg-image)] [filter:blur(10px)] [transform:scale(1.06)]"
+        aria-hidden
+      />
+      <div
+        id="app-root"
+        className="relative flex h-screen w-screen overflow-hidden bg-gradient-to-b from-white to-primary-100 text-neutral-900"
+      >
       <Sidebar onOpenPanel={setPanel} />
       {/* relative: 供底部悬浮输入框 absolute 定位
           不压缩滚动区: 消息可滑到输入卡后方 (半透明可见), 底部留白由 MessageList 内部 padding 承担 */}
-      <main className="relative flex min-w-0 flex-1 flex-col bg-white shadow-[-10px_0_24px_-12px_rgba(0,0,0,0.08)]">
+      <main className="relative flex min-w-0 flex-1 flex-col bg-[rgb(var(--surface)/var(--chat-opacity))] shadow-[-10px_0_24px_-12px_rgba(0,0,0,0.08)]">
         {isSwitching ? (
           <div className="flex flex-1 items-center justify-center">
             <ChaosLoader />
@@ -113,8 +126,8 @@ export default function App() {
 
       {/* 右侧面板抽屉 (Skill/package) */}
       {panel && (
-        <div className="absolute inset-0 z-40 flex justify-end bg-neutral-900/10">
-          <div className="flex h-full w-[380px] flex-col border-l border-neutral-200 bg-white shadow-2xl">
+        <div className="absolute inset-0 z-40 flex justify-end bg-black/10">
+          <div className="flex h-full w-[380px] flex-col border-l border-neutral-200 bg-panel shadow-2xl">
             <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-3">
               <span className="font-medium">
                 {panel === "skills" ? "Skill 管理" : panel === "packages" ? "pi Package" : "设置"}
@@ -133,6 +146,7 @@ export default function App() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

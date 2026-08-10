@@ -58,7 +58,7 @@ export function SkillsPanel() {
                 className={`w-full rounded-xl border p-3 text-left transition ${
                   selected?.path === s.path
                     ? "border-primary-300 bg-primary-50"
-                    : "border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50"
+                    : "border-neutral-200 bg-panel hover:border-neutral-300 hover:bg-neutral-50"
                 }`}
               >
                 <span className="flex items-center gap-2">

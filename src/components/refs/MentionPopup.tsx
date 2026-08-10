@@ -207,7 +207,7 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
   const fileCount = firstSkill === -1 ? candidates.length : firstSkill;
 
   return (
-    <div className="absolute bottom-full left-0 z-50 mb-1 w-[460px] rounded-xl border border-neutral-200 bg-white p-2 shadow-xl">
+    <div className="absolute bottom-full left-0 z-50 mb-1 w-[460px] rounded-xl border border-neutral-200 bg-panel p-2 shadow-xl">
       <div className="flex items-center justify-between px-2 pb-1">
         <span className="text-[11px] text-neutral-400">引用文件或技能 · ↑↓ 选择, Enter 确认</span>
         <button

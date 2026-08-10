@@ -36,7 +36,7 @@ export function QueueIndicator({ steering, followUp }: { steering: string[]; fol
         <>
           {/* 透明遮罩: 点击任意处关闭 (与 SettingsWindow 遮罩同模式) */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-1 max-h-72 w-80 overflow-y-auto rounded-xl border border-neutral-200 bg-white py-1 shadow-xl">
+          <div className="absolute right-0 top-full z-50 mt-1 max-h-72 w-80 overflow-y-auto rounded-xl border border-neutral-200 bg-panel py-1 shadow-xl">
             <QueueGroup label="steer 指导" color="orange" icon={<MessageSquarePlus className="h-3 w-3" />} items={steering} />
             <QueueGroup label="followUp 后续" color="blue" icon={<ListPlus className="h-3 w-3" />} items={followUp} />
             {total === 0 && <div className="px-4 py-3 text-xs text-neutral-400">队列为空</div>}

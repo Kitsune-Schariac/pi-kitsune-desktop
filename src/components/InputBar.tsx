@@ -41,7 +41,7 @@ function MiniSelect({ label, icon: Icon, value, options, onChange, disabled, ope
         <ChevronDown className="h-2.5 w-2.5 text-neutral-400" />
       </button>
       {openSel && (
-        <div className="absolute bottom-full right-0 z-50 mb-1 max-h-56 overflow-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-xl">
+        <div className="absolute bottom-full right-0 z-50 mb-1 max-h-56 overflow-auto rounded-lg border border-neutral-200 bg-panel py-1 shadow-xl">
           {options.map((opt) => (
             <button
               key={opt}
@@ -392,7 +392,7 @@ export function InputBar({
       <div
         ref={cardRef}
         // 半透明悬浮卡: 消息从卡片后方滑过时可见 (不挡内容), 轻模糊防文字混叠
-        className="pointer-events-auto rounded-2xl border border-neutral-200 bg-white/80 shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition focus-within:border-primary-400"
+        className="pointer-events-auto rounded-2xl border border-neutral-200 bg-[rgb(var(--panel)/0.8)] shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition focus-within:border-primary-400"
       >
         <div className="px-4 pt-3">
           {/* @引用 / /命令 浮层: 悬浮在输入卡上方 (与 RefsPopup 同模式), 不占卡片布局 */}
@@ -451,7 +451,7 @@ export function InputBar({
           {/* 引用预览 popover */}
           {preview && (
             <div className="relative">
-              <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-xl border border-neutral-200 bg-white shadow-xl">
+              <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-xl border border-neutral-200 bg-panel shadow-xl">
                 <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-2">
                   <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-700">
                     {(() => {
