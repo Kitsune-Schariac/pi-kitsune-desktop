@@ -102,12 +102,14 @@ body {
   background: rgb(var(--surface));
 }
 
-/* 锁死页面级滚动: 只允许内部滚动容器滚动, 避免整个窗口像浏览器一样被拖动 */
+/* 锁死页面级滚动: 只允许内部滚动容器滚动, 避免整个窗口像浏览器一样被拖动
+   overflow: clip 而非 hidden — hidden 仍是滚动容器, 聚焦/滚动锚定可编程滚动 document
+   (实测: 打开会话时 textarea 聚焦触发 document scrollTop=24 → 整窗视觉上移), clip 彻底禁止 */
 html,
 body,
 #root {
   height: 100%;
-  overflow: hidden;
+  overflow: clip;
   overscroll-behavior: none;
 }
 
