@@ -43,7 +43,7 @@ export default function App() {
       {/* 背景层: 皮肤背景图铺这里 (自身 blur 模拟毛玻璃底, 不用 backdrop-filter — WebView2 大面积 backdrop-filter 有内容消失 bug)
           浅色时 --bg-image 为 none, 透出根容器渐变 */}
       <div
-        className="app-bg absolute inset-0 z-0 bg-cover bg-center [background-image:var(--bg-image)] [filter:blur(10px)] [transform:scale(1.06)]"
+        className="app-bg absolute inset-0 z-0 bg-cover bg-center [background-image:var(--bg-image)] [filter:blur(var(--bg-blur))] [transform:scale(1.06)]"
         aria-hidden
       />
       <div

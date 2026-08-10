@@ -53,6 +53,7 @@
   --sidebar-opacity: 0.6;       /* 侧边栏不透明率 (20%–90%) */
   --bubble-bg: 255 255 255;     /* 消息气泡底色, 皮肤可覆盖 */
   --bubble-opacity: 0.55;       /* 气泡不透明率 (30%–90%) */
+  --bg-blur: 10px;              /* 背景层模糊度 (0–30px, slider 运行时覆盖) */
 }
 
 /* 暗色方向: 皮肤 base=dark 时挂在 <html data-base="dark"> 上

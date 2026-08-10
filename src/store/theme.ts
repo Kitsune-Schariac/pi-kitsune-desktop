@@ -25,6 +25,7 @@ const CHAT_OPACITY_KEY = "kitsune.chatOpacity";
 const SIDEBAR_OPACITY_KEY = "kitsune.sidebarOpacity";
 const BUBBLE_ENABLED_KEY = "kitsune.bubbleEnabled";
 const BUBBLE_OPACITY_KEY = "kitsune.bubbleOpacity";
+const BG_BLUR_KEY = "kitsune.bgBlur";
 
 // StrictMode 双跑 effect 防重入: init 只执行一次
 let initialized = false;
@@ -33,6 +34,7 @@ export const DEFAULT_SKIN_ID = "light-sky";
 const DEFAULT_CHAT_OPACITY = 0.75;
 const DEFAULT_SIDEBAR_OPACITY = 0.6;
 const DEFAULT_BUBBLE_OPACITY = 0.55;
+const DEFAULT_BG_BLUR = 10;
 
 function readNumber(key: string, fallback: number): number {
   const raw = localStorage.getItem(key);
@@ -79,12 +81,14 @@ interface ThemeStore {
   sidebarOpacity: number;  // 0.2–0.9, 侧边栏
   bubbleEnabled: boolean;  // 消息气泡框开关
   bubbleOpacity: number;   // 0.3–0.9, 气泡
+  bgBlur: number;          // 0–30px, 背景层模糊度 (有背景图的皮肤生效)
   init: () => Promise<void>;
   applyTheme: (skin: SkinMeta) => Promise<void>;
   setChatOpacity: (n: number) => void;
   setSidebarOpacity: (n: number) => void;
   setBubbleEnabled: (on: boolean) => void;
   setBubbleOpacity: (n: number) => void;
+  setBgBlur: (n: number) => void;
   reloadSkins: () => Promise<void>;
 }
 
@@ -96,6 +100,7 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
   sidebarOpacity: DEFAULT_SIDEBAR_OPACITY,
   bubbleEnabled: false,
   bubbleOpacity: DEFAULT_BUBBLE_OPACITY,
+  bgBlur: DEFAULT_BG_BLUR,
 
   /** 启动: 拉皮肤列表 + 恢复持久化 (主题/不透明率/气泡) + 应用当前主题 */
   init: async () => {
@@ -111,6 +116,7 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
     const chatOpacity = readNumber(CHAT_OPACITY_KEY, DEFAULT_CHAT_OPACITY);
     const sidebarOpacity = readNumber(SIDEBAR_OPACITY_KEY, DEFAULT_SIDEBAR_OPACITY);
     const bubbleOpacity = readNumber(BUBBLE_OPACITY_KEY, DEFAULT_BUBBLE_OPACITY);
+    const bgBlur = readNumber(BG_BLUR_KEY, DEFAULT_BG_BLUR);
     // 气泡开关: 无持久化记录 → 跟随皮肤推荐; 用户改过 → 以用户为准
     const rawBubble = localStorage.getItem(BUBBLE_ENABLED_KEY);
     const bubbleEnabled = rawBubble === null ? (skin.bubble ?? false) : rawBubble === "1";
@@ -122,8 +128,10 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
       sidebarOpacity,
       bubbleEnabled,
       bubbleOpacity,
+      bgBlur,
     });
     applyOpacityVars(chatOpacity, sidebarOpacity, bubbleOpacity);
+    document.documentElement.style.setProperty("--bg-blur", `${bgBlur}px`);
     await get().applyTheme(skin);
   },
 
@@ -210,6 +218,16 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
   reloadSkins: async () => {
     const skins = await invoke<SkinMeta[]>("list_skins");
     set({ skins });
+  },
+
+  setBgBlur: (n) => {
+    set({ bgBlur: n });
+    document.documentElement.style.setProperty("--bg-blur", `${n}px`);
+    try {
+      localStorage.setItem(BG_BLUR_KEY, String(n));
+    } catch {
+      /* ignore */
+    }
   },
 }));
 

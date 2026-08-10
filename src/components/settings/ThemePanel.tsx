@@ -10,18 +10,23 @@ function OpacitySlider({
   min,
   max,
   onChange,
+  unit = "pct",
 }: {
   label: string;
   value: number;
   min: number;
   max: number;
   onChange: (n: number) => void;
+  /** 显示单位: pct = 百分比 (不透明率), px = 像素 (模糊度) */
+  unit?: "pct" | "px";
 }) {
   return (
     <label className="block">
       <div className="mb-1 flex items-center justify-between text-xs text-neutral-500">
         <span>{label}</span>
-        <span className="tabular-nums text-neutral-600">{Math.round(value * 100)}%</span>
+        <span className="tabular-nums text-neutral-600">
+          {unit === "pct" ? `${Math.round(value * 100)}%` : `${Math.round(value)}px`}
+        </span>
       </div>
       <input
         type="range"
@@ -44,12 +49,16 @@ export function ThemePanel() {
   const sidebarOpacity = useThemeStore((s) => s.sidebarOpacity);
   const bubbleEnabled = useThemeStore((s) => s.bubbleEnabled);
   const bubbleOpacity = useThemeStore((s) => s.bubbleOpacity);
+  const bgBlur = useThemeStore((s) => s.bgBlur);
   const applyTheme = useThemeStore((s) => s.applyTheme);
   const setChatOpacity = useThemeStore((s) => s.setChatOpacity);
   const setSidebarOpacity = useThemeStore((s) => s.setSidebarOpacity);
   const setBubbleEnabled = useThemeStore((s) => s.setBubbleEnabled);
   const setBubbleOpacity = useThemeStore((s) => s.setBubbleOpacity);
+  const setBgBlur = useThemeStore((s) => s.setBgBlur);
   const reloadSkins = useThemeStore((s) => s.reloadSkins);
+  // 当前激活皮肤: 判断是否有背景图 (无则模糊度禁用)
+  const activeSkin = skins.find((s) => s.id === activeSkinId);
   // 切换中皮肤 id: 异步取背景图期间防连点
   const [busy, setBusy] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -161,6 +170,21 @@ export function ThemePanel() {
           max={0.9}
           onChange={setSidebarOpacity}
         />
+      </section>
+
+      {/* 背景模糊度: 无背景图的皮肤无意义, 禁用 */}
+      <section className="space-y-3 border-t border-neutral-200 pt-4">
+        <OpacitySlider
+          label="背景模糊度"
+          value={bgBlur}
+          min={0}
+          max={30}
+          unit="px"
+          onChange={setBgBlur}
+        />
+        {!activeSkin?.has_bg && (
+          <p className="text-[10px] text-neutral-400">当前皮肤无背景图，模糊度不生效</p>
+        )}
       </section>
 
       {/* 消息气泡框 */}
