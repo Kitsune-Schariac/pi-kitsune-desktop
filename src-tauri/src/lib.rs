@@ -2,6 +2,7 @@ mod capture;
 mod pi_runtime;
 mod search;
 mod session_fs;
+mod skins;
 mod token_stats;
 
 use pi_runtime::PiRuntime;
@@ -384,6 +385,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(Arc::new(Mutex::new(RuntimePool::new())) as SharedRuntime)
         .setup(|_app| {
             // token 统计索引预热: 后台线程首次全量建索引 (1~2s), 不阻塞启动;
@@ -413,6 +415,7 @@ pub fn run() {
             search::search_files,
             capture::capture_screenshot,
             token_stats::get_token_stats,
+            skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
