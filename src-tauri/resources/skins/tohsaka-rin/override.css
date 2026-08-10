@@ -1,0 +1,12 @@
+/* 远坂凛 · 暗黑哥特 — 皮肤覆盖样式
+   选择器带 [data-theme="tohsaka-rin"] 前缀, 只在皮肤激活时生效 (切走后整体移除) */
+
+/* 背景图偏右定位: 远坂凛在画面中轴偏右, 让焦点透出 main 区 (cover 裁切下微调) */
+[data-theme="tohsaka-rin"] #app-root {
+  background-position: 66% 30%;
+}
+
+/* 侧边栏微调: 暗色下毛玻璃更透, 彩窗光透出 */
+[data-theme="tohsaka-rin"] .sidebar-shell {
+  border-right: 1px solid rgb(92 138 230 / 0.18);
+}

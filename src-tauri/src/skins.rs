@@ -24,6 +24,7 @@ pub struct SkinMeta {
     pub has_override: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preview_data_uri: Option<String>,
+    pub bubble: bool,
 }
 
 /// skin.json 解析结构 (override 是 Rust 关键字, rename 处理)
@@ -44,6 +45,9 @@ struct SkinConfig {
     preview: Option<String>,
     #[serde(default, rename = "override")]
     override_css: Option<String>,
+    /// 皮肤推荐的气泡框开关 (用户未手动改过时生效)
+    #[serde(default)]
+    bubble: bool,
 }
 
 /// 用户皮肤目录 ~/.pi-kitsune/skins (不存在则创建)
@@ -85,6 +89,7 @@ fn parse_skin(dir: &Path) -> Option<SkinMeta> {
         has_bg: cfg.background.as_ref().is_some_and(|n| dir.join(n).exists()),
         has_override: cfg.override_css.as_ref().is_some_and(|n| dir.join(n).exists()),
         preview_data_uri,
+        bubble: cfg.bubble,
     })
 }
 
