@@ -5,13 +5,10 @@ import { Sparkles, Package, Settings, FolderKanban, Plus, FolderOpen } from "luc
 // 左侧边栏: 功能区 (skill/package/设置) + 项目会话区
 export function Sidebar({ onOpenPanel }: { onOpenPanel: (p: PanelKind) => void }) {
   return (
-    <aside className="flex w-[18%] flex-col border-r border-neutral-200 bg-neutral-50">
+    <aside className="flex w-[18%] flex-col bg-white/60 backdrop-blur-xl">
       {/* 品牌区 */}
-      <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+      <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500 text-white">
-            <Sparkles className="h-4 w-4" />
-          </div>
           <span className="font-semibold">Pi Kitsune</span>
         </div>
         <button
@@ -24,26 +21,26 @@ export function Sidebar({ onOpenPanel }: { onOpenPanel: (p: PanelKind) => void }
       </div>
 
       {/* 功能区 */}
-      <div className="space-y-1 border-b border-neutral-200 px-3 py-3">
+      <div className="space-y-1 px-3 py-3">
         <button
           onClick={() => onOpenPanel("skills")}
           className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-neutral-600 transition hover:bg-neutral-200/60 hover:text-neutral-900"
         >
-          <Sparkles className="h-4 w-4 text-orange-500" />
+          <Sparkles className="h-4 w-4 text-neutral-500" />
           Skill 管理
         </button>
         <button
           onClick={() => onOpenPanel("packages")}
           className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-neutral-600 transition hover:bg-neutral-200/60 hover:text-neutral-900"
         >
-          <Package className="h-4 w-4 text-orange-500" />
+          <Package className="h-4 w-4 text-neutral-500" />
           pi Package
         </button>
         <button
           onClick={() => onOpenPanel("settings")}
           className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-neutral-600 transition hover:bg-neutral-200/60 hover:text-neutral-900"
         >
-          <Settings className="h-4 w-4 text-orange-500" />
+          <Settings className="h-4 w-4 text-neutral-500" />
           设置
         </button>
       </div>
@@ -67,7 +64,7 @@ export function Sidebar({ onOpenPanel }: { onOpenPanel: (p: PanelKind) => void }
       </div>
 
       {/* 底部提示 */}
-      <div className="border-t border-neutral-200 px-4 py-2 text-[11px] text-neutral-400">
+      <div className="px-4 py-2 text-[11px] text-neutral-400">
         <span className="flex items-center gap-1">
           <FolderOpen className="h-3 w-3" />
           会话数据来自 ~/.pi/agent/sessions

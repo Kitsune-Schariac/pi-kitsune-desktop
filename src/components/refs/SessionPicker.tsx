@@ -95,7 +95,7 @@ export function SessionPicker({ onPick, onDone }: {
                   onClick={() => openSession(p, s)}
                   className={`flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition ${
                     selSession?.session_path === s.session_path
-                      ? "bg-orange-50 text-orange-700"
+                      ? "bg-primary-50 text-primary-700"
                       : "text-neutral-600 hover:bg-neutral-100"
                   }`}
                   title={s.preview}
@@ -131,7 +131,7 @@ export function SessionPicker({ onPick, onDone }: {
                   key={e.id}
                   onClick={() => setSelMsg(sel ? null : e)}
                   className={`mb-0.5 flex w-full items-start gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition ${
-                    sel ? "bg-orange-50 text-orange-700" : "text-neutral-600 hover:bg-neutral-100"
+                    sel ? "bg-primary-50 text-primary-700" : "text-neutral-600 hover:bg-neutral-100"
                   }`}
                 >
                   {e.role === "user" ? (
@@ -142,7 +142,7 @@ export function SessionPicker({ onPick, onDone }: {
                   <span className="line-clamp-2">
                     {e.role === "user" ? "用户" : "助手"}: {e.text?.slice(0, 120)}
                   </span>
-                  {sel && <Check className="mt-0.5 h-3 w-3 shrink-0 text-orange-500" />}
+                  {sel && <Check className="mt-0.5 h-3 w-3 shrink-0 text-primary-500" />}
                 </button>
               );
             })
@@ -155,7 +155,7 @@ export function SessionPicker({ onPick, onDone }: {
           <button
             onClick={confirm}
             disabled={!selMsg}
-            className="flex items-center gap-1 rounded-lg bg-orange-500 px-3 py-1.5 text-xs text-white transition hover:bg-orange-600 disabled:opacity-40"
+            className="flex items-center gap-1 rounded-lg bg-primary-500 px-3 py-1.5 text-xs text-white transition hover:bg-primary-600 disabled:opacity-40"
           >
             <ChevronRight className="h-3 w-3" />
             添加引用

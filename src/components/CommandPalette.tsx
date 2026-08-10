@@ -152,14 +152,14 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
                   it.disabled
                     ? "opacity-40"
                     : sel
-                      ? "bg-orange-50"
+                      ? "bg-primary-50"
                       : "hover:bg-neutral-100"
                 }`}
                 title={it.description}
               >
-                <Icon className={`h-3.5 w-3.5 shrink-0 ${it.source === "local" ? "text-neutral-400" : "text-orange-400"}`} />
+                <Icon className={`h-3.5 w-3.5 shrink-0 ${it.source === "local" ? "text-neutral-400" : "text-primary-400"}`} />
                 <span className="min-w-0 flex-1">
-                  <span className={`block truncate font-medium ${sel ? "text-orange-700" : "text-neutral-700"}`}>
+                  <span className={`block truncate font-medium ${sel ? "text-primary-700" : "text-neutral-700"}`}>
                     /{it.name}
                   </span>
                   <span className="block truncate text-[10px] text-neutral-400">{it.description}</span>

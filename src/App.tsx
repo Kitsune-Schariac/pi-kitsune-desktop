@@ -4,7 +4,7 @@ import { useProjectsStore } from "./store/projects";
 import { MessageList } from "./components/MessageList";
 import { InputBar } from "./components/InputBar";
 import { Sidebar } from "./components/Sidebar";
-import { EmptyState } from "./components/EmptyState";
+import { EmptyState, ProjectCard } from "./components/EmptyState";
 import { ChaosLoader } from "./components/ChaosLoader";
 import { SettingsWindow } from "./components/settings/SettingsWindow";
 import { SkillsPanel } from "./components/panels/SkillsPanel";
@@ -36,11 +36,11 @@ export default function App() {
   }, [loadProjects]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-white text-neutral-900">
+    <div className="flex h-screen w-screen overflow-hidden bg-gradient-to-b from-white to-primary-100 text-neutral-900">
       <Sidebar onOpenPanel={setPanel} />
       {/* relative: 供底部悬浮输入框 absolute 定位
           不压缩滚动区: 消息可滑到输入卡后方 (半透明可见), 底部留白由 MessageList 内部 padding 承担 */}
-      <main className="relative flex min-w-0 flex-1 flex-col">
+      <main className="relative flex min-w-0 flex-1 flex-col bg-white shadow-[-10px_0_24px_-12px_rgba(0,0,0,0.08)]">
         {isSwitching ? (
           <div className="flex flex-1 items-center justify-center">
             <ChaosLoader />
@@ -81,9 +81,17 @@ export default function App() {
             <MessageList inputBarH={inputBarH} />
           </>
         ) : (
-          <EmptyState project={emptyProject} onProjectChange={setEmptyProject} />
+          <EmptyState />
         )}
-        <InputBar emptyProject={emptyProject} onHeightChange={setInputBarH} onOpenPanel={setPanel} />
+        <InputBar
+          emptyProject={emptyProject}
+          onHeightChange={setInputBarH}
+          onOpenPanel={setPanel}
+          bottomLayer={
+            // 仅空状态: 项目选择卡片压在输入卡下层, 顶部露出可点击
+            !active && <ProjectCard project={emptyProject} onProjectChange={setEmptyProject} />
+          }
+        />
       </main>
 
       {/* 扩展 UI 请求弹窗: 只渲染活跃会话的队头请求 (FIFO, 关闭后自动弹下一个) */}

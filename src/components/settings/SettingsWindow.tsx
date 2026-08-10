@@ -47,7 +47,7 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
                   : "text-neutral-600 hover:bg-neutral-200/60 hover:text-neutral-900"
               }`}
             >
-              <BarChart3 className="h-4 w-4 text-orange-500" />
+              <BarChart3 className="h-4 w-4 text-neutral-500" />
               Token 统计
             </button>
           </nav>

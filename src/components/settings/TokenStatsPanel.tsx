@@ -90,7 +90,7 @@ export function TokenStatsPanel() {
       {/* 标题 + 加载指示 */}
       <div className="flex items-center gap-2">
         <h2 className="text-base font-semibold text-neutral-900">Token 使用统计</h2>
-        {loading && <Loader2 className="h-4 w-4 animate-spin text-orange-500" />}
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-primary-500" />}
         {error && (
           <span className="flex items-center gap-1 text-xs text-red-500">
             <AlertCircle className="h-3.5 w-3.5" /> {error}
@@ -109,7 +109,7 @@ export function TokenStatsPanel() {
                 onClick={() => { setRange(r); setCustomStart(""); setCustomEnd(""); }}
                 className={`px-3 py-1.5 transition ${
                   range === r && !customStart && !customEnd
-                    ? "bg-orange-500 font-medium text-white"
+                    ? "bg-primary-500 font-medium text-white"
                     : "text-neutral-600 hover:bg-neutral-100"
                 }`}
               >
@@ -121,13 +121,13 @@ export function TokenStatsPanel() {
           <div className="flex items-center gap-1.5 text-xs text-neutral-500">
             <input
               type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)}
-              className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-orange-400"
+              className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
               title="自定义开始日期"
             />
             <span>至</span>
             <input
               type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)}
-              className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-orange-400"
+              className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
               title="自定义结束日期"
             />
           </div>
@@ -136,7 +136,7 @@ export function TokenStatsPanel() {
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <select
             value={project} onChange={(e) => setProject(e.target.value)}
-            className="max-w-[220px] rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-orange-400"
+            className="max-w-[220px] rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
             title="按项目筛选"
           >
             <option value="">全部项目</option>
@@ -146,7 +146,7 @@ export function TokenStatsPanel() {
           </select>
           <select
             value={provider} onChange={(e) => setProvider(e.target.value)}
-            className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-orange-400"
+            className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
             title="按供应商筛选"
           >
             <option value="">全部供应商</option>
@@ -156,7 +156,7 @@ export function TokenStatsPanel() {
           </select>
           <select
             value={model} onChange={(e) => setModel(e.target.value)}
-            className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-orange-400"
+            className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
             title="按模型筛选"
           >
             <option value="">全部模型</option>
@@ -181,7 +181,7 @@ export function TokenStatsPanel() {
           ].map(({ label, value, icon: Icon }) => (
             <div key={label} className="rounded-xl border border-neutral-200 bg-white p-3">
               <div className="mb-1 flex items-center gap-1 text-xs text-neutral-400">
-                <Icon className="h-3.5 w-3.5 text-orange-500" />
+                <Icon className="h-3.5 w-3.5 text-primary-500" />
                 {label}
               </div>
               <div className="text-lg font-semibold tabular-nums text-neutral-900">{value}</div>
@@ -206,7 +206,7 @@ export function TokenStatsPanel() {
                 {byDay.map((d) => (
                   <div
                     key={d.date}
-                    className="group relative flex-1 rounded-t bg-orange-400/70 transition hover:bg-orange-500"
+                    className="group relative flex-1 rounded-t bg-primary-400/70 transition hover:bg-primary-500"
                     style={{ height: `${Math.max((d.total / max) * 100, 1.5)}%` }}
                     title={`${d.date} · ${fmt(d.total)} tokens · ${fmt(d.messageCount)} 条消息`}
                   />

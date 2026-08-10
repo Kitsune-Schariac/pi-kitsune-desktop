@@ -55,13 +55,13 @@ export function UiRequestModal({
 
   const icon =
     request.method === "confirm" ? (
-      <ShieldAlert className="h-5 w-5 text-orange-500" />
+      <ShieldAlert className="h-5 w-5 text-primary-500" />
     ) : request.method === "select" ? (
-      <ListChecks className="h-5 w-5 text-orange-500" />
+      <ListChecks className="h-5 w-5 text-primary-500" />
     ) : request.method === "editor" ? (
-      <FileText className="h-5 w-5 text-orange-500" />
+      <FileText className="h-5 w-5 text-primary-500" />
     ) : (
-      <TextCursorInput className="h-5 w-5 text-orange-500" />
+      <TextCursorInput className="h-5 w-5 text-primary-500" />
     );
 
   const submit = () => onResolve(request.id, { value });
@@ -103,7 +103,7 @@ export function UiRequestModal({
                   <button
                     key={opt}
                     onClick={() => onResolve(request.id, { value: opt })}
-                    className="flex w-full items-center justify-between rounded-lg border border-neutral-200 px-3.5 py-2.5 text-left text-sm text-neutral-700 transition hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700"
+                    className="flex w-full items-center justify-between rounded-lg border border-neutral-200 px-3.5 py-2.5 text-left text-sm text-neutral-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700"
                   >
                     <span className="truncate">{opt}</span>
                     <ListChecks className="h-3.5 w-3.5 shrink-0 text-neutral-300" />
@@ -124,7 +124,7 @@ export function UiRequestModal({
                 if (e.key === "Enter") submit();
               }}
               placeholder={request.placeholder || "输入内容…"}
-              className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
             />
           )}
 
@@ -138,7 +138,7 @@ export function UiRequestModal({
                 if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit();
               }}
               rows={8}
-              className="w-full resize-y rounded-lg border border-neutral-200 px-3 py-2 font-mono text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              className="w-full resize-y rounded-lg border border-neutral-200 px-3 py-2 font-mono text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
             />
           )}
         </div>
@@ -153,7 +153,7 @@ export function UiRequestModal({
             </button>
             <button
               onClick={request.method === "confirm" ? () => onResolve(request.id, { confirmed: true }) : submit}
-              className="rounded-lg bg-orange-500 px-3.5 py-1.5 text-sm font-medium text-white transition hover:bg-orange-600"
+              className="rounded-lg bg-primary-500 px-3.5 py-1.5 text-sm font-medium text-white transition hover:bg-primary-600"
             >
               {request.method === "confirm" ? "确认" : "提交"}
             </button>
@@ -198,7 +198,7 @@ function NotificationToast({
     n.notifyType === "error"
       ? "border-red-200 bg-red-50 text-red-700"
       : n.notifyType === "warning"
-        ? "border-orange-200 bg-orange-50 text-orange-700"
+        ? "border-primary-200 bg-primary-50 text-primary-700"
         : "border-neutral-200 bg-white text-neutral-700";
   const Icon =
     n.notifyType === "error" ? XCircle : n.notifyType === "warning" ? AlertTriangle : Info;

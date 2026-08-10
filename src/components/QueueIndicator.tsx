@@ -19,7 +19,7 @@ export function QueueIndicator({ steering, followUp }: { steering: string[]; fol
         title={`待处理队列 ${total} 条: steer ${steering.length} / followUp ${followUp.length}`}
       >
         {steering.length > 0 && (
-          <span className="flex items-center gap-0.5 rounded bg-orange-100 px-1.5 py-0.5 font-medium text-orange-600">
+          <span className="flex items-center gap-0.5 rounded bg-primary-100 px-1.5 py-0.5 font-medium text-primary-600">
             <MessageSquarePlus className="h-3 w-3" />
             {steering.length}
           </span>
@@ -54,7 +54,7 @@ function QueueGroup({ label, color, icon, items }: {
   items: string[];
 }) {
   if (items.length === 0) return null;
-  const labelCls = color === "orange" ? "text-orange-600" : "text-blue-600";
+  const labelCls = color === "orange" ? "text-primary-600" : "text-blue-600";
   return (
     <div className="py-1">
       <div className={`flex items-center gap-1 px-4 py-1 text-[10px] font-medium uppercase tracking-wide ${labelCls}`}>

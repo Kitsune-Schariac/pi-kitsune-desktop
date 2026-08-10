@@ -133,7 +133,7 @@ export function RefsPopup({ root, onPick, onClose }: {
             onClick={() => { setTab(key); setErr(null); }}
             className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs transition ${
               tab === key
-                ? "bg-orange-50 font-medium text-orange-600"
+                ? "bg-primary-50 font-medium text-primary-600"
                 : "text-neutral-500 hover:bg-neutral-100"
             }`}
           >
@@ -155,7 +155,7 @@ export function RefsPopup({ root, onPick, onClose }: {
           <FileTreePicker root={root} onPick={onPick} onDone={() => {}} />
           <button
             onClick={addAnyFile}
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 px-3 py-2 text-xs text-neutral-500 transition hover:border-orange-300 hover:text-orange-600"
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 px-3 py-2 text-xs text-neutral-500 transition hover:border-primary-300 hover:text-primary-600"
           >
             <FilePlus2 className="h-3.5 w-3.5" />
             引用项目外文件 (系统选择器)
@@ -173,24 +173,24 @@ export function RefsPopup({ root, onPick, onClose }: {
           <button
             onClick={pasteText}
             disabled={busy !== null}
-            className="flex w-full items-center gap-2.5 rounded-xl border border-neutral-200 px-4 py-3 text-left text-sm text-neutral-700 transition hover:border-orange-300 hover:bg-orange-50 disabled:opacity-50"
+            className="flex w-full items-center gap-2.5 rounded-xl border border-neutral-200 px-4 py-3 text-left text-sm text-neutral-700 transition hover:border-primary-300 hover:bg-primary-50 disabled:opacity-50"
           >
             {busy === "clipboard-text" ? (
-              <Loader2 className="h-4 w-4 animate-spin text-orange-500" />
+              <Loader2 className="h-4 w-4 animate-spin text-primary-500" />
             ) : (
-              <ClipboardPaste className="h-4 w-4 text-orange-500" />
+              <ClipboardPaste className="h-4 w-4 text-primary-500" />
             )}
             粘贴剪贴板文本
           </button>
           <button
             onClick={pasteImage}
             disabled={busy !== null}
-            className="flex w-full items-center gap-2.5 rounded-xl border border-neutral-200 px-4 py-3 text-left text-sm text-neutral-700 transition hover:border-orange-300 hover:bg-orange-50 disabled:opacity-50"
+            className="flex w-full items-center gap-2.5 rounded-xl border border-neutral-200 px-4 py-3 text-left text-sm text-neutral-700 transition hover:border-primary-300 hover:bg-primary-50 disabled:opacity-50"
           >
             {busy === "clipboard-image" ? (
-              <Loader2 className="h-4 w-4 animate-spin text-orange-500" />
+              <Loader2 className="h-4 w-4 animate-spin text-primary-500" />
             ) : (
-              <ClipboardType className="h-4 w-4 text-orange-500" />
+              <ClipboardType className="h-4 w-4 text-primary-500" />
             )}
             粘贴剪贴板图片
           </button>
@@ -201,12 +201,12 @@ export function RefsPopup({ root, onPick, onClose }: {
           <button
             onClick={shoot}
             disabled={busy !== null}
-            className="flex w-full items-center gap-2.5 rounded-xl border border-neutral-200 px-4 py-3 text-left text-sm text-neutral-700 transition hover:border-orange-300 hover:bg-orange-50 disabled:opacity-50"
+            className="flex w-full items-center gap-2.5 rounded-xl border border-neutral-200 px-4 py-3 text-left text-sm text-neutral-700 transition hover:border-primary-300 hover:bg-primary-50 disabled:opacity-50"
           >
             {busy === "shot" ? (
-              <Loader2 className="h-4 w-4 animate-spin text-orange-500" />
+              <Loader2 className="h-4 w-4 animate-spin text-primary-500" />
             ) : (
-              <Camera className="h-4 w-4 text-orange-500" />
+              <Camera className="h-4 w-4 text-primary-500" />
             )}
             截取屏幕 (全屏)
           </button>

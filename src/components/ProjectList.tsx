@@ -133,7 +133,7 @@ export function ProjectList() {
     return (
       <div className="px-4 py-6 text-sm text-neutral-500">
         <p>{error}</p>
-        <button onClick={loadProjects} className="mt-2 text-orange-500 hover:underline">
+        <button onClick={loadProjects} className="mt-2 text-primary-500 hover:underline">
           重试
         </button>
       </div>
@@ -282,7 +282,7 @@ export function ProjectList() {
             ) : (
               <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
             )}
-            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-neutral-500" />
             <span className="min-w-0 flex-1 truncate text-sm text-neutral-700" title={p.path}>
               {p.display_name}
             </span>
@@ -307,7 +307,7 @@ export function ProjectList() {
 
           {/* 会话列表: 最近 5 个, 点省略号每次 +7 */}
           {p.expanded && (
-            <div className="ml-4 border-l border-neutral-200 pl-2">
+            <div className="ml-4 pl-2">
               {p.sessions.slice(0, p.visibleCount).map((s) => {
                 const openId = sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, s.session_path));
                 const isActive = openId === activeSessionId;
@@ -317,7 +317,7 @@ export function ProjectList() {
                     key={s.session_path}
                     className={`group flex cursor-pointer items-center gap-1.5 rounded-md py-1 pl-1.5 pr-1 text-sm transition ${
                       isActive
-                        ? "bg-orange-100 text-orange-700"
+                        ? "bg-primary-100 text-primary-700"
                         : "text-neutral-600 hover:bg-neutral-200/60"
                     }`}
                     onClick={() => handleOpenSession(p.path, s)}
@@ -340,13 +340,13 @@ export function ProjectList() {
                     }}
                   >
                     {isLoading && (
-                      <Loader2 className="h-3 w-3 shrink-0 animate-spin text-orange-400" />
+                      <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary-400" />
                     )}
                     <span className="min-w-0 flex-1 truncate">{sessionTitle(s)}</span>
                     {openId && sessions[openId]?.isStreaming ? (
-                      <Loader2 className="h-3 w-3 shrink-0 animate-spin text-orange-400" />
+                      <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary-400" />
                     ) : openId && sessions[openId]?.hasUnread ? (
-                      <span className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-orange-500" />
+                      <span className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-primary-500" />
                     ) : (
                       <span className="shrink-0 text-[10px] text-neutral-400">{formatTime(s.timestamp)}</span>
                     )}
@@ -376,7 +376,7 @@ export function ProjectList() {
                     key={`open:${sid}`}
                     className={`group flex cursor-pointer items-center gap-1.5 rounded-md py-1 pl-1.5 pr-1 text-sm transition ${
                       isActive
-                        ? "bg-orange-100 text-orange-700"
+                        ? "bg-primary-100 text-primary-700"
                         : "text-neutral-600 hover:bg-neutral-200/60"
                     }`}
                     onClick={() => setActiveSession(sid)}
@@ -393,9 +393,9 @@ export function ProjectList() {
                   >
                     <span className="min-w-0 flex-1 truncate">{openSessionTitle(s)}</span>
                     {s.isStreaming ? (
-                      <Loader2 className="h-3 w-3 shrink-0 animate-spin text-orange-400" />
+                      <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary-400" />
                     ) : s.hasUnread ? (
-                      <span className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-orange-500" />
+                      <span className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-primary-500" />
                     ) : (
                       <span className="shrink-0 text-[10px] text-neutral-400">新会话</span>
                     )}
@@ -427,7 +427,7 @@ export function ProjectList() {
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submitRename()}
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-orange-400"
+              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
               placeholder="会话名称"
             />
             <div className="mt-3 flex justify-end gap-2">
@@ -439,7 +439,7 @@ export function ProjectList() {
               </button>
               <button
                 onClick={submitRename}
-                className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-orange-600"
+                className="rounded-lg bg-primary-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-primary-600"
               >
                 确定
               </button>

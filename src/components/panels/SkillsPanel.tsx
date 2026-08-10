@@ -57,12 +57,12 @@ export function SkillsPanel() {
                 onClick={() => openSkill(s)}
                 className={`w-full rounded-xl border p-3 text-left transition ${
                   selected?.path === s.path
-                    ? "border-orange-300 bg-orange-50"
+                    ? "border-primary-300 bg-primary-50"
                     : "border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50"
                 }`}
               >
                 <span className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 shrink-0 text-orange-500" />
+                  <Sparkles className="h-4 w-4 shrink-0 text-neutral-500" />
                   <span className="font-medium text-neutral-800">{s.name}</span>
                   {selected?.path === s.path ? (
                     <ChevronDown className="ml-auto h-4 w-4 text-neutral-400" />

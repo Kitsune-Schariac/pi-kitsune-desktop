@@ -251,17 +251,17 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
                     onClick={() => { setActive(i); pick(c); }}
                     onMouseEnter={() => setActive(i)}
                     className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition ${
-                      sel ? "bg-orange-50" : "hover:bg-neutral-100"
+                      sel ? "bg-primary-50" : "hover:bg-neutral-100"
                     }`}
                     title={c.path}
                   >
                     {isFile ? (
                       <FileText className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
                     ) : (
-                      <Sparkles className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+                      <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary-400" />
                     )}
                     <span className="min-w-0 flex-1">
-                      <span className={`block truncate font-medium ${sel ? "text-orange-700" : "text-neutral-700"}`}>
+                      <span className={`block truncate font-medium ${sel ? "text-primary-700" : "text-neutral-700"}`}>
                         {c.title}
                       </span>
                       <span className="block truncate text-[10px] text-neutral-400">{c.sub}</span>

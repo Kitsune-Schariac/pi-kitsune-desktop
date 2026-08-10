@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/session";
 import {
@@ -47,7 +47,7 @@ function MiniSelect({ label, icon: Icon, value, options, onChange, disabled, ope
               key={opt}
               onClick={() => { onChange(opt); setOpenSel(false); }}
               className={`block w-full whitespace-nowrap px-3 py-1.5 text-left text-xs transition hover:bg-neutral-100 ${
-                opt === value ? "text-orange-600" : "text-neutral-600"
+                opt === value ? "text-primary-600" : "text-neutral-600"
               }`}
             >
               {opt}
@@ -69,12 +69,15 @@ export function InputBar({
   emptyProject,
   onHeightChange,
   onOpenPanel,
+  bottomLayer,
 }: {
   emptyProject: string;
   // 卡片实际高度变化时回调 (App 据此调整消息区底部留白, 避免高输入框遮挡消息)
   onHeightChange?: (h: number) => void;
   // /skills /packages 本地命令: 打开 App 级右侧面板
   onOpenPanel?: (kind: "skills" | "packages") => void;
+  // 输入卡底层插槽: 项目选择卡片等被输入卡压住、顶部露出一点的下层元素
+  bottomLayer?: ReactNode;
 }) {
   const [text, setText] = useState("");
   const [refs, setRefs] = useState<Ref[]>([]);
@@ -385,10 +388,11 @@ export function InputBar({
   return (
     // 悬浮输入卡: 底部居中, 宽度与消息列表一致 (max-w-[65%]), 与消息区分离成浮动层
     <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 mx-auto w-full max-w-[65%] px-4">
+      {bottomLayer}
       <div
         ref={cardRef}
         // 半透明悬浮卡: 消息从卡片后方滑过时可见 (不挡内容), 轻模糊防文字混叠
-        className="pointer-events-auto rounded-2xl border border-neutral-200 bg-white/80 shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition focus-within:border-orange-400"
+        className="pointer-events-auto rounded-2xl border border-neutral-200 bg-white/80 shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition focus-within:border-primary-400"
       >
         <div className="px-4 pt-3">
           {/* @引用 / /命令 浮层: 悬浮在输入卡上方 (与 RefsPopup 同模式), 不占卡片布局 */}
@@ -422,7 +426,7 @@ export function InputBar({
                 return (
                   <span
                     key={i}
-                    className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-xs text-orange-700"
+                    className="flex items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-700"
                   >
                     <Icon className="h-3 w-3" />
                     <button
@@ -432,10 +436,10 @@ export function InputBar({
                     >
                       {r.title}
                     </button>
-                    {meta && <span className="text-[10px] text-orange-400">{meta}</span>}
+                    {meta && <span className="text-[10px] text-primary-400">{meta}</span>}
                     <button
                       onClick={() => setRefs((prev) => prev.filter((_, j) => j !== i))}
-                      className="rounded p-0.5 transition hover:bg-orange-100"
+                      className="rounded p-0.5 transition hover:bg-primary-100"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -452,7 +456,7 @@ export function InputBar({
                   <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-700">
                     {(() => {
                       const Icon = refIcon(preview.ref);
-                      return <Icon className="h-3.5 w-3.5 text-orange-500" />;
+                      return <Icon className="h-3.5 w-3.5 text-primary-500" />;
                     })()}
                     {preview.ref.title}
                   </span>
@@ -499,7 +503,7 @@ export function InputBar({
         />
 
         {/* 输入框内底部工具行: 左上下文 / 右 context window + 选择器 + 发送 */}
-        {hint && <p className="px-4 text-right text-xs text-orange-600">{hint}</p>}
+        {hint && <p className="px-4 text-right text-xs text-primary-600">{hint}</p>}
         <div className="flex items-center justify-between px-2 pb-2">
           {/* 左下: 上下文添加 */}
           <div className="relative">
@@ -530,7 +534,7 @@ export function InputBar({
               <div className="h-1.5 w-16 overflow-hidden rounded-full bg-neutral-200">
                 <div
                   className={`h-full rounded-full transition-all ${
-                    percent === null ? "bg-neutral-300" : percent > 85 ? "bg-red-500" : "bg-orange-500"
+                    percent === null ? "bg-neutral-300" : percent > 85 ? "bg-red-500" : "bg-primary-500"
                   }`}
                   style={{ width: percent === null ? "0%" : `${Math.min(100, percent)}%` }}
                 />
@@ -576,7 +580,7 @@ export function InputBar({
             {isStreaming ? (
               <button
                 onClick={() => activeSessionId && abort(activeSessionId)}
-                className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-100 text-red-500 transition hover:bg-red-200"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-red-100 text-red-500 transition hover:bg-red-200"
                 title="中止 (Enter 发 steer 指导)"
               >
                 <Square className="h-4 w-4" />
@@ -585,7 +589,7 @@ export function InputBar({
               <button
                 onClick={() => handleSend("prompt")}
                 disabled={!text.trim()}
-                className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white shadow-sm shadow-orange-500/30 transition hover:bg-orange-600 disabled:opacity-40"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-500 text-white shadow-sm shadow-primary-500/30 transition hover:bg-primary-600 disabled:opacity-40"
                 title="发送"
               >
                 <Send className="h-4 w-4" />

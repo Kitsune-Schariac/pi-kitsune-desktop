@@ -30,7 +30,7 @@ export function PackagesPanel() {
     <div className="space-y-6 p-5">
       <section>
         <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-neutral-700">
-          <Package className="h-4 w-4 text-orange-500" />
+          <Package className="h-4 w-4 text-neutral-500" />
           已安装 Package
         </h3>
         {packages.length === 0 ? (
@@ -44,7 +44,7 @@ export function PackagesPanel() {
                 key={p}
                 className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-700"
               >
-                <Package className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+                <Package className="h-3.5 w-3.5 shrink-0 text-neutral-500" />
                 <span className="truncate font-mono text-xs" title={p}>{p}</span>
               </li>
             ))}
@@ -54,7 +54,7 @@ export function PackagesPanel() {
 
       <section>
         <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-neutral-700">
-          <Layers className="h-4 w-4 text-orange-500" />
+          <Layers className="h-4 w-4 text-neutral-500" />
           Provider (models.json)
         </h3>
         {providers && providers.length > 0 ? (

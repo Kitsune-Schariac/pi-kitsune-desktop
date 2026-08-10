@@ -36,13 +36,13 @@ function TreeRow({ entry, depth, openSet, childrenMap, selected, onToggle, onSel
       <button
         onClick={() => onSelect(entry)}
         className={`flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition ${
-          sel ? "bg-orange-50 text-orange-700" : "text-neutral-600 hover:bg-neutral-100"
+          sel ? "bg-primary-50 text-primary-700" : "text-neutral-600 hover:bg-neutral-100"
         }`}
         style={{ paddingLeft: depth * 14 + 6 }}
         title={entry.path}
       >
         {sel ? (
-          <Check className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+          <Check className="h-3.5 w-3.5 shrink-0 text-primary-500" />
         ) : (
           <Circle className="h-3.5 w-3.5 shrink-0 text-neutral-300" />
         )}
@@ -66,7 +66,7 @@ function TreeRow({ entry, depth, openSet, childrenMap, selected, onToggle, onSel
         ) : (
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
         )}
-        <Folder className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+        <Folder className="h-3.5 w-3.5 shrink-0 text-primary-400" />
         <span className="truncate">{entry.name}</span>
         {isOpen && !kids && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-neutral-300" />}
       </button>
@@ -179,7 +179,7 @@ export function FileTreePicker({ root, onPick, onDone }: {
         <button
           onClick={confirm}
           disabled={selected.size === 0}
-          className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs text-white transition hover:bg-orange-600 disabled:opacity-40"
+          className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs text-white transition hover:bg-primary-600 disabled:opacity-40"
         >
           添加引用
         </button>
