@@ -103,8 +103,10 @@ body {
 }
 
 /* 锁死页面级滚动: 只允许内部滚动容器滚动, 避免整个窗口像浏览器一样被拖动
-   overflow: clip 而非 hidden — hidden 仍是滚动容器, 聚焦/滚动锚定可编程滚动 document
-   (实测: 打开会话时 textarea 聚焦触发 document scrollTop=24 → 整窗视觉上移), clip 彻底禁止 */
+   根治靠 App.tsx: app-root / app-bg 用 fixed inset-0 钉死 viewport → document 无文档流内容,
+   聚焦/滚动锚定找不到可滚祖先; InputBar 的 focus() 全部带 { preventScroll: true } 防御。
+   此处 overflow: clip 为辅助层 (clip 比 hidden 更彻底: hidden 仍是 scroll container,
+   可被编程滚动; clip 连 scroll container 都不是), 双保险兜底。 */
 html,
 body,
 #root {

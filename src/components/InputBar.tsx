@@ -109,7 +109,7 @@ export function InputBar({
     const tr = triggerPosRef.current;
     dismissedRef.current = tr >= 0 ? text.slice(tr, tr + 1 + popup.query.length) : null;
     closePopup();
-    textareaRef.current?.focus();
+    textareaRef.current?.focus({ preventScroll: true });
   };
 
   // textarea 自动增高: 内容超过 rows 高度时拉高, 上限 12 行 (超出后内部滚动)
@@ -207,7 +207,7 @@ export function InputBar({
     else await sendPrompt(activeSessionId!, full, images);
     setText("");
     setRefs([]);
-    textareaRef.current?.focus();
+    textareaRef.current?.focus({ preventScroll: true });
   };
 
   // 输入变更: 驱动触发状态机 (词首 @ / / 检测 + 查询词维护 + 被动关闭)
@@ -285,7 +285,7 @@ export function InputBar({
     // 光标定位回删除点, 便于继续输入
     requestAnimationFrame(() => {
       const el = textareaRef.current;
-      if (el) { el.focus(); el.setSelectionRange(tr, tr); }
+      if (el) { el.focus({ preventScroll: true }); el.setSelectionRange(tr, tr); }
     });
     setRefs((prev) => [...prev, r]);
     dismissedRef.current = null; // 选中是主动操作: 下次 @ 正常重弹
@@ -315,7 +315,7 @@ export function InputBar({
       await sendPrompt(activeSessionId, "/" + cmd.name + (args ? " " + args : ""));
     }
     setText("");
-    textareaRef.current?.focus();
+    textareaRef.current?.focus({ preventScroll: true });
   };
 
   // 本地白名单执行器: 返回 false = 执行失败 (hint 已提示, 输入框内容保留)
