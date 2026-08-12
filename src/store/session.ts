@@ -5,7 +5,7 @@ import type { UiNotification, UiRequest } from "../lib/pi";
 
 export interface ChatEntry {
   id: string;
-  kind: "message" | "tool";
+  kind: "message" | "tool" | "notification";
   role?: "user" | "assistant";
   text?: string;
   thinking?: string;
@@ -14,6 +14,8 @@ export interface ChatEntry {
   args?: unknown;
   status?: "running" | "done" | "error";
   result?: unknown;
+  // notification 专用: info/warning/error, 决定图标 + 类型色 (会话内系统消息条目)
+  notifyType?: "info" | "warning" | "error";
 }
 
 export interface ModelInfo {
@@ -403,9 +405,11 @@ export const useSessionStore = create<SessionStore>((set, get) => {
 
     handleEvent: (payload) => {
       const { sessionId, event } = payload;
-      const s = get().sessions[sessionId];
-      if (!s) return;
       const type = event.type as string;
+      const s = get().sessions[sessionId];
+      // notify 是 fire-and-forget: 即使源 session 已不存在也要兜底展示 (走右下角弹窗);
+      // 其余事件 session 不存在直接丢弃 (孤儿事件无处理对象)
+      if (!s && !(type === "extension_ui_request" && (event as unknown as UiRequest).method === "notify")) return;
       switch (type) {
         case "agent_start":
           patch(sessionId, { isStreaming: true });
@@ -500,7 +504,14 @@ export const useSessionStore = create<SessionStore>((set, get) => {
               message: (req.message as string) || "",
               notifyType: (req.notifyType as UiNotification["notifyType"]) || "info",
             };
-            if (n.message) {
+            if (!n.message) break;
+            if (s) {
+              // 归属源会话: 作为会话内消息条目插入 entries (居中系统消息, 不自动消失, 不持久化)
+              patch(sessionId, {
+                entries: [...s.entries, { id: n.id, kind: "notification", notifyType: n.notifyType, text: n.message }],
+              });
+            } else {
+              // 无归属会话 (软件级通知): 走右下角兜底弹窗, 3.5s 自动消失 (保留原行为)
               set((state) => ({ notifications: [...state.notifications, n] }));
             }
           }

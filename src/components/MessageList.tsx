@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useSessionStore } from "../store/session";
 import { ToolCallCard } from "./ToolCallCard";
 import { MessageItem } from "./MessageItem";
+import { NotificationItem } from "./NotificationItem";
 
 export function MessageList({ inputBarH = 0 }: { inputBarH?: number }) {
   const entries = useSessionStore((s) => {
@@ -54,6 +55,8 @@ export function MessageList({ inputBarH = 0 }: { inputBarH?: number }) {
         {entries.map((e) =>
           e.kind === "message" ? (
             <MessageItem key={e.id} entry={e} />
+          ) : e.kind === "notification" ? (
+            <NotificationItem key={e.id} entry={e} />
           ) : (
             <ToolCallCard key={e.id} entry={e} />
           )
