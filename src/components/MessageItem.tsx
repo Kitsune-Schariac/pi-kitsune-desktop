@@ -27,7 +27,7 @@ export const MessageItem = memo(function MessageItem({ entry }: { entry: ChatEnt
         <div
           className={`bubble min-w-0 text-sm leading-relaxed ${
             isUser
-              ? "max-w-[85%] text-right text-[rgb(var(--text-on-bubble))]"
+              ? "max-w-[85%] text-[rgb(var(--text-on-bubble))]"
               : "max-w-[90%] text-[rgb(var(--text-on-bubble))]"
           }`}
         >
@@ -37,7 +37,7 @@ export const MessageItem = memo(function MessageItem({ entry }: { entry: ChatEnt
         <div
           className={`min-w-0 text-sm leading-relaxed ${
             isUser
-              ? "max-w-[85%] text-right text-[rgb(var(--text-user))]"
+              ? "max-w-[85%] text-[rgb(var(--text-user))]"
               : "w-full text-neutral-800"
           }`}
         >
