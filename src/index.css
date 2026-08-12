@@ -52,7 +52,7 @@
   --chat-opacity: 0.75;         /* 会话区不透明率 (40%–95%) */
   --sidebar-opacity: 0.6;       /* 侧边栏不透明率 (20%–90%) */
   --bubble-bg: 255 255 255;     /* 消息气泡底色, 皮肤可覆盖 */
-  --bubble-opacity: 0.55;       /* 气泡不透明率 (30%–90%) */
+  --bubble-opacity: 0.55;       /* 气泡不透明率 (0–1, 不设限) */
   --bg-blur: 10px;              /* 背景层模糊度 (0–30px, slider 运行时覆盖) */
 }
 
@@ -294,6 +294,13 @@ body,
   border-radius: 12px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
   padding: 0.6em 0.9em;
+}
+
+/* 气泡内 markdown 标题跟随气泡底色联动 (而非全局 --text-strong):
+   配合 store.updateBubbleTextColor — 深底时 --text-on-bubble 翻浅字, 浅底时翻深字,
+   保证自定义底色下标题可读; 选择器比 .markdown-body h1 多一层 .bubble, 优先级更高 */
+.bubble .markdown-body :is(h1, h2, h3, h4, h5, h6) {
+  color: rgb(var(--text-on-bubble));
 }
 
 /* 洛伦兹吸引子 loading (会话切换中): 混沌系统蝴蝶轨迹, 流动光沿轨道跑 + 整体慢旋 */

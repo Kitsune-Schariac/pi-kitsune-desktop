@@ -49,12 +49,14 @@ export function ThemePanel() {
   const sidebarOpacity = useThemeStore((s) => s.sidebarOpacity);
   const bubbleEnabled = useThemeStore((s) => s.bubbleEnabled);
   const bubbleOpacity = useThemeStore((s) => s.bubbleOpacity);
+  const bubbleColor = useThemeStore((s) => s.bubbleColor);
   const bgBlur = useThemeStore((s) => s.bgBlur);
   const applyTheme = useThemeStore((s) => s.applyTheme);
   const setChatOpacity = useThemeStore((s) => s.setChatOpacity);
   const setSidebarOpacity = useThemeStore((s) => s.setSidebarOpacity);
   const setBubbleEnabled = useThemeStore((s) => s.setBubbleEnabled);
   const setBubbleOpacity = useThemeStore((s) => s.setBubbleOpacity);
+  const setBubbleColor = useThemeStore((s) => s.setBubbleColor);
   const setBgBlur = useThemeStore((s) => s.setBgBlur);
   const reloadSkins = useThemeStore((s) => s.reloadSkins);
   // 当前激活皮肤: 判断是否有背景图 (无则模糊度禁用)
@@ -208,13 +210,44 @@ export function ThemePanel() {
           </button>
         </div>
         {bubbleEnabled && (
-          <OpacitySlider
-            label="气泡不透明率"
-            value={bubbleOpacity}
-            min={0.3}
-            max={0.9}
-            onChange={setBubbleOpacity}
-          />
+          <>
+            <OpacitySlider
+              label="气泡不透明率"
+              value={bubbleOpacity}
+              min={0}
+              max={1}
+              onChange={setBubbleOpacity}
+            />
+            {/* 气泡底色: 选色器覆盖皮肤 --bubble-bg; null = 跟随皮肤默认 */}
+            <div className="flex items-center justify-between text-xs text-neutral-500">
+              <span>气泡底色</span>
+              <div className="flex items-center gap-2">
+                {bubbleColor && (
+                  <button
+                    onClick={() => setBubbleColor(null)}
+                    className="rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-500 transition hover:bg-neutral-100"
+                  >
+                    跟随皮肤
+                  </button>
+                )}
+                <label className="relative inline-flex h-6 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-neutral-200">
+                  <span
+                    className="absolute inset-0"
+                    style={{ background: bubbleColor ?? "rgb(var(--bubble-bg))" }}
+                  />
+                  <input
+                    type="color"
+                    value={bubbleColor ?? "#ffffff"}
+                    onChange={(e) => setBubbleColor(e.target.value)}
+                    className="absolute inset-0 cursor-pointer opacity-0"
+                  />
+                </label>
+                <span className="tabular-nums text-neutral-600">
+                  {bubbleColor ?? "皮肤默认"}
+                </span>
+              </div>
+            </div>
+          </>
         )}
       </section>
     </div>
