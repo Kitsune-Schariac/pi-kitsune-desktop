@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { createHighlighter } from "shiki";
 import type { Highlighter } from "shiki";
+import type { Element } from "hast";
 import { useThemeStore } from "../store/theme";
 
 // Markdown 渲染封装: react-markdown + GFM(表格/删除线/任务列表) + Shiki 语法高亮
@@ -83,6 +84,16 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{ pre: CodeBlock }}
+        // 单换行渲染成 <br>: CommonMark 默认把软换行 (单个 \n) 折叠成空格,
+        // 导致输入框里的换行发送后丢失; 拦截 remark-rehype 的 softbreak handler
+        // 改返回 <br> 元素, 保留用户输入的换行格式 (零新依赖)
+        remarkRehypeOptions={{
+          handlers: {
+            // softbreak 节点 @types/mdast 未声明 (不在 Nodes 联合), 但运行时 remark-rehype 会查 handlers.softbreak;
+            // @ts-expect-error softbreak 不在 mdast Nodes 类型联合中
+            softbreak: (): Element => ({ type: "element", tagName: "br", properties: {}, children: [] }),
+          },
+        }}
       >
         {text}
       </ReactMarkdown>
