@@ -1,4 +1,4 @@
-// 主题皮肤 store: 皮肤列表 + 当前主题 + 容器不透明率 + 气泡框开关
+// 主题皮肤 store: 皮肤列表 + 当前主题 + 容器不透明率 + 气泡框开关 + 气泡颜色
 // 切换主题 = 写 :root CSS 变量 + data-theme/data-base 属性 + 背景图 + override.css 注入
 // 契约对齐 Rust skins.rs (serde 序列化, snake_case 字段) + design.md 皮肤包 schema
 import { create } from "zustand";
@@ -25,6 +25,7 @@ const CHAT_OPACITY_KEY = "kitsune.chatOpacity";
 const SIDEBAR_OPACITY_KEY = "kitsune.sidebarOpacity";
 const BUBBLE_ENABLED_KEY = "kitsune.bubbleEnabled";
 const BUBBLE_OPACITY_KEY = "kitsune.bubbleOpacity";
+const BUBBLE_COLOR_KEY = "kitsune.bubbleColor"; // 气泡自定义底色 (hex), 空 = 跟随皮肤
 const BG_BLUR_KEY = "kitsune.bgBlur";
 
 // StrictMode 双跑 effect 防重入: init 只执行一次
@@ -80,7 +81,8 @@ interface ThemeStore {
   chatOpacity: number;     // 0.4–0.95, 会话区
   sidebarOpacity: number;  // 0.2–0.9, 侧边栏
   bubbleEnabled: boolean;  // 消息气泡框开关
-  bubbleOpacity: number;   // 0.3–0.9, 气泡
+  bubbleOpacity: number;   // 0–1, 气泡不透明率 (不设上下限, 用户自由调)
+  bubbleColor: string | null; // 气泡自定义底色 (hex), null = 跟随皮肤 --bubble-bg
   bgBlur: number;          // 0–30px, 背景层模糊度 (有背景图的皮肤生效)
   init: () => Promise<void>;
   applyTheme: (skin: SkinMeta) => Promise<void>;
@@ -88,6 +90,7 @@ interface ThemeStore {
   setSidebarOpacity: (n: number) => void;
   setBubbleEnabled: (on: boolean) => void;
   setBubbleOpacity: (n: number) => void;
+  setBubbleColor: (hex: string | null) => void;
   setBgBlur: (n: number) => void;
   reloadSkins: () => Promise<void>;
 }
@@ -100,6 +103,7 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
   sidebarOpacity: DEFAULT_SIDEBAR_OPACITY,
   bubbleEnabled: false,
   bubbleOpacity: DEFAULT_BUBBLE_OPACITY,
+  bubbleColor: null,
   bgBlur: DEFAULT_BG_BLUR,
 
   /** 启动: 拉皮肤列表 + 恢复持久化 (主题/不透明率/气泡) + 应用当前主题 */
@@ -117,6 +121,8 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
     const sidebarOpacity = readNumber(SIDEBAR_OPACITY_KEY, DEFAULT_SIDEBAR_OPACITY);
     const bubbleOpacity = readNumber(BUBBLE_OPACITY_KEY, DEFAULT_BUBBLE_OPACITY);
     const bgBlur = readNumber(BG_BLUR_KEY, DEFAULT_BG_BLUR);
+    // 气泡自定义色: 无记录 = null (跟随皮肤); 有记录 = hex
+    const bubbleColor = localStorage.getItem(BUBBLE_COLOR_KEY);
     // 气泡开关: 无持久化记录 → 跟随皮肤推荐; 用户改过 → 以用户为准
     const rawBubble = localStorage.getItem(BUBBLE_ENABLED_KEY);
     const bubbleEnabled = rawBubble === null ? (skin.bubble ?? false) : rawBubble === "1";
@@ -128,6 +134,7 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
       sidebarOpacity,
       bubbleEnabled,
       bubbleOpacity,
+      bubbleColor,
       bgBlur,
     });
     applyOpacityVars(chatOpacity, sidebarOpacity, bubbleOpacity);
@@ -168,7 +175,15 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
     set({ activeSkinId: skin.id, activeBase: skin.base });
     localStorage.setItem(ACTIVE_SKIN_KEY, skin.id);
 
-    // 5. 淡入淡出过渡 ~220ms (底色/背景图切换瞬间)
+    // 5. 用户自定义气泡色覆盖皮肤 --bubble-bg (null 则保留上面 colors 循环写入的皮肤值)
+    const bubbleColor = get().bubbleColor;
+    if (bubbleColor) {
+      el.style.setProperty("--bubble-bg", hexToRgbChannels(bubbleColor));
+    }
+    // 气泡内文字色随底色亮度联动: 深底配浅字 / 浅底配深字 (含 markdown 标题, 见 index.css)
+    updateBubbleTextColor(bubbleColor, skin);
+
+    // 6. 淡入淡出过渡 ~220ms (底色/背景图切换瞬间)
     rootEl()?.animate([{ opacity: 0.55 }, { opacity: 1 }], {
       duration: 220,
       easing: "ease-out",
@@ -204,6 +219,29 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
     }
   },
 
+  setBubbleColor: (hex) => {
+    set({ bubbleColor: hex });
+    try {
+      if (hex) localStorage.setItem(BUBBLE_COLOR_KEY, hex);
+      else localStorage.removeItem(BUBBLE_COLOR_KEY);
+    } catch {
+      /* ignore */
+    }
+    // 写 CSS: 自定义色覆盖 --bubble-bg; 重置(null)则恢复当前皮肤的 bubble-bg
+    const el = document.documentElement;
+    const { skins, activeSkinId } = get();
+    const skin = skins.find((s) => s.id === activeSkinId);
+    if (hex) {
+      el.style.setProperty("--bubble-bg", hexToRgbChannels(hex));
+    } else {
+      const bg = skin?.colors?.["bubble-bg"];
+      if (bg) el.style.setProperty("--bubble-bg", bg);
+      else el.style.removeProperty("--bubble-bg");
+    }
+    // 联动文字色: 深底配浅字 / 浅底配深字
+    updateBubbleTextColor(hex, skin);
+  },
+
   setBubbleOpacity: (n) => {
     set({ bubbleOpacity: n });
     document.documentElement.style.setProperty("--bubble-opacity", String(n));
@@ -236,4 +274,30 @@ function applyOpacityVars(chat: number, sidebar: number, bubble: number) {
   el.style.setProperty("--chat-opacity", String(chat));
   el.style.setProperty("--sidebar-opacity", String(sidebar));
   el.style.setProperty("--bubble-opacity", String(bubble));
+}
+
+/** hex (#rrggbb) → CSS 变量用的 RGB 通道字符串 "r g b" (与皮肤 colors 值格式对齐) */
+function hexToRgbChannels(hex: string): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `${r} ${g} ${b}`;
+}
+
+/** 取当前实际生效的气泡底色 RGB 通道 (用户自定义色优先, 否则皮肤/默认白) */
+function resolveBubbleBg(bubbleColor: string | null, skin: SkinMeta | undefined): string {
+  if (bubbleColor) return hexToRgbChannels(bubbleColor);
+  return skin?.colors?.["bubble-bg"] ?? "255 255 255";
+}
+
+/** 气泡内文字色随底色亮度联动: 浅底(亮度≥145)配深字, 深底配浅字
+   亮度用 Rec.601 加权 (人眼对绿最敏感); 阈值偏深, 中等偏暗色也判深底保可读 */
+function updateBubbleTextColor(bubbleColor: string | null, skin: SkinMeta | undefined) {
+  const [r, g, b] = resolveBubbleBg(bubbleColor, skin).split(" ").map(Number);
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  document.documentElement.style.setProperty(
+    "--text-on-bubble",
+    lum >= 145 ? "38 38 38" : "245 245 245",
+  );
 }
