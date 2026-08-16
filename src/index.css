@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Nerd Font 图标字体 (pi-kitsune-ui 等扩展消息里的图标):
+   Symbols-only 版只含图标字形, unicode-range 锁定两个私有区
+   (BMP PUA + Plane 15 补充 PUA, Nerd Font v3 的 MD 图标在后者),
+   普通中英文照走系统字体栈, 互不干扰 */
+@font-face {
+  font-family: "Symbols Nerd Font Mono";
+  src: url("./assets/fonts/SymbolsNerdFontMono-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+E000-F8FF, U+F0000-FFFFD;
+}
+
 :root {
   color-scheme: light;
   /* 主题色 (淡天蓝 sky 色阶): 皮肤切换时由 ThemeStore 运行时覆盖 */
@@ -98,7 +111,7 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "Symbols Nerd Font Mono", sans-serif;
   background: rgb(var(--surface));
 }
 
