@@ -39,16 +39,20 @@ pub async fn search_files(query: String, root: String) -> Result<Vec<DirEntry>, 
     // es.exe 输出可能挂起 (Everything 服务未启动), 用 tokio timeout 兜底;
     // -match-path: 单段词也按完整路径匹配, 与前端 score 的路径子串语义对齐
     // (不加时 es 只按名称匹配, 输入 yfz 会漏掉 yfz\index.vue 这类路径命中)
-    let output = tokio::time::timeout(
-        ES_TIMEOUT,
-        tokio::process::Command::new("es")
-            .args(["-path", &root, "-match-path", &q])
-            .stdin(Stdio::null())
-            .output(),
-    )
-    .await
-    .map_err(|_| "Everything 搜索超时".to_string())?
-    .map_err(|e| format!("启动 es.exe 失败: {e}"))?;
+    let mut cmd = tokio::process::Command::new("es");
+    cmd.args(["-path", &root, "-match-path", &q])
+        .stdin(Stdio::null());
+    // CREATE_NO_WINDOW: GUI 进程下 spawn es.exe 抑制新控制台弹窗 (同 build_pi_command 根因)
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = tokio::time::timeout(ES_TIMEOUT, cmd.output())
+        .await
+        .map_err(|_| "Everything 搜索超时".to_string())?
+        .map_err(|e| format!("启动 es.exe 失败: {e}"))?;
 
     if !output.status.success() {
         return Err(format!("es.exe 搜索失败: {}", output.status));
