@@ -33,6 +33,9 @@
       "icons/[email protected]",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "allowDowngrades": false
+    }
   }
 }
