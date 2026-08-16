@@ -1,0 +1,26 @@
+{
+  "id": "honkai-sakura",
+  "name": "崩坏3 · 樱·冰晶",
+  "author": "汉江",
+  "version": "1.0",
+  "base": "dark",
+  "bubble": true,
+  "colors": {
+    "primary-50": "224 250 255",
+    "primary-100": "198 240 252",
+    "primary-200": "153 224 250",
+    "primary-300": "98 202 244",
+    "primary-400": "45 178 233",
+    "primary-500": "8 155 217",
+    "primary-600": "4 130 184",
+    "primary-700": "6 108 155",
+    "primary-800": "10 90 130",
+    "primary-900": "14 75 108",
+    "accent": "255 138 175",
+    "bubble-bg": "226 242 255",
+    "panel": "12 22 50"
+  },
+  "background": "bg.jpg",
+  "preview": "preview.jpg",
+  "override": "override.css"
+}

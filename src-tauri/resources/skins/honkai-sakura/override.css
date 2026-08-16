@@ -1,0 +1,13 @@
+/* 崩坏3 · 樱·冰晶 — 皮肤覆盖样式
+   选择器带 [data-theme="honkai-sakura"] 前缀, 只在皮肤激活时生效 (切走后整体移除) */
+
+/* 背景图偏右上定位: 人物与光源集中在画面右侧上部 (右上+右中九宫格),
+   cover 裁切下让焦点从 main 区透出, 默认 center 会把人物裁到右边缘 */
+[data-theme="honkai-sakura"] .app-bg {
+  background-position: 64% 28%;
+}
+
+/* 侧边栏微调: 冰蓝描边呼应冰雪主题, 让冷光从左缘渗出 */
+[data-theme="honkai-sakura"] .sidebar-shell {
+  border-right: 1px solid rgb(98 202 244 / 0.18);
+}
