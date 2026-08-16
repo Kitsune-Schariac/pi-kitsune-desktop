@@ -337,8 +337,11 @@ impl PiRuntime {
         #[cfg(windows)]
         {
             if let Some(pid) = self.child.id() {
+                // CREATE_NO_WINDOW: GUI 进程下 spawn taskkill 抑制新控制台弹窗 (同 build_pi_command 根因)
+                const CREATE_NO_WINDOW: u32 = 0x0800_0000;
                 let _ = tokio::process::Command::new("taskkill")
                     .args(["/PID", &pid.to_string(), "/T", "/F"])
+                    .creation_flags(CREATE_NO_WINDOW)
                     .output()
                     .await;
             }
@@ -357,7 +360,10 @@ fn build_pi_command() -> Command {
     cmd.arg("/c").arg("pi");
     // CREATE_NEW_PROCESS_GROUP: 隔离进程组, 便于后续 taskkill /T 管理整棵进程树
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
+    // CREATE_NO_WINDOW: GUI 进程(打包版无控制台) spawn cmd 时抑制新控制台弹窗;
+    // 开发版父进程自带控制台不弹, 打包版才暴露, 故此 flag 必加
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
     cmd
 }
 
