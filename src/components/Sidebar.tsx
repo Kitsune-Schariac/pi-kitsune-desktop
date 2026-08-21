@@ -5,7 +5,7 @@ import { Sparkles, Package, Settings, FolderKanban, Plus, FolderOpen } from "luc
 // 左侧边栏: 功能区 (skill/package/设置) + 项目会话区
 export function Sidebar({ onOpenPanel }: { onOpenPanel: (p: PanelKind) => void }) {
   return (
-    <aside className="sidebar-shell flex w-[18%] flex-col bg-[rgb(var(--sidebar-surface)/var(--sidebar-opacity))]">
+    <aside className="sidebar-shell flex w-[18%] flex-col bg-[rgb(var(--surface-sunken)/var(--sidebar-alpha))]">
       {/* 品牌区 */}
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-2">
@@ -64,7 +64,8 @@ export function Sidebar({ onOpenPanel }: { onOpenPanel: (p: PanelKind) => void }
       </div>
 
       {/* 底部提示 */}
-      <div className="px-4 py-2 text-[11px] text-neutral-400">
+      {/* 侧边栏是 sunken 灰底, 次要文字比白底上再深一档才够 WCAG AA (neutral-500 在灰底上仅 4.35:1) */}
+      <div className="px-4 py-2 text-[11px] text-neutral-600">
         <span className="flex items-center gap-1">
           <FolderOpen className="h-3 w-3" />
           会话数据来自 ~/.pi/agent/sessions

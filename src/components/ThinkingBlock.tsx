@@ -9,7 +9,7 @@ export function ThinkingBlock({ text }: { text: string }) {
     <div className="mb-1.5">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1.5 text-xs text-neutral-400 transition hover:text-neutral-600"
+        className="flex items-center gap-1.5 text-xs text-neutral-500 transition hover:text-neutral-600"
       >
         {expanded ? (
           <ChevronDown className="h-3 w-3" />

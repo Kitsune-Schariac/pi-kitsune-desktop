@@ -37,7 +37,7 @@ function DiffView({ text }: { text: string }) {
   return (
     <pre className="mt-2 max-h-64 overflow-auto rounded bg-neutral-50 p-2 text-xs leading-relaxed">
       {lines.map((line, i) => {
-        let cls = "text-neutral-400";
+        let cls = "text-neutral-500"; // 上下文行是代码内容, neutral-400 在浅底上仅 2.3:1
         if (line.startsWith("+")) cls = "text-green-600";
         else if (line.startsWith("-")) cls = "text-red-600";
         else if (line.startsWith("@@")) cls = "text-neutral-400";
@@ -66,7 +66,17 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
   const isBash = entry.toolName === "bash";
 
   return (
-    <div className="text-sm">
+    // 结构标记提权: 2px primary 左边条 + sunken 底 + subtle 边框, 让工具调用在消息流里更易被扫到。
+    // 底色走 --overlay-alpha: 纯色皮肤下实色撑层次, 背景图皮肤下半透明, 不糊掉背景。
+    // 用内联 style 写边框避免 tailwind border-color longhand 与 shorthand 任意值优先级不确定。
+    <div
+      className="rounded-lg p-2 text-sm"
+      style={{
+        background: "rgb(var(--surface-sunken) / var(--overlay-alpha))",
+        border: "1px solid rgb(var(--border-subtle))",
+        borderLeft: "2px solid rgb(var(--primary-500))",
+      }}
+    >
       {/* 折叠行: 工具名 + 状态 + 参数摘要 */}
       <button
         onClick={() => setExpanded(!expanded)}
@@ -92,22 +102,24 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
         )}
       </button>
-      {/* 展开: 参数 + 结果 (差异化渲染) */}
+      {/* 展开: 参数 + 结果 (差异化渲染)
+          底色走 --code-bg 而非 bg-neutral-950: 中性色阶在暗色方向整组反转,
+          neutral-950 会翻成白色, 让"深底浅字"变成"浅底灰字" */}
       {expanded && (
         <div className="mt-2 space-y-2 pl-5">
           {argsStr && (
-            <pre className="overflow-x-auto rounded bg-neutral-950/60 p-2 text-xs text-neutral-400">
+            <pre className="overflow-x-auto rounded bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 text-xs text-neutral-700">
               {argsStr}
             </pre>
           )}
           {resultText && isDiff && <DiffView text={resultText} />}
           {resultText && isBash && (
-            <pre className="max-h-48 overflow-auto rounded bg-neutral-900 p-2 font-mono text-xs text-green-300">
+            <pre className="max-h-48 overflow-auto rounded bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 font-mono text-xs text-[rgb(var(--term-text))]">
               {resultText}
             </pre>
           )}
           {resultText && !isDiff && !isBash && (
-            <pre className="max-h-48 overflow-auto rounded bg-neutral-950/60 p-2 text-xs text-neutral-400">
+            <pre className="max-h-48 overflow-auto rounded bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 text-xs text-neutral-700">
               {resultText}
             </pre>
           )}

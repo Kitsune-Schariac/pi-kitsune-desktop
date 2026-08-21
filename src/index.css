@@ -51,9 +51,10 @@
   --border: 212 212 212;      /* 表格边 #d4d4d4 */
   --table-head: 245 245 245;  /* th 底 #f5f5f5 */
   --divider: 224 224 224;     /* hr #e0e0e0 */
-  --code-bg: 240 240 240;     /* 代码块底 #f0f0f0 */
-  --code-text: 214 51 132;    /* 行内代码 #d63384 */
+  --code-bg: 241 243 246;     /* 行内代码底 (冷调基座同源, 替换原 #f0f0f0) */
+  --code-text: var(--primary-700); /* 行内代码字: 引用主题色阶而非写死, 换皮肤时随 primary 变 (替换品红 #d63384) */
   --shiki-bg: 248 248 248;    /* shiki 覆盖底 #f8f8f8 */
+  --term-text: 21 128 61;     /* bash 输出绿字 (green-700): 浅底上要压深才可读 */
   --text-user: 29 78 216;     /* 无气泡模式 user 消息色 (blue-700 同值) */
   --text-on-bubble: 38 38 38; /* 气泡内文字 (默认气泡为浅底深字, 皮肤可覆盖) */
   --panel: 255 255 255;       /* 浮层/卡片/输入框实心底 (popup/弹窗/设置窗口) */
@@ -67,6 +68,22 @@
   --bubble-bg: 255 255 255;     /* 消息气泡底色, 皮肤可覆盖 */
   --bubble-opacity: 0.55;       /* 气泡不透明率 (0–1, 不设限) */
   --bg-blur: 10px;              /* 背景层模糊度 (0–30px, slider 运行时覆盖) */
+
+  /* 表面层次体系: 纯色皮肤靠这三档表面色差 + 两档边框撑起视觉结构,
+     背景图皮肤由 applyTheme 依 has_bg 覆盖为皮肤半透明取值。
+     组件只认这一套变量, 不出现 has_bg 分支判断。 */
+  --surface-sunken: 244 245 247;  /* 基座: 侧边栏/抽屉底/空状态区 (冷调中性灰, 色相微偏蓝) */
+  --surface-base:   255 255 255;  /* 内容: 会话区/面板正文 */
+  --surface-raised: 255 255 255;  /* 浮层: 设置窗/输入卡/通知条/popup */
+  --border-subtle:  229 231 235;  /* 常规分隔 */
+  --border-strong:  212 214 218;  /* 需要明确切分的边界 */
+  --chat-alpha:     1;           /* 会话区实际 alpha (applyTheme 按 has_bg 写) */
+  --sidebar-alpha:  1;           /* 侧边栏实际 alpha */
+  --raised-alpha:   0.8;         /* 浮层实际 alpha */
+  --overlay-alpha:  1;           /* 内容流里的小面板 (工具卡片/user 轻气泡) 底色 alpha:
+                                    纯色皮肤=1 撑层次, 背景图皮肤由 applyTheme 降为半透明保留透视 */
+  --code-alpha:     1;           /* 代码块/行内代码底 alpha: 比 overlay 高一档,
+                                    代码要稳定可读, 但背景图皮肤下仍留一点透视 */
 }
 
 /* 暗色方向: 皮肤 base=dark 时挂在 <html data-base="dark"> 上
@@ -92,9 +109,10 @@
   --border: 63 63 70;
   --table-head: 39 39 42;
   --divider: 63 63 70;
-  --code-bg: 24 24 27;
-  --code-text: 244 114 182;
+  --code-bg: 28 31 38;         /* 与 surface-raised 同源, 行内代码在暗色下浮起 */
+  --code-text: var(--primary-300); /* 暗色下行内代码用亮一档, 同样引用色阶随皮肤变 */
   --shiki-bg: 13 17 23;         /* 与 github-dark 自带底色一致, 避免覆盖冲突 */
+  --term-text: 134 239 172;     /* 暗底上换回亮绿 (green-300) */
   --text-user: 147 197 253;     /* 暗色下 user 消息用亮蓝 */
   --text-on-bubble: 38 38 38;
   --panel: 24 24 27;
@@ -102,6 +120,14 @@
   --surface: 10 5 20;           /* 深渊黑蓝底 */
   --sidebar-surface: 10 5 20;
   --bubble-bg: 10 5 20;
+
+  /* 暗色表面层次: 不复用中性色阶反转 — 浅色 raised 已到白顶不能更白,
+     暗色 raised 必须更亮, 两个方向物理逻辑相反, 必须分别定义 */
+  --surface-sunken: 15 17 21;   /* #0f1115 */
+  --surface-base:   22 24 29;   /* #16181d */
+  --surface-raised: 28 31 38;   /* #1c1f26 */
+  --border-subtle:  38 42 49;
+  --border-strong:  52 57 67;
 }
 
 /* 暗色下覆盖根容器浅色渐变: 无背景图时露 body 暗底, 有背景图时背景层 (z-0) 盖住渐变 */
@@ -217,7 +243,7 @@ body,
   margin: 0.6em 0;
   padding: 0.9em 1em;
   border-radius: 8px;
-  background: rgb(var(--code-bg));
+  background: rgb(var(--code-bg) / var(--code-alpha));
   overflow-x: auto;
   font-size: 0.88em;
   line-height: 1.5;
@@ -242,7 +268,7 @@ body,
 .markdown-body code {
   padding: 0.15em 0.4em;
   border-radius: 4px;
-  background: rgb(var(--code-bg));
+  background: rgb(var(--code-bg) / var(--code-alpha));
   font-size: 0.88em;
   color: rgb(var(--code-text));
 }
@@ -314,6 +340,51 @@ body,
    保证自定义底色下标题可读; 选择器比 .markdown-body h1 多一层 .bubble, 优先级更高 */
 .bubble .markdown-body :is(h1, h2, h3, h4, h5, h6) {
   color: rgb(var(--text-on-bubble));
+}
+
+/* 关闭气泡框时的 user 轻量气泡: 中性底 + 1px 边框, 非主题色底 (结构中性, 强调用主题色)
+   圆角与 .bubble 一致成规整块, 无阴影; assistant 此时不套气泡, 全宽平铺。
+   暗色下浮起靠更亮的 raised, 故 dark 方向覆盖底色 */
+.bubble-user {
+  background: rgb(var(--surface-sunken) / var(--overlay-alpha));
+  border: 1px solid rgb(var(--border-subtle));
+  border-radius: 12px;
+  padding: 0.6em 0.9em;
+}
+[data-base="dark"] .bubble-user {
+  background: rgb(var(--surface-raised) / var(--overlay-alpha));
+}
+
+/* range 滑块: WebView2 浅色下未填充轨道渲染为近黑长条 (accent-color 只作用填充段),
+   显式定义 track 底为 border-subtle、thumb 为 primary-500, 收进强调通道并与表面层次变量同源。
+   禁用态降透明度 + 灰滑块, 与“无背景图时不生效”提示一致表达 */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgb(var(--border-subtle));
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: rgb(var(--primary-500));
+  border: none;
+  cursor: pointer;
+}
+input[type="range"]:disabled::-webkit-slider-runnable-track {
+  opacity: 0.5;
+}
+input[type="range"]:disabled::-webkit-slider-thumb {
+  background: rgb(var(--neutral-400));
+  cursor: not-allowed;
 }
 
 /* 洛伦兹吸引子 loading (会话切换中): 混沌系统蝴蝶轨迹, 流动光沿轨道跑 + 整体慢旋 */
