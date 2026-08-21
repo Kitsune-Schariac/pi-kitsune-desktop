@@ -348,7 +348,7 @@ export function ProjectList() {
                     ) : openId && sessions[openId]?.hasUnread ? (
                       <span className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-primary-500" />
                     ) : (
-                      <span className="shrink-0 text-[10px] text-neutral-400">{formatTime(s.timestamp)}</span>
+                      <span className="shrink-0 text-[10px] text-neutral-600">{formatTime(s.timestamp)}</span>
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteSession(p.path, s); }}
@@ -363,7 +363,7 @@ export function ProjectList() {
               {p.sessions.length > p.visibleCount && (
                 <button
                   onClick={() => loadMore(p.path)}
-                  className="w-full rounded-md py-1 pl-1.5 text-left text-xs text-neutral-400 transition hover:bg-neutral-200/60 hover:text-neutral-600"
+                  className="w-full rounded-md py-1 pl-1.5 text-left text-xs text-neutral-600 transition hover:bg-neutral-200/60 hover:text-neutral-700"
                 >
                   显示更多 ({p.sessions.length - p.visibleCount})…
                 </button>

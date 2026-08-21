@@ -72,6 +72,8 @@ async function getBgDataUri(skinId: string): Promise<string> {
 
 /** 上一个皮肤写过的变量名: 切换时先清掉, 防残留变量跨皮肤串扰 */
 let lastColorKeys: string[] = [];
+/** applyTheme 按 has_bg 写入的 surface/alpha 变量 (不在 skin.colors 里, 单独跟踪清理) */
+let lastAppliedVars: string[] = [];
 
 interface ThemeStore {
   skins: SkinMeta[];
@@ -153,6 +155,40 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
     for (const [k, v] of Object.entries(skin.colors ?? {})) {
       el.style.setProperty(`--${k}`, v);
     }
+
+    // 1.5 表面层次体系: 按 has_bg 收敛分支, 组件只认 --surface-* / --*-alpha 一套变量。
+    //    先清上次 applyTheme 写入的 surface/alpha 变量, 防跨皮肤串扰 (这些不在 skin.colors 里)。
+    // lastAppliedVars 存的是带 -- 前缀的完整变量名 (与 lastColorKeys 不同), 直接移除不再拼前缀
+    for (const k of lastAppliedVars) el.style.removeProperty(k);
+    const appliedVars: string[] = [];
+    const setSurfaceVar = (name: string, value: string) => {
+      el.style.setProperty(name, value);
+      appliedVars.push(name);
+    };
+    if (skin.has_bg) {
+      // 背景图皮肤: surface 三件套转发到旧变量 — 皮肤 colors 若定义了 surface/sidebar-surface/panel,
+      // 上面的循环已写进 inline style, var() 自然取到皮肤值; 未定义则回落 index.css 里随 base 方向
+      // 变化的默认值 (如暗色 --surface: 10 5 20)。不能硬编码回落白色, 否则暗色背景图皮肤会被刷白。
+      // alpha 引用滑块变量 — 滑块继续写 --*-opacity 即可实时联动, 无需改滑块逻辑
+      setSurfaceVar("--surface-sunken", "var(--sidebar-surface)");
+      setSurfaceVar("--surface-base", "var(--surface)");
+      setSurfaceVar("--surface-raised", "var(--panel)");
+      setSurfaceVar("--chat-alpha", "var(--chat-opacity)");
+      setSurfaceVar("--sidebar-alpha", "var(--sidebar-opacity)");
+      setSurfaceVar("--raised-alpha", "0.8");
+      // 内容流里的小面板 (工具卡片/user 轻气泡) 降为半透明: 实色块会糊掉背景图, 破坏毛玻璃观感
+      setSurfaceVar("--overlay-alpha", "0.35");
+      setSurfaceVar("--code-alpha", "0.75");
+    } else {
+      // 纯色皮肤: surface 三件套走 index.css 默认值 (皮肤 colors 自带 surface-* 则上面循环已覆盖),
+      // 三个 alpha 全置 1 — 半透明在无背景图下是视觉空操作, 实色靠表面色阶差撑层次
+      setSurfaceVar("--chat-alpha", "1");
+      setSurfaceVar("--sidebar-alpha", "1");
+      setSurfaceVar("--raised-alpha", "1");
+      setSurfaceVar("--overlay-alpha", "1");
+      setSurfaceVar("--code-alpha", "1");
+    }
+    lastAppliedVars = appliedVars;
 
     // 2. 背景图: 有则写 --bg-image 变量到 :root (背景层是 app-root 兄弟节点, 变量须全局可见),
     //    无则置 none (light 透出根容器渐变, dark 由 [data-base] 覆盖渐变)

@@ -11,6 +11,7 @@ function OpacitySlider({
   max,
   onChange,
   unit = "pct",
+  disabled = false,
 }: {
   label: string;
   value: number;
@@ -19,9 +20,11 @@ function OpacitySlider({
   onChange: (n: number) => void;
   /** 显示单位: pct = 百分比 (不透明率), px = 像素 (模糊度) */
   unit?: "pct" | "px";
+  /** 禁用: 无背景图皮肤下不透明率是视觉空操作 */
+  disabled?: boolean;
 }) {
   return (
-    <label className="block">
+    <label className={`block ${disabled ? "opacity-50" : ""}`}>
       <div className="mb-1 flex items-center justify-between text-xs text-neutral-500">
         <span>{label}</span>
         <span className="tabular-nums text-neutral-600">
@@ -34,8 +37,9 @@ function OpacitySlider({
         max={max}
         step={0.01}
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full cursor-pointer accent-primary-500"
+        className={`w-full ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
       />
     </label>
   );
@@ -120,7 +124,7 @@ export function ThemePanel() {
                 <div className="flex items-center justify-between px-2.5 py-1.5">
                   <div className="min-w-0">
                     <div className="truncate text-xs font-medium text-neutral-800">{skin.name}</div>
-                    <div className="text-[10px] text-neutral-400">
+                    <div className="text-[10px] text-neutral-500">
                       {skin.base === "dark" ? "暗色" : "浅色"}
                       {skin.author ? ` · ${skin.author}` : ""}
                     </div>
@@ -148,14 +152,14 @@ export function ThemePanel() {
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
             刷新皮肤列表
           </button>
-          <span className="inline-flex items-center gap-1 text-[10px] text-neutral-400">
+          <span className="inline-flex items-center gap-1 text-[10px] text-neutral-500">
             <Info className="h-3 w-3" />
             自定义皮肤放入皮肤目录，刷新后即可切换
           </span>
         </div>
       </section>
 
-      {/* 容器不透明率 */}
+      {/* 容器不透明率: 无背景图皮肤下半透明是视觉空操作, 禁用并说明 */}
       <section className="space-y-3 border-t border-neutral-200 pt-4">
         <h3 className="text-sm font-semibold text-neutral-800">容器不透明率</h3>
         <OpacitySlider
@@ -164,6 +168,7 @@ export function ThemePanel() {
           min={0.4}
           max={0.95}
           onChange={setChatOpacity}
+          disabled={!activeSkin?.has_bg}
         />
         <OpacitySlider
           label="侧边栏"
@@ -171,7 +176,11 @@ export function ThemePanel() {
           min={0.2}
           max={0.9}
           onChange={setSidebarOpacity}
+          disabled={!activeSkin?.has_bg}
         />
+        {!activeSkin?.has_bg && (
+          <p className="text-[10px] text-neutral-500">当前皮肤无背景图，不透明率不生效</p>
+        )}
       </section>
 
       {/* 背景模糊度: 无背景图的皮肤无意义, 禁用 */}
@@ -185,7 +194,7 @@ export function ThemePanel() {
           onChange={setBgBlur}
         />
         {!activeSkin?.has_bg && (
-          <p className="text-[10px] text-neutral-400">当前皮肤无背景图，模糊度不生效</p>
+          <p className="text-[10px] text-neutral-500">当前皮肤无背景图，模糊度不生效</p>
         )}
       </section>
 
@@ -194,7 +203,7 @@ export function ThemePanel() {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-neutral-800">消息气泡框</h3>
-            <p className="text-[10px] text-neutral-400">消息显示为毛玻璃气泡块，任何主题均可开关</p>
+            <p className="text-[10px] text-neutral-500">消息显示为毛玻璃气泡块，任何主题均可开关</p>
           </div>
           <button
             onClick={() => setBubbleEnabled(!bubbleEnabled)}

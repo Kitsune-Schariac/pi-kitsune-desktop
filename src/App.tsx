@@ -53,7 +53,7 @@ export default function App() {
       <Sidebar onOpenPanel={setPanel} />
       {/* relative: 供底部悬浮输入框 absolute 定位
           不压缩滚动区: 消息可滑到输入卡后方 (半透明可见), 底部留白由 MessageList 内部 padding 承担 */}
-      <main className="relative flex min-w-0 flex-1 flex-col bg-[rgb(var(--surface)/var(--chat-opacity))] shadow-[-10px_0_24px_-12px_rgba(0,0,0,0.08)]">
+      <main className="relative flex min-w-0 flex-1 flex-col bg-[rgb(var(--surface-base)/var(--chat-alpha))] shadow-[-10px_0_24px_-12px_rgba(0,0,0,0.08)]">
         {isSwitching ? (
           <div className="flex flex-1 items-center justify-center">
             <ChaosLoader />
@@ -65,7 +65,7 @@ export default function App() {
                 <span className="truncate font-medium">
                   {active.sessionName || active.cwd.split(/[\\/]/).filter(Boolean).pop()}
                 </span>
-                <span className="truncate text-xs text-neutral-400" title={active.cwd}>
+                <span className="truncate text-xs text-neutral-500" title={active.cwd}>
                   {active.cwd}
                 </span>
                 {active.isStreaming && (
@@ -124,13 +124,13 @@ export default function App() {
       {/* 设置: 独立模态窗口 (与右侧 drawer 并存, 不冲突) */}
       {panel === "settings" && <SettingsWindow onClose={() => setPanel(null)} />}
 
-      {/* 右侧面板抽屉 (Skill/package) */}
-      {panel && (
+      {/* 右侧面板抽屉 (Skill/package): settings 走独立模态窗, 不进抽屉, 否则多出空白抽屉 */}
+      {(panel === "skills" || panel === "packages") && (
         <div className="absolute inset-0 z-40 flex justify-end bg-black/10">
           <div className="flex h-full w-[380px] flex-col border-l border-neutral-200 bg-panel shadow-2xl">
             <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-3">
               <span className="font-medium">
-                {panel === "skills" ? "Skill 管理" : panel === "packages" ? "pi Package" : "设置"}
+                {panel === "skills" ? "Skill 管理" : "pi Package"}
               </span>
               <button
                 onClick={() => setPanel(null)}
