@@ -395,10 +395,13 @@ function hexToRgbChannels(hex: string): string {
   return `${r} ${g} ${b}`;
 }
 
-/** 取当前实际生效的气泡底色 RGB 通道 (用户自定义色优先, 否则皮肤/默认白) */
+/** 取当前实际生效的气泡底色 RGB 通道: 用户自定义色 > 皮肤 colors > index.css 按 base 方向的默认值。
+   最后一档必须跟着 base 走 — 皮肤不定义 bubble-bg 时, CSS 里真正生效的是 [data-base="dark"] 的
+   10 5 20 (暗) 或 :root 的 255 255 255 (亮); 一律当白色会让暗色皮肤判成浅底配深字, 深底深字读不了。
+   这两个值与 index.css 的 --bubble-bg 默认值绑定, 改那边要同步 */
 function resolveBubbleBg(bubbleColor: string | null, skin: SkinMeta | undefined): string {
   if (bubbleColor) return hexToRgbChannels(bubbleColor);
-  return skin?.colors?.["bubble-bg"] ?? "255 255 255";
+  return skin?.colors?.["bubble-bg"] ?? (skin?.base === "dark" ? "10 5 20" : "255 255 255");
 }
 
 /** 气泡内文字色随底色亮度联动: 浅底(亮度≥145)配深字, 深底配浅字
