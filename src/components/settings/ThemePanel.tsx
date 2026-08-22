@@ -204,6 +204,7 @@ export function ThemePanel() {
           <div>
             <h3 className="text-sm font-semibold text-neutral-800">消息气泡框</h3>
             <p className="text-[10px] text-neutral-500">消息显示为毛玻璃气泡块，任何主题均可开关</p>
+            <p className="text-[10px] text-neutral-500">这组设置按皮肤分别保存，切换皮肤会切到对应皮肤的记忆</p>
           </div>
           <button
             onClick={() => setBubbleEnabled(!bubbleEnabled)}

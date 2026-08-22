@@ -19,14 +19,24 @@ export interface SkinMeta {
   bubble?: boolean;
 }
 
+/** 单皮肤的气泡偏好: 字段全可选 — 只有用户实际调过的项才落盘, 其余走皮肤推荐值 */
+interface BubblePref {
+  enabled?: boolean;
+  color?: string | null; // hex, null = 用户显式选择"跟随皮肤" (与字段缺失语义不同, 都保留)
+  opacity?: number;
+}
+
 // localStorage 键: 与现有 kitsune.projectOrder 同前缀, 不冲突
 const ACTIVE_SKIN_KEY = "kitsune.activeSkin";
 const CHAT_OPACITY_KEY = "kitsune.chatOpacity";
 const SIDEBAR_OPACITY_KEY = "kitsune.sidebarOpacity";
+// ↓ 三个全局气泡键已废弃 (跨皮肤串味): 气泡偏好改存 BUBBLE_PREFS_KEY 按皮肤分桶, 它们仅供旧数据迁移
 const BUBBLE_ENABLED_KEY = "kitsune.bubbleEnabled";
 const BUBBLE_OPACITY_KEY = "kitsune.bubbleOpacity";
 const BUBBLE_COLOR_KEY = "kitsune.bubbleColor"; // 气泡自定义底色 (hex), 空 = 跟随皮肤
 const BG_BLUR_KEY = "kitsune.bgBlur";
+// 单键 map 存储: 皮肤可扩展 (第三方皮肤包), 拼键方案会让 localStorage 键数无上限且没法整体解析兜底
+const BUBBLE_PREFS_KEY = "kitsune.bubblePrefs";
 
 // StrictMode 双跑 effect 防重入: init 只执行一次
 let initialized = false;
@@ -108,7 +118,7 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
   bubbleColor: null,
   bgBlur: DEFAULT_BG_BLUR,
 
-  /** 启动: 拉皮肤列表 + 恢复持久化 (主题/不透明率/气泡) + 应用当前主题 */
+  /** 启动: 拉皮肤列表 + 恢复持久化 (主题/不透明率) + 应用当前主题 (含按皮肤重解析气泡偏好) */
   init: async () => {
     if (initialized) return;
     initialized = true;
@@ -119,28 +129,22 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
       skins.find((s) => s.id === DEFAULT_SKIN_ID) ??
       skins[0];
     if (!skin) return; // 理论不可能: 内置至少一套
+    // 旧版全局气泡键一次性迁移到当前皮肤: 必须在 applyTheme 读 prefs 之前完成
+    migrateLegacyBubbleKeys();
     const chatOpacity = readNumber(CHAT_OPACITY_KEY, DEFAULT_CHAT_OPACITY);
     const sidebarOpacity = readNumber(SIDEBAR_OPACITY_KEY, DEFAULT_SIDEBAR_OPACITY);
-    const bubbleOpacity = readNumber(BUBBLE_OPACITY_KEY, DEFAULT_BUBBLE_OPACITY);
     const bgBlur = readNumber(BG_BLUR_KEY, DEFAULT_BG_BLUR);
-    // 气泡自定义色: 无记录 = null (跟随皮肤); 有记录 = hex
-    const bubbleColor = localStorage.getItem(BUBBLE_COLOR_KEY);
-    // 气泡开关: 无持久化记录 → 跟随皮肤推荐; 用户改过 → 以用户为准
-    const rawBubble = localStorage.getItem(BUBBLE_ENABLED_KEY);
-    const bubbleEnabled = rawBubble === null ? (skin.bubble ?? false) : rawBubble === "1";
     set({
       skins,
       activeSkinId: skin.id,
       activeBase: skin.base,
       chatOpacity,
       sidebarOpacity,
-      bubbleEnabled,
-      bubbleOpacity,
-      bubbleColor,
       bgBlur,
     });
-    applyOpacityVars(chatOpacity, sidebarOpacity, bubbleOpacity);
+    applyOpacityVars(chatOpacity, sidebarOpacity);
     document.documentElement.style.setProperty("--bg-blur", `${bgBlur}px`);
+    // 气泡三项不在这里读 — 交给末尾的 applyTheme 按当前皮肤重解析, 单一入口不留第二条读取路径
     await get().applyTheme(skin);
   },
 
@@ -211,13 +215,27 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
     set({ activeSkinId: skin.id, activeBase: skin.base });
     localStorage.setItem(ACTIVE_SKIN_KEY, skin.id);
 
-    // 5. 用户自定义气泡色覆盖皮肤 --bubble-bg (null 则保留上面 colors 循环写入的皮肤值)
-    const bubbleColor = get().bubbleColor;
-    if (bubbleColor) {
-      el.style.setProperty("--bubble-bg", hexToRgbChannels(bubbleColor));
+    // 5. 气泡偏好按新皮肤重解析: 每个皮肤各记一套, 无记录的项回落该皮肤推荐值。
+    //    在 set({ activeSkinId }) 之后执行, 保证 writeBubblePref 等路径拿到的 activeSkinId 一致
+    const { enabled, color, opacity } = resolveBubblePref(skin, readBubblePrefs());
+    set({ bubbleEnabled: enabled, bubbleColor: color, bubbleOpacity: opacity });
+    el.style.setProperty("--bubble-opacity", String(opacity));
+    // --bubble-bg 三态回落 (与 setBubbleColor 的 null 分支同一语义):
+    // 不能什么都不做 — 自定义色是 setter 直接 inline 在 :root 上的, 从未进过 lastColorKeys,
+    // 浅色纯色皮肤的 colors 又不含 bubble-bg (如 light-sky), 第 1 步清理覆盖不到它,
+    // 不处理的话上个皮肤的自定义深色会残留到本皮肤 (深底白字事故的根源);
+    // 也不能一律移除 — 第 1 步刚把皮肤自带的 bubble-bg inline 写入, 裸删会把它误删,
+    // 底色回落到 index.css 的 base 方向默认值后, 与 updateBubbleTextColor 按皮肤原值
+    // 判出的文字色方向相反 (深底深字), 可读性直接崩掉
+    if (color) {
+      el.style.setProperty("--bubble-bg", hexToRgbChannels(color));
+    } else {
+      const skinBg = skin.colors?.["bubble-bg"];
+      if (skinBg) el.style.setProperty("--bubble-bg", skinBg);
+      else el.style.removeProperty("--bubble-bg");
     }
     // 气泡内文字色随底色亮度联动: 深底配浅字 / 浅底配深字 (含 markdown 标题, 见 index.css)
-    updateBubbleTextColor(bubbleColor, skin);
+    updateBubbleTextColor(color, skin);
 
     // 6. 淡入淡出过渡 ~220ms (底色/背景图切换瞬间)
     rootEl()?.animate([{ opacity: 0.55 }, { opacity: 1 }], {
@@ -248,21 +266,13 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
 
   setBubbleEnabled: (on) => {
     set({ bubbleEnabled: on });
-    try {
-      localStorage.setItem(BUBBLE_ENABLED_KEY, on ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
+    writeBubblePref(get().activeSkinId, { enabled: on });
   },
 
   setBubbleColor: (hex) => {
     set({ bubbleColor: hex });
-    try {
-      if (hex) localStorage.setItem(BUBBLE_COLOR_KEY, hex);
-      else localStorage.removeItem(BUBBLE_COLOR_KEY);
-    } catch {
-      /* ignore */
-    }
+    // null 也落盘而非删字段: 保留"用户显式选了跟随皮肤"的语义, 与从未调过 (字段缺失) 区分
+    writeBubblePref(get().activeSkinId, { color: hex });
     // 写 CSS: 自定义色覆盖 --bubble-bg; 重置(null)则恢复当前皮肤的 bubble-bg
     const el = document.documentElement;
     const { skins, activeSkinId } = get();
@@ -281,11 +291,7 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
   setBubbleOpacity: (n) => {
     set({ bubbleOpacity: n });
     document.documentElement.style.setProperty("--bubble-opacity", String(n));
-    try {
-      localStorage.setItem(BUBBLE_OPACITY_KEY, String(n));
-    } catch {
-      /* ignore */
-    }
+    writeBubblePref(get().activeSkinId, { opacity: n });
   },
 
   /** 放新皮肤后手动刷新列表 (不切换当前主题) */
@@ -305,11 +311,79 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
   },
 }));
 
-function applyOpacityVars(chat: number, sidebar: number, bubble: number) {
+function applyOpacityVars(chat: number, sidebar: number) {
   const el = document.documentElement;
   el.style.setProperty("--chat-opacity", String(chat));
   el.style.setProperty("--sidebar-opacity", String(sidebar));
-  el.style.setProperty("--bubble-opacity", String(bubble));
+}
+
+/** 读全量气泡 prefs: JSON 坏了 / 不是对象 / 是数组一律当空 map, 绝不让启动路径抛异常 */
+function readBubblePrefs(): Record<string, BubblePref> {
+  try {
+    const raw = localStorage.getItem(BUBBLE_PREFS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
+    return parsed as Record<string, BubblePref>;
+  } catch {
+    return {};
+  }
+}
+
+/** 取某皮肤的生效气泡值: 用户调过的项用用户值, 没调过的回落该皮肤推荐值 (skin.bubble / 默认不透明率) */
+function resolveBubblePref(skin: SkinMeta, prefs: Record<string, BubblePref>) {
+  const pref = prefs[skin.id] ?? {};
+  return {
+    enabled: pref.enabled ?? (skin.bubble ?? false),
+    color: pref.color ?? null,
+    opacity: pref.opacity ?? DEFAULT_BUBBLE_OPACITY,
+  };
+}
+
+/** 写当前皮肤的一项气泡偏好: 单键 map 只能读-改-写整体, 失败静默同其他 setter */
+function writeBubblePref(skinId: string, patch: Partial<BubblePref>) {
+  try {
+    const prefs = readBubblePrefs();
+    prefs[skinId] = { ...prefs[skinId], ...patch };
+    localStorage.setItem(BUBBLE_PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 旧版全局气泡键 → 当时激活皮肤的一次性迁移: 老用户的设置留在原皮肤上, 其余皮肤保持干净。
+    幂等: 旧键删掉后下次启动不再命中; 新结构里已有目标皮肤记录时不覆盖 (不能抹掉新版下的设置) */
+function migrateLegacyBubbleKeys() {
+  if (
+    localStorage.getItem(BUBBLE_ENABLED_KEY) === null &&
+    localStorage.getItem(BUBBLE_OPACITY_KEY) === null &&
+    localStorage.getItem(BUBBLE_COLOR_KEY) === null
+  ) {
+    return;
+  }
+  const targetSkinId = localStorage.getItem(ACTIVE_SKIN_KEY) ?? DEFAULT_SKIN_ID;
+  const pref: BubblePref = {};
+  const rawEnabled = localStorage.getItem(BUBBLE_ENABLED_KEY);
+  if (rawEnabled !== null) pref.enabled = rawEnabled === "1";
+  const rawColor = localStorage.getItem(BUBBLE_COLOR_KEY);
+  if (rawColor !== null) pref.color = rawColor;
+  // 注意 Number(null) === 0 会误过 Number.isFinite 校验, 必须先判字符串存在
+  const rawOpacityStr = localStorage.getItem(BUBBLE_OPACITY_KEY);
+  if (rawOpacityStr !== null) {
+    const n = Number(rawOpacityStr);
+    if (Number.isFinite(n)) pref.opacity = n;
+  }
+  const prefs = readBubblePrefs();
+  prefs[targetSkinId] = { ...pref, ...prefs[targetSkinId] };
+  try {
+    localStorage.setItem(BUBBLE_PREFS_KEY, JSON.stringify(prefs));
+    // 写成功才删旧键: setItem 万一失败, 下次启动还能再迁, 不丢用户数据
+    localStorage.removeItem(BUBBLE_ENABLED_KEY);
+    localStorage.removeItem(BUBBLE_OPACITY_KEY);
+    localStorage.removeItem(BUBBLE_COLOR_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** hex (#rrggbb) → CSS 变量用的 RGB 通道字符串 "r g b" (与皮肤 colors 值格式对齐) */
