@@ -1,9 +1,30 @@
+import { useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { PanelKind } from "../App";
 import { ProjectList } from "./ProjectList";
-import { Sparkles, Package, Settings, FolderKanban, Plus, FolderOpen } from "lucide-react";
+import { useSessionStore } from "../store/session";
+import { Sparkles, Package, Settings, FolderKanban, Plus, FolderOpen, Loader2 } from "lucide-react";
 
 // 左侧边栏: 功能区 (skill/package/设置) + 项目会话区
 export function Sidebar({ onOpenPanel }: { onOpenPanel: (p: PanelKind) => void }) {
+  const startSession = useSessionStore((s) => s.startSession);
+  const [adding, setAdding] = useState(false);
+
+  // 添加项目 = 选目录 + 在该目录起一个会话。项目列表是 Rust 扫 ~/.pi/agent/sessions 反推出来的,
+  // 没有独立的"注册项目"动作, 目录里没有会话就无从显示; 会话文件落盘前由 ProjectList 的虚拟项目行兜住
+  const handleAddProject = async () => {
+    if (adding) return;
+    try {
+      const dir = await open({ directory: true, multiple: false, title: "选择项目目录" });
+      if (typeof dir !== "string") return; // 用户取消
+      setAdding(true);
+      await startSession(dir);
+    } catch (e) {
+      console.error("添加项目失败", e);
+    }
+    setAdding(false);
+  };
+
   return (
     <aside className="sidebar-shell flex w-[18%] flex-col bg-[rgb(var(--surface-sunken)/var(--sidebar-alpha))]">
       {/* 品牌区 */}
@@ -53,11 +74,12 @@ export function Sidebar({ onOpenPanel }: { onOpenPanel: (p: PanelKind) => void }
             项目会话
           </span>
           <button
-            onClick={() => onOpenPanel("settings")}
-            className="rounded p-1 text-neutral-400 transition hover:bg-neutral-200/70 hover:text-neutral-700"
-            title="新建会话 (选择项目)"
+            onClick={handleAddProject}
+            disabled={adding}
+            className="rounded p-1 text-neutral-400 transition hover:bg-neutral-200/70 hover:text-neutral-700 disabled:opacity-40"
+            title="添加项目 (选择目录并新建会话)"
           >
-            <Plus className="h-3.5 w-3.5" />
+            {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
           </button>
         </div>
         <ProjectList />
