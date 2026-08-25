@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectsStore, pathEq } from "./projects";
+import { hasTerminalMarkup, stripTerminalMarkup } from "../lib/sanitize";
 import type { UiNotification, UiRequest } from "../lib/pi";
 
 export interface ChatEntry {
@@ -22,6 +23,19 @@ export interface ModelInfo {
   id: string;
   name: string;
   provider: string;
+}
+
+/// 本轮 agent 运行的 usage 累计 (输入卡底部实时统计条用, 与跨会话的 TokenStatsPanel 无关)
+/// 拆 committed / live 两组是被 pi 契约逼的: message_update 只给顶层 usage (当前这条消息的累计),
+/// message_end 的 message.usage 才是该条消息的权威值 —— 直接累加 message_update 会把同一条消息重复计入
+export interface TurnStats {
+  input: number;      // 已 message_end 的消息累加值
+  output: number;
+  cost: number;
+  liveInput: number;  // 当前流式消息的实时量, message_end 时并入上面归零
+  liveOutput: number;
+  startedAt: number | null;
+  elapsedMs: number | null; // null = 仍在跑; 有值 = 本轮已定格
 }
 
 // 单个 session 的完整状态 (M3: 多 session, 每个 session 独立)
@@ -49,6 +63,7 @@ export interface SessionState {
     assistantMessages: number;
     totalMessages: number;
   } | null;
+  turnStats: TurnStats | null;  // 本轮运行统计 (null = 本会话还没跑过任何一轮)
   detached: boolean;            // pi 进程已停但 entries 仍在内存 (秒切缓存), 切回走 reattach
   hasUnread: boolean;           // 后台完成任务有新消息, 用户未看 (侧边栏显示点提醒)
   lastEntryMtime: number | null; // jsonl 文件 mtime baseline (mtime 守卫: 没变就不重读 entries)
@@ -94,6 +109,9 @@ interface SessionStore {
 let reattachEpoch = 0;
 // detached 会话 entries 常驻上限, 超限清最久未访问 (防长期使用内存无限增长)
 const ENTRY_CACHE_LIMIT = 20;
+// 自动重试条目的复用槽位 id: pi 一轮里可能连发多次 auto_retry_start, 固定 id 让它们原地刷新成
+// 一条「重试中 N/M」而不是刷屏。重试彻底失败转成最终错误时会换成 uuid 脱离此槽位, 见 auto_retry_end
+const RETRY_ENTRY_ID = "__auto_retry__";
 
 export const useSessionStore = create<SessionStore>((set, get) => {
   // 更新指定 session 的部分字段 (闭包 helper, handleEvent/actions 复用)
@@ -138,7 +156,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
               error: null, currentModel: null, thinkingLevel: "medium",
               availableModels: [], availableThinkingLevels: ["off"],
               steeringQueue: [], followUpQueue: [], uiRequests: [],
-              contextUsage: null, tokenStats: null,
+              contextUsage: null, tokenStats: null, turnStats: null,
             },
           },
           activeSessionId: id,
@@ -411,9 +429,19 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       // 其余事件 session 不存在直接丢弃 (孤儿事件无处理对象)
       if (!s && !(type === "extension_ui_request" && (event as unknown as UiRequest).method === "notify")) return;
       switch (type) {
-        case "agent_start":
-          patch(sessionId, { isStreaming: true });
+        case "agent_start": {
+          // 只在上一轮已定格 (或从未跑过) 时重置统计: pi 自动重试会在同一轮里再次发 agent_start,
+          // 无条件重置会把重试前已累计的 token 抹掉
+          const prev = s.turnStats;
+          const fresh = !prev || prev.elapsedMs !== null;
+          patch(sessionId, {
+            isStreaming: true,
+            turnStats: fresh
+              ? { input: 0, output: 0, cost: 0, liveInput: 0, liveOutput: 0, startedAt: Date.now(), elapsedMs: null }
+              : prev,
+          });
           break;
+        }
         case "message_start": {
           const msg = event.message as { role?: string; id?: string } | undefined;
           if (msg?.role === "assistant") {
@@ -429,7 +457,17 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         case "message_update": {
           const ev = event.assistantMessageEvent as { type?: string; delta?: string } | undefined;
           const cur = get().sessions[sessionId];
-          if (!cur || !cur.currentAssistantId || !ev?.delta) break;
+          if (!cur) break;
+          // 顶层 usage 是当前这条消息的最新累计 (rpc.md: message_update 已移除 message 字段和
+          // assistantMessageEvent.partial, 这是唯一可用的实时量)。provider 不在流式中报 usage 时
+          // 会一直是 0, 等 message_end 一次性跳上去, 属预期行为
+          const u = event.usage as { input?: number; output?: number } | undefined;
+          if (cur.turnStats && u && ((u.input ?? 0) > 0 || (u.output ?? 0) > 0)) {
+            patch(sessionId, {
+              turnStats: { ...cur.turnStats, liveInput: u.input ?? 0, liveOutput: u.output ?? 0 },
+            });
+          }
+          if (!cur.currentAssistantId || !ev?.delta) break;
           if (ev.type === "text_delta") {
             patch(sessionId, { entries: cur.entries.map((e) =>
               e.id === cur.currentAssistantId && e.kind === "message" ? { ...e, text: (e.text || "") + ev.delta! } : e
@@ -441,9 +479,38 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           }
           break;
         }
-        case "message_end":
-          patch(sessionId, { currentAssistantId: null });
+        case "message_end": {
+          const msg = event.message as {
+            role?: string;
+            stopReason?: string;
+            errorMessage?: string;
+            usage?: { input?: number; output?: number; cost?: { total?: number } };
+          } | undefined;
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          const fields: Partial<SessionState> = { currentAssistantId: null };
+          // message_end 的 usage 是该条消息的权威值 (rpc.md), 并入 committed 后 live 归零
+          if (cur.turnStats && msg?.role === "assistant" && msg.usage) {
+            fields.turnStats = {
+              ...cur.turnStats,
+              input: cur.turnStats.input + (msg.usage.input ?? 0),
+              output: cur.turnStats.output + (msg.usage.output ?? 0),
+              cost: cur.turnStats.cost + (msg.usage.cost?.total ?? 0),
+              liveInput: 0,
+              liveOutput: 0,
+            };
+          }
+          // pi 契约: 失败编码为最终 AssistantMessage 的 stopReason=error + errorMessage
+          // (aborted 是用户主动中止, 不算错误)
+          if (msg?.stopReason === "error") {
+            fields.entries = [...cur.entries, {
+              id: crypto.randomUUID(), kind: "notification", notifyType: "error",
+              text: `模型返回错误: ${msg.errorMessage || "无详细信息"}`,
+            }];
+          }
+          patch(sessionId, fields);
           break;
+        }
         case "tool_execution_start": {
           const cur = get().sessions[sessionId];
           if (!cur) break;
@@ -462,13 +529,82 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           )});
           break;
         }
+        // pi 遇到 5xx / overloaded / rate limit 会自动重试, 期间界面本来完全静默。
+        // 用固定 id 占一个槽位原地刷新, 一轮重试始终只占一条, 不刷屏
+        case "auto_retry_start": {
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          const text = `模型调用失败, 重试中 (${event.attempt}/${event.maxAttempts}): ${event.errorMessage || "未知错误"}`;
+          const entry: ChatEntry = { id: RETRY_ENTRY_ID, kind: "notification", notifyType: "warning", text };
+          const exists = cur.entries.some((e) => e.id === RETRY_ENTRY_ID);
+          patch(sessionId, {
+            entries: exists
+              ? cur.entries.map((e) => (e.id === RETRY_ENTRY_ID ? entry : e))
+              : [...cur.entries, entry],
+          });
+          break;
+        }
+        case "auto_retry_end": {
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          if (event.success) {
+            // 重试成功: 撤掉提示, 消息流回归干净
+            patch(sessionId, { entries: cur.entries.filter((e) => e.id !== RETRY_ENTRY_ID) });
+          } else {
+            // 重试耗尽: 转成最终错误, 同时换掉 id 脱离复用槽位 ——
+            // 继续占着 RETRY_ENTRY_ID 的话, 下一轮重试会把这条历史错误原地覆盖掉
+            const text = `模型调用失败, 已重试 ${event.attempt} 次仍未成功: ${event.finalError || "无详细信息"}`;
+            patch(sessionId, {
+              entries: cur.entries.map((e) =>
+                e.id === RETRY_ENTRY_ID
+                  ? { id: crypto.randomUUID(), kind: "notification" as const, notifyType: "error" as const, text }
+                  : e
+              ),
+            });
+          }
+          break;
+        }
+        case "extension_error": {
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          // 扩展挂了不代表这轮对话失败, 用 warning 不用 error
+          patch(sessionId, { entries: [...cur.entries, {
+            id: crypto.randomUUID(), kind: "notification", notifyType: "warning",
+            text: `扩展出错 (${event.extensionPath || "未知扩展"}): ${event.error || "无详细信息"}`,
+          }]});
+          break;
+        }
+        case "compaction_end": {
+          // 压缩成功时无 errorMessage, 不打扰用户; 失败才提示 (额度耗尽这类会在这里现形)
+          if (!event.errorMessage) break;
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          patch(sessionId, { entries: [...cur.entries, {
+            id: crypto.randomUUID(), kind: "notification", notifyType: "warning",
+            text: `上下文压缩失败: ${event.errorMessage}`,
+          }]});
+          break;
+        }
         case "queue_update": {
           const q = event as { steering?: string[]; followUp?: string[] };
           patch(sessionId, { steeringQueue: q.steering || [], followUpQueue: q.followUp || [] });
           break;
         }
-        case "agent_settled":
-          patch(sessionId, { isStreaming: false, currentAssistantId: null });
+        case "agent_settled": {
+          const cur = get().sessions[sessionId];
+          const settled: Partial<SessionState> = { isStreaming: false, currentAssistantId: null };
+          if (cur?.turnStats?.startedAt) {
+            settled.turnStats = {
+              ...cur.turnStats,
+              liveInput: 0, liveOutput: 0,
+              elapsedMs: Date.now() - cur.turnStats.startedAt,
+            };
+          }
+          // 兜底: 异常路径下 auto_retry_end 可能没到, 重试条目会一直挂着显示「重试中」
+          if (cur?.entries.some((e) => e.id === RETRY_ENTRY_ID)) {
+            settled.entries = cur.entries.filter((e) => e.id !== RETRY_ENTRY_ID);
+          }
+          patch(sessionId, settled);
           // 后台完成任务: 若用户没在看这个会话, 标记未读 (侧边栏圈圈→点提醒看)
           if (get().activeSessionId !== sessionId) {
             patch(sessionId, { hasUnread: true });
@@ -485,6 +621,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
             }
           }
           break;
+        }
         case "pi_process_exit":
           patch(sessionId, { isStreaming: false, currentAssistantId: null, uiRequests: [], error: "pi 进程已退出" });
           break;
@@ -499,10 +636,18 @@ export const useSessionStore = create<SessionStore>((set, get) => {
             if (!cur) break;
             patch(sessionId, { uiRequests: [...cur.uiRequests, req] });
           } else if (method === "notify") {
+            const raw = (req.message as string) || "";
+            const notifyType = (req.notifyType as UiNotification["notifyType"]) || "info";
+            // 扩展是照着 TUI 写的, notify 里可能嵌 ANSI 上色和 Nerd Font 私用区图标, WebView 认不了。
+            // 带这类标记的 info 一律丢弃 —— 那是终端专用渲染 (如 pi-kitsune-ui 的任务完成条),
+            // GUI 侧已有输入卡底部的原生统计承载同类信息。error/warning 不丢, 剥干净照显,
+            // 要紧的信息不能因为扩展给它上了个色就蒸发
+            const terminalOnly = hasTerminalMarkup(raw);
+            if (terminalOnly && notifyType === "info") break;
             const n: UiNotification = {
               id: (req.id as string) || crypto.randomUUID(),
-              message: (req.message as string) || "",
-              notifyType: (req.notifyType as UiNotification["notifyType"]) || "info",
+              message: terminalOnly ? stripTerminalMarkup(raw) : raw,
+              notifyType,
             };
             if (!n.message) break;
             if (s) {
