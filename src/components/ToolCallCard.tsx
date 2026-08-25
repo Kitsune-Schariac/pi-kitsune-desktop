@@ -1,5 +1,7 @@
 import { memo, useState } from "react";
 import type { ChatEntry } from "../store/session";
+import { useSessionStore } from "../store/session";
+import { DiffView, PlainDiffView } from "./DiffView";
 import {
   Terminal, Wrench, Loader2, CheckCircle2, XCircle, ChevronRight, ChevronDown,
 } from "lucide-react";
@@ -31,24 +33,17 @@ function extractResultText(result: unknown): string {
   return "";
 }
 
-// diff 行着色: + 绿 - 红 @@ 灰
-function DiffView({ text }: { text: string }) {
-  const lines = text.split("\n");
-  return (
-    <pre className="mt-2 max-h-64 overflow-auto rounded bg-neutral-50 p-2 text-xs leading-relaxed">
-      {lines.map((line, i) => {
-        let cls = "text-neutral-500"; // 上下文行是代码内容, neutral-400 在浅底上仅 2.3:1
-        if (line.startsWith("+")) cls = "text-green-600";
-        else if (line.startsWith("-")) cls = "text-red-600";
-        else if (line.startsWith("@@")) cls = "text-neutral-400";
-        return (
-          <div key={i} className={cls}>
-            {line || " "}
-          </div>
-        );
-      })}
-    </pre>
-  );
+// 从 result.details 取 diff 数据。判定依据是 details 里有无 diff 数据, 不是工具名 ——
+// 第三方工具只要遵循 pi 的 details 约定就自动获得 diff 渲染, 无需在 GUI 侧维护工具名白名单;
+// write 的 details 为 undefined, 自动落"无 diff"分支, 断裂三随之消失
+function extractDiff(result: unknown): { patch?: string; diff?: string } | null {
+  if (!result || typeof result !== "object") return null;
+  const details = (result as { details?: unknown }).details;
+  if (!details || typeof details !== "object") return null;
+  const d = details as { patch?: unknown; diff?: unknown };
+  if (typeof d.patch === "string" && d.patch) return { patch: d.patch };
+  if (typeof d.diff === "string" && d.diff) return { diff: d.diff };
+  return null;
 }
 
 export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatEntry }) {
@@ -62,8 +57,13 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
   // 折叠时的"大概": 取参数第一行 (bash 命令 / 文件路径等)
   const summary = argsStr.split("\n")[0].trim();
   const resultText = entry.result ? extractResultText(entry.result) : "";
-  const isDiff = entry.toolName === "edit" || entry.toolName === "write";
+  const diff = entry.result ? extractDiff(entry.result) : null;
   const isBash = entry.toolName === "bash";
+  // cwd 用于 diff 路径相对化: selector 粒度取当前会话 cwd (会话级常量, 不随消息流变化)
+  const cwd = useSessionStore((s) => {
+    const id = s.activeSessionId;
+    return id ? s.sessions[id]?.cwd : undefined;
+  });
 
   return (
     // 结构标记提权: 2px primary 左边条 + sunken 底 + subtle 边框, 让工具调用在消息流里更易被扫到。
@@ -112,13 +112,17 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
               {argsStr}
             </pre>
           )}
-          {resultText && isDiff && <DiffView text={resultText} />}
-          {resultText && isBash && (
+          {/* diff 渲染: details.patch → unified patch (双列行号 + 语法高亮);
+              details.patch 缺失 → details.diff 朴素着色回退 (无行号, 保证不白屏);
+              两者皆无 → 普通文本 (write 等无 details 的工具自动落此分支, 不再空转) */}
+          {diff?.patch && <DiffView patch={diff.patch} cwd={cwd} />}
+          {!diff?.patch && diff?.diff && <PlainDiffView text={diff.diff} />}
+          {resultText && !diff && isBash && (
             <pre className="max-h-48 overflow-auto rounded bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 font-mono text-xs text-[rgb(var(--term-text))]">
               {resultText}
             </pre>
           )}
-          {resultText && !isDiff && !isBash && (
+          {resultText && !diff && !isBash && (
             <pre className="max-h-48 overflow-auto rounded bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 text-xs text-neutral-700">
               {resultText}
             </pre>

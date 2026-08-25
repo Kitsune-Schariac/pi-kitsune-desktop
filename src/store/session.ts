@@ -529,6 +529,22 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           )});
           break;
         }
+        case "tool_execution_update": {
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          const toolCallId = event.toolCallId as string;
+          // 乱序到达 (update 早于 start) 或 entry 已不存在 → 忽略, 不凭空创建
+          // (凭空创建会在 tool_execution_start 到达时产生重复卡片)
+          const idx = cur.entries.findIndex((e) => e.kind === "tool" && e.toolCallId === toolCallId);
+          if (idx < 0) break;
+          // 整体替换 result, 绝不追加: 上游语义是累计值 (rpc.md: partialResult = accumulated
+          // output so far, 消费者可直接替换显示), 做字符串追加会得到指数级重复内容。
+          // tool_execution_end 的最终 result 仍会覆盖此 partial
+          patch(sessionId, {
+            entries: cur.entries.map((e, i) => (i === idx ? { ...e, result: event.partialResult } : e)),
+          });
+          break;
+        }
         // pi 遇到 5xx / overloaded / rate limit 会自动重试, 期间界面本来完全静默。
         // 用固定 id 占一个槽位原地刷新, 一轮重试始终只占一条, 不刷屏
         case "auto_retry_start": {
@@ -692,7 +708,18 @@ export const useSessionStore = create<SessionStore>((set, get) => {
 export function mapHistoryEntries(entries: unknown[]): ChatEntry[] {
   const result: ChatEntry[] = [];
   for (const raw of entries) {
-    const e = raw as { id?: string; type?: string; message?: { role?: string; content?: unknown[] } };
+    const e = raw as {
+      id?: string;
+      type?: string;
+      message?: {
+        role?: string;
+        content?: unknown[];
+        // toolResult 专有: 按 toolCallId 回填, details 含 diff/patch, isError 还原 status
+        toolCallId?: string;
+        details?: unknown;
+        isError?: boolean;
+      };
+    };
     if (e.type !== "message" || !e.message) continue;
     const content = e.message.content ?? [];
     if (e.message.role === "user") {
@@ -709,7 +736,8 @@ export function mapHistoryEntries(entries: unknown[]): ChatEntry[] {
         if (b.type === "text" && b.text) text += b.text;
         else if (b.type === "thinking" && b.thinking) thinking += b.thinking;
         else if (b.type === "toolCall") {
-          // 历史里的工具调用: 无执行结果, 只展示调用参数
+          // 先以占位入列 (result:null): jsonl 里 toolResult 是与 user/assistant 平级的独立行,
+          // 后续循环按 toolCallId 回填完整 result (含 details) 与 status
           result.push({
             id: b.id ?? crypto.randomUUID(), kind: "tool",
             toolCallId: b.id, toolName: b.name, args: b.arguments,
@@ -723,6 +751,23 @@ export function mapHistoryEntries(entries: unknown[]): ChatEntry[] {
           text, thinking: thinking || undefined,
         });
       }
+    } else if (e.message.role === "toolResult") {
+      // pi session jsonl 里 toolResult 是独立行 (与 user/assistant 平级), 早期回放只判
+      // user/assistant 导致它落空、工具结果写死 null。这里按 toolCallId 回填到已产生的 tool entry:
+      // toolCall 一定先于 toolResult (jsonl 时序), 单趟遍历即可命中, 不需要两趟扫描
+      const msg = e.message;
+      const toolCallId = msg.toolCallId;
+      if (!toolCallId) continue;
+      const idx = result.findIndex((en) => en.kind === "tool" && en.toolCallId === toolCallId);
+      // 孤儿 toolResult (历史被压缩截断等): 丢弃, 不报错、不造空卡片
+      if (idx < 0) continue;
+      // 回填形状对齐实时路径 (tool_execution_end): result = {content, details} 整体保留,
+      // status 由 isError 还原 —— 同一个 ToolCallCard 不因来源不同走两套渲染
+      result[idx] = {
+        ...result[idx],
+        status: msg.isError ? "error" : "done",
+        result: { content: msg.content, details: msg.details },
+      };
     }
   }
   return result;
