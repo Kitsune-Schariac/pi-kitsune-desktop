@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/session";
 import {
   Send, Square, Paperclip, X, ChevronDown, Cpu, Layers, Brain, Loader2,
+  ArrowUp, ArrowDown, Clock, DollarSign,
 } from "lucide-react";
 import { buildRefsParts, refIcon, refMetaText, type Ref } from "../lib/refs";
 import type { PaletteCommand } from "../lib/commands";
@@ -139,6 +140,7 @@ export function InputBar({
   const active = activeSessionId ? sessions[activeSessionId] : null;
   const isStreaming = active?.isStreaming ?? false;
   const contextUsage = active?.contextUsage ?? null;
+  const turnStats = active?.turnStats ?? null;
   const currentModel = active?.currentModel ?? null;
   const availableModels = active?.availableModels ?? [];
   const thinkingLevel = active?.thinkingLevel ?? "medium";
@@ -385,6 +387,26 @@ export function InputBar({
     ? `${Math.round((contextUsage.tokens ?? 0) / 1000)}k / ${Math.round(contextUsage.contextWindow / 1000)}k`
     : null;
 
+  // 统计条的耗时要按秒走字, 但 store 只存事实数据不存渲染节拍, 所以计时器放组件里。
+  // 只在运行中跑, 停下就清掉 (空闲时定格显示上一轮结果, 没有重渲染的必要);
+  // 计数值本身没人读, 自增只为触发重渲染让下面的 Date.now() 重新求值
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!isStreaming) return;
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [isStreaming]);
+
+  // 运行中读墙上时钟, 结束后读 store 里定格的值
+  const elapsedMs = turnStats
+    ? turnStats.elapsedMs ?? (turnStats.startedAt ? Date.now() - turnStats.startedAt : 0)
+    : 0;
+  const statTokens = (n: number) => (n < 1000 ? String(n) : `${(n / 1000).toFixed(1)}k`);
+  const statDuration = (ms: number) => {
+    const total = Math.floor(ms / 1000);
+    return total < 60 ? `${total}s` : `${Math.floor(total / 60)}m ${total % 60}s`;
+  };
+
   return (
     // 悬浮输入卡: 底部居中, 宽度与消息列表一致 (max-w-[65%]), 与消息区分离成浮动层
     <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 mx-auto w-full max-w-[65%] px-4">
@@ -597,6 +619,33 @@ export function InputBar({
             )}
           </div>
         </div>
+
+        {/* 本轮运行统计: 顶替 pi-kitsune-ui 那条终端专用提示 (它带 ANSI + Nerd Font 码点, 已在
+            store 的 notify 分支被过滤)。运行中实时跳动, settled 后定格, 下一轮 agent_start 重置 */}
+        {turnStats && (
+          <div
+            className={`flex items-center gap-4 border-t border-neutral-200 px-4 py-1.5 text-[11px] tabular-nums transition-colors ${
+              isStreaming ? "text-neutral-500" : "text-neutral-400"
+            }`}
+          >
+            <span className="flex items-center gap-1" title="本轮输入 token">
+              <ArrowUp className="h-3 w-3" />
+              {statTokens(turnStats.input + turnStats.liveInput)}
+            </span>
+            <span className="flex items-center gap-1" title="本轮输出 token">
+              <ArrowDown className="h-3 w-3" />
+              {statTokens(turnStats.output + turnStats.liveOutput)}
+            </span>
+            <span className="flex items-center gap-1" title="本轮成本">
+              <DollarSign className="h-3 w-3" />
+              {turnStats.cost.toFixed(4)}
+            </span>
+            <span className="flex items-center gap-1" title="本轮耗时">
+              <Clock className="h-3 w-3" />
+              {statDuration(elapsedMs)}
+            </span>
+          </div>
+        )}
         </div>
       </div>
     </div>
