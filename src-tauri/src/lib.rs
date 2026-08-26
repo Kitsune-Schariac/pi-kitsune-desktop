@@ -1,6 +1,7 @@
 mod capture;
 mod pi_runtime;
 mod search;
+mod git;
 mod session_fs;
 mod skins;
 mod token_stats;
@@ -413,6 +414,8 @@ pub fn run() {
             session_fs::list_dir, session_fs::read_session_entries_public,
             session_fs::list_files_recursive,
             search::search_files,
+            git::git_status, git::git_diff, git::git_branches, git::git_log, git::git_show,
+            git::git_stage, git::git_unstage, git::git_commit, git::git_checkout,
             capture::capture_screenshot,
             token_stats::get_token_stats,
             skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
