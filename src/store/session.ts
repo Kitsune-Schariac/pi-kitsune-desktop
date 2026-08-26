@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectsStore, pathEq } from "./projects";
+import { useGitStore } from "./git";
 import { hasTerminalMarkup, stripTerminalMarkup } from "../lib/sanitize";
 import type { UiNotification, UiRequest } from "../lib/pi";
 
@@ -635,6 +636,13 @@ export const useSessionStore = create<SessionStore>((set, get) => {
             if (sp && !inDisk) {
               useProjectsStore.getState().loadProjects();
             }
+          }
+          // agent_settled: 模型刚改完文件, 正是仓库状态最可能变化的时刻, 刷新该会话所属
+          // 仓库的 git 状态 (design 四 时机 3)。频率天然受限 (一轮一次); 不做 fs watch ——
+          // 模型连续改文件会事件风暴。loadStatus 内部处理非仓库/未装 git, 无副作用。
+          {
+            const c = get().sessions[sessionId]?.cwd;
+            if (c) useGitStore.getState().loadStatus(c);
           }
           break;
         }

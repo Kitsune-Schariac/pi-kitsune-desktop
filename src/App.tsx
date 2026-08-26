@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useSessionStore } from "./store/session";
 import { useProjectsStore } from "./store/projects";
 import { MessageList } from "./components/MessageList";
@@ -7,12 +7,14 @@ import { Sidebar } from "./components/Sidebar";
 import { EmptyState, ProjectCard } from "./components/EmptyState";
 import { ChaosLoader } from "./components/ChaosLoader";
 import { SettingsWindow } from "./components/settings/SettingsWindow";
+import { GitSidebarPanel } from "./components/GitSidebarPanel";
 import { SkillsPanel } from "./components/panels/SkillsPanel";
 import { PackagesPanel } from "./components/panels/PackagesPanel";
 import { NotificationToasts, UiRequestModal } from "./components/UiRequestModal";
 import { QueueIndicator } from "./components/QueueIndicator";
 import { useThemeStore } from "./store/theme";
-import { Loader2, X } from "lucide-react";
+import { useGitStore } from "./store/git";
+import { Loader2, X, GitBranch } from "lucide-react";
 
 export type PanelKind = "skills" | "packages" | "settings" | null;
 
@@ -26,6 +28,18 @@ export default function App() {
   const resolveUiRequest = useSessionStore((s) => s.resolveUiRequest);
   const notifications = useSessionStore((s) => s.notifications);
   const dismissNotification = useSessionStore((s) => s.dismissNotification);
+
+  // Git 工作台: 药丸入口 + 右侧内嵌侧栏 (design 三; S5 起深度交互走侧栏内嵌视图切换, 无弹层 diff)
+  // cwd 用单 selector 取字符串: sessions map 随消息流频繁变, cwd 字符串不变则不重渲染
+  const cwd = useSessionStore((s) => {
+    const id = s.activeSessionId;
+    return id ? s.sessions[id]?.cwd : undefined;
+  });
+  const gitStatus = useGitStore((s) => (cwd ? s.statusByCwd[cwd] ?? null : null));
+  const gitError = useGitStore((s) => (cwd ? s.errorByCwd[cwd] ?? null : null));
+  const loadGitStatus = useGitStore((s) => s.loadStatus);
+  const [gitSidebarOpen, setGitSidebarOpen] = useState(false);
+
   const [panel, setPanel] = useState<PanelKind>(null);
   // 空状态: 项目选择器的选中值 (InputBar 发送时自动建会话用)
   const [emptyProject, setEmptyProject] = useState("");
@@ -37,6 +51,52 @@ export default function App() {
     // 主题皮肤系统: 拉皮肤列表 + 恢复持久化 + 应用当前主题 (模块级防重入)
     useThemeStore.getState().init();
   }, [loadProjects]);
+
+  // Git 状态拉取 (原 Sidebar 职责迁入): cwd 变化拉一次 (药丸常驻显示需要 status)。
+  // diff 视图归侧栏内部管理, cwd 变化侧栏自行重置回 list (design 三-3.3), App 不再持有 diffTarget
+  useEffect(() => {
+    if (cwd) loadGitStatus(cwd);
+  }, [cwd]);
+
+  // 工作台状态药丸 (design 三-3.1): 会话区 header 右上常驻, 聚合多源摘要。本次只接 git,
+  // 后续 trellis/analytics/fleet 摘要挂进同一药丸 (父任务挂载点统一决策)
+  let gitPill: ReactNode = null;
+  if (gitStatus === null && !gitError) {
+    // 首次加载中 → 不渲染 (避免空骨架闪烁)
+  } else if (gitError) {
+    // 未装 git 等 → 整个药丸隐藏 (侧栏展开后侧栏内显示红字)
+  } else if (gitStatus && !gitStatus.is_repo) {
+    // 非 git 仓库 → 灰显, 仍可点击展开 (PRD: 安静降级不报错, 侧栏内有提示)
+    gitPill = (
+      <button
+        onClick={() => setGitSidebarOpen((v) => !v)}
+        className={`rounded-full border px-2.5 py-1 text-xs text-neutral-400 transition hover:text-neutral-600 ${
+          gitSidebarOpen ? "border-neutral-300" : "border-neutral-200"
+        }`}
+        title="非 Git 仓库"
+      >
+        非 Git 仓库
+      </button>
+    );
+  } else {
+    const changeCount = gitStatus?.files.length ?? 0;
+    gitPill = (
+      <button
+        onClick={() => setGitSidebarOpen((v) => !v)}
+        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition tabular-nums ${
+          gitSidebarOpen
+            ? "border-[rgb(var(--primary-400))] text-[rgb(var(--primary-600))]"
+            : "border-neutral-200 text-neutral-500 hover:text-neutral-700"
+        }`}
+        title={`分支 ${gitStatus?.branch ?? "—"} · ${changeCount} 个变更`}
+      >
+        <GitBranch className="h-3.5 w-3.5" />
+        <span className="max-w-[120px] truncate">{gitStatus?.branch ?? "—"}</span>
+        <span className="text-neutral-300">·</span>
+        <span>{changeCount}</span>
+      </button>
+    );
+  }
 
   return (
     <>
@@ -76,6 +136,7 @@ export default function App() {
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {gitPill}
                 <QueueIndicator steering={active.steeringQueue} followUp={active.followUpQueue} />
                 <button
                   onClick={() => stopSession(activeSessionId!)}
@@ -106,6 +167,11 @@ export default function App() {
           }
         />
       </main>
+
+      {/* Git 侧栏: main 的 flex 兄弟 (展开时右让 340px, 收起恢复全宽, 由 flex 自然完成) */}
+      {active && gitSidebarOpen && (
+        <GitSidebarPanel cwd={active.cwd} onClose={() => setGitSidebarOpen(false)} />
+      )}
 
       {/* 扩展 UI 请求弹窗: 只渲染活跃会话的队头请求 (FIFO, 关闭后自动弹下一个) */}
       {active && active.uiRequests.length > 0 && (
