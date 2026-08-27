@@ -16,6 +16,10 @@ export interface ChatEntry {
   args?: unknown;
   status?: "running" | "done" | "error";
   result?: unknown;
+  // 舰队 stream 推导用: tool 调用起止时间 (epoch ms)。实时路径 Date.now(), 历史路径从
+  // message.timestamp 解析。缺失/无效 → undefined (耗时显示 —)。非 tool 条目不填
+  startedAt?: number;
+  endedAt?: number;
   // notification 专用: info/warning/error, 决定图标 + 类型色 (会话内系统消息条目)
   notifyType?: "info" | "warning" | "error";
 }
@@ -518,6 +522,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           patch(sessionId, { entries: [...cur.entries, {
             id: event.toolCallId as string, kind: "tool", toolCallId: event.toolCallId as string,
             toolName: event.toolName as string, args: event.args, status: "running",
+            startedAt: Date.now(),
           }]});
           break;
         }
@@ -526,7 +531,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           if (!cur) break;
           patch(sessionId, { entries: cur.entries.map((e) =>
             e.kind === "tool" && e.toolCallId === event.toolCallId
-              ? { ...e, status: event.isError ? "error" : "done", result: event.result } : e
+              ? { ...e, status: event.isError ? "error" : "done", result: event.result, endedAt: Date.now() } : e
           )});
           break;
         }
@@ -708,6 +713,13 @@ export const useSessionStore = create<SessionStore>((set, get) => {
   };
 });
 
+// ISO 时间戳 → epoch ms, 无效/缺失 → undefined (舰队 stream 耗时计算用, 无值显示 —)
+function parseTs(ts?: string): number | undefined {
+  if (!ts) return undefined;
+  const n = Date.parse(ts);
+  return Number.isNaN(n) ? undefined : n;
+}
+
 /**
  * get_entries 历史条目 → ChatEntry 映射 (纯函数, 便于测试)
  * message 条目: user 取 text 块拼接; assistant 拆 thinking/text/toolCall 块
@@ -719,6 +731,7 @@ export function mapHistoryEntries(entries: unknown[]): ChatEntry[] {
     const e = raw as {
       id?: string;
       type?: string;
+      timestamp?: string;
       message?: {
         role?: string;
         content?: unknown[];
@@ -750,6 +763,7 @@ export function mapHistoryEntries(entries: unknown[]): ChatEntry[] {
             id: b.id ?? crypto.randomUUID(), kind: "tool",
             toolCallId: b.id, toolName: b.name, args: b.arguments,
             status: "done", result: null,
+            startedAt: parseTs(e.timestamp),
           });
         }
       }
@@ -775,6 +789,7 @@ export function mapHistoryEntries(entries: unknown[]): ChatEntry[] {
         ...result[idx],
         status: msg.isError ? "error" : "done",
         result: { content: msg.content, details: msg.details },
+        endedAt: parseTs(e.timestamp),
       };
     }
   }
