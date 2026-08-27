@@ -53,21 +53,24 @@ struct SubAgg {
 }
 
 /// 单文件聚合快照 (一个 jsonl = 一个会话)
-struct FileAgg {
+/// behavior: 行为统计聚合 (轮/工具/thinking/重试)——与 token 同一遍行扫描产出,
+/// 见 behavior_stats.rs 头部口径注释
+pub(crate) struct FileAgg {
     /// 增量守卫: 两者任一不匹配即触发该文件重扫 (append-only 场景 mtime 必变,
     /// size 兜底防 mtime 粒度/时钟异常)
     mtime_nanos: i128,
     size_bytes: u64,
     /// 文件级信息 (session 头权威来源)
-    cwd: String,
-    file_name: String,
-    session_id: String,
+    pub(crate) cwd: String,
+    pub(crate) file_name: String,
+    pub(crate) session_id: String,
+    pub(crate) behavior: crate::behavior_stats::FileBehavior,
     sub: BTreeMap<(String, String), SubAgg>,
 }
 
 /// 全局索引: 只增改删, 查询时全量 fold (几百条记录, 微秒级)
-struct TokenIndex {
-    files: BTreeMap<PathBuf, FileAgg>,
+pub(crate) struct TokenIndex {
+    pub(crate) files: BTreeMap<PathBuf, FileAgg>,
 }
 
 static TOKEN_INDEX: OnceLock<Mutex<TokenIndex>> = OnceLock::new();
@@ -101,7 +104,8 @@ fn parse_usage(v: &Value) -> Option<(u64, u64, u64, u64, u64, f64)> {
 }
 
 /// 扫描单个会话文件, 产出聚合快照; 无 session 头返回 None (该文件不入索引)
-fn scan_file(path: &Path) -> Option<FileAgg> {
+/// pub(crate): behavior_stats 测试与冒烟核对真实数据用
+pub(crate) fn scan_file(path: &Path) -> Option<FileAgg> {
     use std::io::BufRead;
     let metadata = std::fs::metadata(path).ok()?;
     let mtime_nanos = metadata
@@ -116,6 +120,7 @@ fn scan_file(path: &Path) -> Option<FileAgg> {
     let mut session_id = String::new();
     let mut cwd = String::new();
     let mut sub: BTreeMap<(String, String), SubAgg> = BTreeMap::new();
+    let mut behavior_scanner = crate::behavior_stats::BehaviorScanner::new();
     for line in reader.lines() {
         let Ok(line) = line else { break };
         if line.trim().is_empty() {
@@ -124,6 +129,9 @@ fn scan_file(path: &Path) -> Option<FileAgg> {
         let Ok(v) = serde_json::from_str::<Value>(&line) else {
             continue;
         };
+        // 行为扫描必须逐行无遗漏: token 分支内有多个 continue (无 usage/非 assistant),
+        // 因此 feed 放在 match 之前——行为口径不依赖 usage 字段
+        behavior_scanner.feed(&v);
         match v.get("type").and_then(|t| t.as_str()) {
             // session 头: id + 项目路径的权威来源 (目录名是 pi 有损编码, 不可信)
             Some("session") => {
@@ -223,6 +231,7 @@ fn scan_file(path: &Path) -> Option<FileAgg> {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default(),
         session_id,
+        behavior: behavior_scanner.finish(),
         sub,
     })
 }
@@ -293,6 +302,17 @@ fn ensure_index() {
 /// 冷启动预热: lib.rs setup 里后台线程调用 (进程内首次全量建索引, 1~2s)
 pub fn prewarm() {
     ensure_index();
+}
+
+/// 索引只读访问入口: ensure_index (增量守卫) + 持锁 fold。
+/// 行为统计等其它查询共用同一索引, 一律经此入口 (锁中毒对齐 into_inner 模式)
+pub(crate) fn with_index<R>(f: impl FnOnce(&TokenIndex) -> R) -> R {
+    ensure_index();
+    let guard = match token_index().lock() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    f(&guard)
 }
 
 /// 会话删除联动: delete_session_file 成功后从索引移除, 避免残留导致统计虚高
