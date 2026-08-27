@@ -5,6 +5,7 @@ mod search;
 mod git;
 mod session_fs;
 mod skins;
+mod subagent_fleet;
 mod token_stats;
 
 use pi_runtime::PiRuntime;
@@ -421,6 +422,7 @@ pub fn run() {
             token_stats::get_token_stats,
             behavior_stats::get_behavior_stats, behavior_stats::get_session_behavior,
             skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
+            subagent_fleet::list_fleet_runs, subagent_fleet::read_fleet_run_detail,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
