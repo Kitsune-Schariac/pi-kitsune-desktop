@@ -4,6 +4,11 @@ import {
   ArrowDownToLine, ArrowUpFromLine, Coins, Database, DatabaseZap,
   DollarSign, FolderKanban, Loader2, MessageSquare, AlertCircle,
 } from "lucide-react";
+import { StatsFilterBar, projectLabel } from "./StatsFilterBar";
+import {
+  resolveQueryBounds,
+  useStatsFilterStore,
+} from "../../store/statsFilter";
 
 // ---- 后端 get_token_stats 返回结构 ----
 interface TokenStatsResult {
@@ -24,34 +29,16 @@ interface TokenStatsResult {
   filters: { projects: string[]; providers: string[]; models: string[] };
 }
 
-type TimeRange = "today" | "7d" | "30d" | "all";
-
-// 快捷时间范围 → [start, end] 完整 ISO (start 含当天零点, end 取次日零点, 后端按字典序含两端比较)
-function rangeBounds(range: TimeRange): { start: string | null; end: string | null } {
-  if (range === "all") return { start: null, end: null };
-  const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const end = new Date(today + 86_400_000).toISOString();
-  const days = range === "today" ? 0 : range === "7d" ? 6 : 29;
-  return { start: new Date(today - days * 86_400_000).toISOString(), end };
-}
-
 // 数值展示: token 用千分位, 花费保留 4 位小数
 const fmt = (n: number) => n.toLocaleString();
 const fmtCost = (n: number) => `$${n.toFixed(4)}`;
 
-// 项目路径取 basename 展示 (全路径放 title), 空路径原样
-function projectLabel(p: string) {
-  const parts = p.split(/[\\/]/).filter(Boolean);
-  return parts.length ? parts[parts.length - 1] : p;
-}
-
 export function TokenStatsPanel() {
-  // ---- 筛选条件 ----
-  const [range, setRange] = useState<TimeRange>("30d");
-  const [customStart, setCustomStart] = useState("");
-  const [customEnd, setCustomEnd] = useState("");
-  const [project, setProject] = useState("");
+  // ---- 筛选条件: 时间+项目走共享 store (与行为统计同口径); provider/model 是本面板私有 ----
+  const range = useStatsFilterStore((s) => s.range);
+  const customStart = useStatsFilterStore((s) => s.customStart);
+  const customEnd = useStatsFilterStore((s) => s.customEnd);
+  const project = useStatsFilterStore((s) => s.project);
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
   // ---- 结果 ----
@@ -65,10 +52,7 @@ export function TokenStatsPanel() {
     const id = ++reqId.current;
     setLoading(true);
     setError(null);
-    const rb = rangeBounds(range);
-    // 自定义起止覆盖快捷范围 (date 转 ISO; end 用当天 23:59:59.999 含当天)
-    const startTime = customStart ? `${customStart}T00:00:00Z` : rb.start;
-    const endTime = customEnd ? `${customEnd}T23:59:59.999Z` : rb.end;
+    const { startTime, endTime } = resolveQueryBounds({ range, customStart, customEnd });
     invoke<TokenStatsResult>("get_token_stats", {
       startTime, endTime,
       project: project || null,
@@ -98,74 +82,29 @@ export function TokenStatsPanel() {
         )}
       </div>
 
-      {/* 筛选栏 */}
-      <div className="space-y-2.5 rounded-xl border border-neutral-200 bg-neutral-50/60 p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* 时间快捷 */}
-          <div className="flex overflow-hidden rounded-lg border border-neutral-200 bg-panel text-xs">
-            {([["today", "今天"], ["7d", "近 7 天"], ["30d", "近 30 天"], ["all", "全部"]] as [TimeRange, string][]).map(([r, label]) => (
-              <button
-                key={r}
-                onClick={() => { setRange(r); setCustomStart(""); setCustomEnd(""); }}
-                className={`px-3 py-1.5 transition ${
-                  range === r && !customStart && !customEnd
-                    ? "bg-primary-500 font-medium text-white"
-                    : "text-neutral-600 hover:bg-neutral-100"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {/* 自定义起止 */}
-          <div className="flex items-center gap-1.5 text-xs text-neutral-500">
-            <input
-              type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)}
-              className="rounded-lg border border-neutral-200 bg-panel px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
-              title="自定义开始日期"
-            />
-            <span>至</span>
-            <input
-              type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)}
-              className="rounded-lg border border-neutral-200 bg-panel px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
-              title="自定义结束日期"
-            />
-          </div>
-        </div>
-        {/* 项目 / 供应商 / 模型 */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <select
-            value={project} onChange={(e) => setProject(e.target.value)}
-            className="max-w-[220px] rounded-lg border border-neutral-200 bg-panel px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
-            title="按项目筛选"
-          >
-            <option value="">全部项目</option>
-            {(filters?.projects ?? []).map((p) => (
-              <option key={p} value={p} title={p}>{projectLabel(p)}</option>
-            ))}
-          </select>
-          <select
-            value={provider} onChange={(e) => setProvider(e.target.value)}
-            className="rounded-lg border border-neutral-200 bg-panel px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
-            title="按供应商筛选"
-          >
-            <option value="">全部供应商</option>
-            {(filters?.providers ?? []).map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-          <select
-            value={model} onChange={(e) => setModel(e.target.value)}
-            className="rounded-lg border border-neutral-200 bg-panel px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
-            title="按模型筛选"
-          >
-            <option value="">全部模型</option>
-            {(filters?.models ?? []).map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+      {/* 筛选栏: 时间+项目共享组件, provider/model 是本面板私有插槽 */}
+      <StatsFilterBar projects={filters?.projects ?? []}>
+        <select
+          value={provider} onChange={(e) => setProvider(e.target.value)}
+          className="rounded-lg border border-neutral-200 bg-panel px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
+          title="按供应商筛选"
+        >
+          <option value="">全部供应商</option>
+          {(filters?.providers ?? []).map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+        <select
+          value={model} onChange={(e) => setModel(e.target.value)}
+          className="rounded-lg border border-neutral-200 bg-panel px-2 py-1.5 text-neutral-700 outline-none focus:border-primary-400"
+          title="按模型筛选"
+        >
+          <option value="">全部模型</option>
+          {(filters?.models ?? []).map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+      </StatsFilterBar>
       {/* 汇总卡片 */}
       {summary && (
         <div className="grid grid-cols-4 gap-2.5">

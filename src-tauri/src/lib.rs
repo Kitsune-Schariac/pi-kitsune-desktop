@@ -1,4 +1,5 @@
 mod capture;
+mod behavior_stats;
 mod pi_runtime;
 mod search;
 mod git;
@@ -418,6 +419,7 @@ pub fn run() {
             git::git_stage, git::git_unstage, git::git_commit, git::git_checkout,
             capture::capture_screenshot,
             token_stats::get_token_stats,
+            behavior_stats::get_behavior_stats, behavior_stats::get_session_behavior,
             skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
         ])
         .on_window_event(|window, event| {
