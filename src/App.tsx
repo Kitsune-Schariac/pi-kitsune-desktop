@@ -8,13 +8,15 @@ import { EmptyState, ProjectCard } from "./components/EmptyState";
 import { ChaosLoader } from "./components/ChaosLoader";
 import { SettingsWindow } from "./components/settings/SettingsWindow";
 import { GitSidebarPanel } from "./components/GitSidebarPanel";
+import { FleetSidebarPanel } from "./components/FleetSidebarPanel";
 import { SkillsPanel } from "./components/panels/SkillsPanel";
 import { PackagesPanel } from "./components/panels/PackagesPanel";
 import { NotificationToasts, UiRequestModal } from "./components/UiRequestModal";
 import { QueueIndicator } from "./components/QueueIndicator";
 import { useThemeStore } from "./store/theme";
 import { useGitStore } from "./store/git";
-import { Loader2, X, GitBranch } from "lucide-react";
+import { useFleetStore } from "./store/fleet";
+import { Loader2, X, GitBranch, Radar } from "lucide-react";
 
 export type PanelKind = "skills" | "packages" | "settings" | null;
 
@@ -38,7 +40,11 @@ export default function App() {
   const gitStatus = useGitStore((s) => (cwd ? s.statusByCwd[cwd] ?? null : null));
   const gitError = useGitStore((s) => (cwd ? s.errorByCwd[cwd] ?? null : null));
   const loadGitStatus = useGitStore((s) => s.loadStatus);
+  // 舰队药丸: 活动数 (App 挂载时 refresh 一次拿初始快照; 面板打开才 2s 高频轮询, 此处不轮询)
+  const fleetActiveCount = useFleetStore((s) => s.runs.filter((r) => r.active).length);
+  const fleetRunCount = useFleetStore((s) => s.runs.length);
   const [gitSidebarOpen, setGitSidebarOpen] = useState(false);
+  const [fleetSidebarOpen, setFleetSidebarOpen] = useState(false);
 
   const [panel, setPanel] = useState<PanelKind>(null);
   // 空状态: 项目选择器的选中值 (InputBar 发送时自动建会话用)
@@ -51,6 +57,20 @@ export default function App() {
     // 主题皮肤系统: 拉皮肤列表 + 恢复持久化 + 应用当前主题 (模块级防重入)
     useThemeStore.getState().init();
   }, [loadProjects]);
+
+  // 舰队药丸初始快照: App 挂载拉一次 runs 给药丸数据 (PRD R4: 后台 run 在 GUI 重启后仍可被发现)
+  useEffect(() => {
+    void useFleetStore.getState().refresh();
+  }, []);
+
+  // ToolCallCard 联动按钮 → fleet store panelRequest 递增 → 开舰队面板 + 关 Git (互斥让位)
+  const fleetPanelRequest = useFleetStore((s) => s.panelRequest);
+  useEffect(() => {
+    if (fleetPanelRequest > 0) {
+      setGitSidebarOpen(false);
+      setFleetSidebarOpen(true);
+    }
+  }, [fleetPanelRequest]);
 
   // Git 状态拉取 (原 Sidebar 职责迁入): cwd 变化拉一次 (药丸常驻显示需要 status)。
   // diff 视图归侧栏内部管理, cwd 变化侧栏自行重置回 list (design 三-3.3), App 不再持有 diffTarget
@@ -69,7 +89,7 @@ export default function App() {
     // 非 git 仓库 → 灰显, 仍可点击展开 (PRD: 安静降级不报错, 侧栏内有提示)
     gitPill = (
       <button
-        onClick={() => setGitSidebarOpen((v) => !v)}
+        onClick={() => { if (gitSidebarOpen) setGitSidebarOpen(false); else { setFleetSidebarOpen(false); setGitSidebarOpen(true); } }}
         className={`rounded-full border px-2.5 py-1 text-xs text-neutral-400 transition hover:text-neutral-600 ${
           gitSidebarOpen ? "border-neutral-300" : "border-neutral-200"
         }`}
@@ -82,7 +102,7 @@ export default function App() {
     const changeCount = gitStatus?.files.length ?? 0;
     gitPill = (
       <button
-        onClick={() => setGitSidebarOpen((v) => !v)}
+        onClick={() => { if (gitSidebarOpen) setGitSidebarOpen(false); else { setFleetSidebarOpen(false); setGitSidebarOpen(true); } }}
         className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition tabular-nums ${
           gitSidebarOpen
             ? "border-[rgb(var(--primary-400))] text-[rgb(var(--primary-600))]"
@@ -94,6 +114,25 @@ export default function App() {
         <span className="max-w-[120px] truncate">{gitStatus?.branch ?? "—"}</span>
         <span className="text-neutral-300">·</span>
         <span>{changeCount}</span>
+      </button>
+    );
+  }
+
+  // 舰队药丸: 有 subagent 产物就显示入口 (活动数>0 带数字, 0 仅入口看历史, 满足 R2 面板列活动+历史)
+  let fleetPill: ReactNode = null;
+  if (fleetRunCount > 0) {
+    fleetPill = (
+      <button
+        onClick={() => { if (fleetSidebarOpen) setFleetSidebarOpen(false); else { setGitSidebarOpen(false); setFleetSidebarOpen(true); } }}
+        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition tabular-nums ${
+          fleetSidebarOpen
+            ? "border-[rgb(var(--primary-400))] text-[rgb(var(--primary-600))]"
+            : "border-neutral-200 text-neutral-500 hover:text-neutral-700"
+        }`}
+        title={fleetActiveCount > 0 ? `${fleetActiveCount} 个 subagent 活动中` : "查看 subagent 运行产物"}
+      >
+        <Radar className="h-3.5 w-3.5" />
+        <span>舰队{fleetActiveCount > 0 ? ` ${fleetActiveCount}` : ""}</span>
       </button>
     );
   }
@@ -136,6 +175,7 @@ export default function App() {
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {fleetPill}
                 {gitPill}
                 <QueueIndicator steering={active.steeringQueue} followUp={active.followUpQueue} />
                 <button
@@ -171,6 +211,9 @@ export default function App() {
       {/* Git 侧栏: main 的 flex 兄弟 (展开时右让 340px, 收起恢复全宽, 由 flex 自然完成) */}
       {active && gitSidebarOpen && (
         <GitSidebarPanel cwd={active.cwd} onClose={() => setGitSidebarOpen(false)} />
+      )}
+      {active && fleetSidebarOpen && (
+        <FleetSidebarPanel onClose={() => setFleetSidebarOpen(false)} />
       )}
 
       {/* 扩展 UI 请求弹窗: 只渲染活跃会话的队头请求 (FIFO, 关闭后自动弹下一个) */}
