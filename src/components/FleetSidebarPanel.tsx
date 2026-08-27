@@ -7,11 +7,12 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Radar, Bot, Cpu, Clock, Coins, ListChecks, ChevronRight, ChevronLeft,
-  X, RefreshCw, Loader2, AlertCircle, FileText,
+  X, RefreshCw, Loader2, AlertCircle, FileText, Database, MessageSquareText, ChevronDown,
 } from "lucide-react";
-import { useFleetStore } from "../store/fleet";
+import { useFleetStore, toArtifactEntry, toStreamEntry, parseSessionUuid, type FleetEntry } from "../store/fleet";
 import type { FleetRunSummary, FleetStepSummary } from "../store/fleet";
-import { mapHistoryEntries, type ChatEntry } from "../store/session";
+import { useSessionStore, mapHistoryEntries, type ChatEntry } from "../store/session";
+import { useFleetStreamEntries } from "../hooks/useFleetStreamEntries";
 import { MessageItem } from "./MessageItem";
 import { ToolCallCard } from "./ToolCallCard";
 import { NotificationItem } from "./NotificationItem";
@@ -97,6 +98,15 @@ export function FleetSidebarPanel({ onClose }: Props) {
   const detailDir = useFleetStore((s) => s.detailDir);
   const openRunDetail = useFleetStore((s) => s.openRunDetail);
   const closeRunDetail = useFleetStore((s) => s.closeRunDetail);
+  const scope = useFleetStore((s) => s.scope);
+  const setScope = useFleetStore((s) => s.setScope);
+  // 当前会话 sessionPath (get_state 返回的主会话 jsonl 路径) → 解析 uuid 做会话锚定 (design §3)
+  const sessionPath = useSessionStore((s) => {
+    const id = s.activeSessionId;
+    return id ? s.sessions[id]?.sessionPath : null;
+  });
+  // stream 条目: 当前会话 entries 纯派生 (hook + useMemo, 不进 store/不扫文件)
+  const streamEntries = useFleetStreamEntries();
 
   const [view, setView] = useState<View>({ kind: "fleet" });
   const [width, setWidth] = useState(DEFAULT_W);
@@ -174,11 +184,38 @@ export function FleetSidebarPanel({ onClose }: Props) {
     () => (view.kind === "run" ? runs.find((r) => r.dir === view.dir) ?? null : null),
     [runs, view],
   );
-  const activeRuns = useMemo(() => runs.filter((r) => r.active), [runs]);
-  const historyRuns = useMemo(
-    () => runs.filter((r) => !r.active).slice(0, 10), // 历史区取最近 10 个
-    [runs],
-  );
+  // 会话锚定 uuid (当前会话主会话 jsonl 路径解析), 空串 = 无会话/未落盘 → 退化全部视图
+  const currentUuid = useMemo(() => parseSessionUuid(sessionPath), [sessionPath]);
+  // 双源合并 (design §3: 合并点在面板 useMemo, stream=hook 派生, artifact=store 状态)。
+  // scope=current: stream 全保留 + 本会话 artifact; 非本会话 running artifact → otherActive 折叠行。
+  // scope=all 或无会话 (currentUuid 空): artifact 全可见 + stream (跨会话 stream 不扫, 仅本会话)。
+  // 排序: running 优先 (startedAt 降序), 其余 startedAt 降序
+  const merged = useMemo(() => {
+    const artifactEntries = runs.map((r) =>
+      toArtifactEntry(r, currentUuid !== "" && r.session_id === currentUuid),
+    );
+    const streamMapped = streamEntries.map((s) => toStreamEntry(s, now));
+    let visible: FleetEntry[];
+    const otherActive: FleetEntry[] = [];
+    if (scope === "current" && currentUuid !== "") {
+      visible = [...streamMapped, ...artifactEntries].filter(
+        (e) => e.source === "stream" || e.isCurrentSession,
+      );
+      // 非本会话的 running artifact 收进折叠桶 (不进主列表, 不接下钻)
+      for (const e of artifactEntries) {
+        if (!e.isCurrentSession && e.state === "running") otherActive.push(e);
+      }
+    } else {
+      visible = [...streamMapped, ...artifactEntries];
+    }
+    visible.sort((a, b) => {
+      if (a.state === "running" && b.state !== "running") return -1;
+      if (b.state === "running" && a.state !== "running") return 1;
+      return b.startedAt - a.startedAt;
+    });
+    otherActive.sort((a, b) => b.startedAt - a.startedAt);
+    return { entries: visible, otherActive };
+  }, [runs, streamEntries, scope, currentUuid, now]);
 
   return (
     <>
@@ -202,6 +239,7 @@ export function FleetSidebarPanel({ onClose }: Props) {
         <aside className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-base)/var(--chat-alpha))] shadow-sm">
           {/* header: 三态各异。fleet = 标题+刷新+收起; run = ‹返回+runId+state; subsession = ‹返回+只读横幅 */}
           {view.kind === "fleet" ? (
+            <>
             <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
               <div className="flex min-w-0 items-center gap-1.5">
                 <Radar className="h-4 w-4 shrink-0 text-neutral-500" />
@@ -228,6 +266,36 @@ export function FleetSidebarPanel({ onClose }: Props) {
                 </button>
               </div>
             </div>
+            {/* segmented control: 本会话 / 全部 (design §3 会话锚定), 仅 fleet 态显示 */}
+            {/* 高亮用生效态: scope=current 但 sessionPath 未就绪时实际渲染全部,
+                UI 必须反映生效态而非选择态 (review SF2); 点击仍写 scope, 就绪后自动回到用户选择 */}
+            <div className="flex items-center gap-1 border-b border-neutral-200 px-3 py-2">
+              <div className="flex rounded-lg border border-[rgb(var(--border-subtle))] p-0.5">
+                <button
+                  onClick={() => setScope("current")}
+                  className={`rounded-md px-3 py-1 text-xs transition ${
+                    scope === "current" && currentUuid !== ""
+                      ? "bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] text-neutral-800"
+                      : "text-neutral-500 hover:text-neutral-700"
+                  }`
+                }
+                >
+                  本会话
+                </button>
+                <button
+                  onClick={() => setScope("all")}
+                  className={`rounded-md px-3 py-1 text-xs transition ${
+                    scope === "all"
+                      ? "bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] text-neutral-800"
+                      : "text-neutral-500 hover:text-neutral-700"
+                  }`
+                }
+                >
+                  全部
+                </button>
+              </div>
+            </div>
+            </>
           ) : view.kind === "run" ? (
             <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2.5">
               <button
@@ -277,9 +345,9 @@ export function FleetSidebarPanel({ onClose }: Props) {
           <div className="flex-1 overflow-y-auto">
             {view.kind === "fleet" ? (
               <FleetList
-                runs={runs}
-                activeRuns={activeRuns}
-                historyRuns={historyRuns}
+                entries={merged.entries}
+                otherActive={merged.otherActive}
+                scope={scope}
                 lastError={lastError}
                 now={now}
                 onOpenRun={(dir) => setView({ kind: "run", dir })}
@@ -306,28 +374,35 @@ export function FleetSidebarPanel({ onClose }: Props) {
   );
 }
 
-// --- fleet 态: 活动区 + 历史区 + 空态 ---
+// --- fleet 态: 双源合并列表 (artifact + stream) + 活动区/历史区 + 会话锚定折叠 ---
 
 function FleetList({
-  runs, activeRuns, historyRuns, lastError, now, onOpenRun,
+  entries, otherActive, scope, lastError, now, onOpenRun,
 }: {
-  runs: FleetRunSummary[];
-  activeRuns: FleetRunSummary[];
-  historyRuns: FleetRunSummary[];
+  entries: FleetEntry[];
+  otherActive: FleetEntry[];
+  scope: "current" | "all";
   lastError: string | null;
   now: number;
   onOpenRun: (dir: string) => void;
 }) {
-  // 空态: 0 run 且无错误 → Radar 图标 + 文案 (PRD: 不显示骨架屏)
-  if (runs.length === 0 && !lastError) {
+  // 空态: 0 条目且无错误。scope 分文案 (design R7): 本会话空 → 还没记录; 全部空 → 停泊中
+  if (entries.length === 0 && otherActive.length === 0 && !lastError) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-16 text-center">
         <Radar className="h-8 w-8 text-neutral-300" />
-        <p className="text-sm text-neutral-400">舰队停泊中</p>
-        <p className="text-xs text-neutral-400">没有发现 subagent 运行产物</p>
+        <p className="text-sm text-neutral-400">
+          {scope === "current" ? "本会话还没有 subagent 记录" : "舰队停泊中"}
+        </p>
+        <p className="text-xs text-neutral-400">
+          {scope === "current" ? "派发子代理后会在这里显示" : "没有发现 subagent 运行产物"}
+        </p>
       </div>
     );
   }
+  const active = entries.filter((e) => e.state === "running");
+  const history = entries.filter((e) => e.state !== "running").slice(0, 10);
+  const historyTotal = entries.length - active.length;
   return (
     <div>
       {lastError && (
@@ -336,24 +411,168 @@ function FleetList({
           产物目录不可达 · 已降级为空
         </div>
       )}
-      {activeRuns.length > 0 && (
+      {active.length > 0 && (
         <div className="py-1">
           <div className="px-4 py-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
-            活动中 ({activeRuns.length})
+            活动中 ({active.length})
           </div>
-          {activeRuns.map((r) => (
-            <RunCard key={r.dir} run={r} now={now} active onOpen={onOpenRun} />
+          {active.map((e) => (
+            <FleetEntryCard key={e.key} entry={e} now={now} onOpenRun={onOpenRun} />
           ))}
         </div>
       )}
-      {historyRuns.length > 0 && (
+      {history.length > 0 && (
         <div className="py-1">
           <div className="px-4 py-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
-            历史 ({historyRuns.length}{runs.length - activeRuns.length > 10 ? ` / ${runs.length - activeRuns.length}` : ""})
+            历史 ({history.length}{historyTotal > 10 ? ` / ${historyTotal}` : ""})
           </div>
-          {historyRuns.map((r) => (
-            <RunRow key={r.dir} run={r} onOpen={onOpenRun} />
+          {history.map((e) => (
+            <FleetEntryRow key={e.key} entry={e} onOpenRun={onOpenRun} />
           ))}
+        </div>
+      )}
+      {otherActive.length > 0 && <OtherActiveFold entries={otherActive} now={now} />}
+    </div>
+  );
+}
+
+// 活动态卡片: 分流 artifact (复用 v1 RunCard) / stream (新 StreamCard)
+function FleetEntryCard({
+  entry, now, onOpenRun,
+}: {
+  entry: FleetEntry;
+  now: number;
+  onOpenRun: (dir: string) => void;
+}) {
+  if (entry.source === "artifact" && entry.run) {
+    return <RunCard run={entry.run} now={now} active onOpen={onOpenRun} />;
+  }
+  return <StreamCard entry={entry} />;
+}
+
+// 历史态紧凑行: 分流 artifact (复用 v1 RunRow) / stream (新 StreamRow)
+function FleetEntryRow({
+  entry, onOpenRun,
+}: {
+  entry: FleetEntry;
+  onOpenRun: (dir: string) => void;
+}) {
+  if (entry.source === "artifact" && entry.run) {
+    return <RunRow run={entry.run} onOpen={onOpenRun} />;
+  }
+  return <StreamRow entry={entry} />;
+}
+
+// stream 共享展开抽屉: prompt 全文 + result 全文 (原地展开, max-height 过渡, 不弹层)
+function StreamDrawer({ entry, expanded }: { entry: FleetEntry; expanded: boolean }) {
+  const call = entry.call;
+  if (!call) return null;
+  return (
+    <div className={`overflow-hidden transition-[max-height] duration-200 ${expanded ? "max-h-[600px]" : "max-h-0"}`}>
+      <div className="mt-1 space-y-2 border-t border-[rgb(var(--border-subtle))] pt-2">
+        <div>
+          <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-400">Prompt</div>
+          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 font-mono text-[11px] leading-relaxed text-neutral-600">
+            {call.fullPrompt || "—"}
+          </pre>
+        </div>
+        {call.fullResult && (
+          <div>
+            <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-400">结果</div>
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 font-mono text-[11px] leading-relaxed text-neutral-600">
+              {call.fullResult}
+            </pre>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// stream 活动态卡片: 来源徽章 (MessageSquareText) + 呼吸灯 + 耗时 + prompt 摘要 + 展开抽屉
+function StreamCard({ entry }: { entry: FleetEntry }) {
+  const [expanded, setExpanded] = useState(false);
+  const call = entry.call!;
+  return (
+    <div className="mx-2 mb-1 flex w-[calc(100%-1rem)] flex-col gap-1 rounded-lg border border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] px-3 py-2 transition hover:border-[rgb(var(--border-strong))]">
+      <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-2 text-left">
+        <StatusDot state={entry.state} active={entry.state === "running"} />
+        <span title="对话派发" className="shrink-0"><MessageSquareText className="h-3.5 w-3.5 text-neutral-400" /></span>
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-neutral-800">{call.agent}</span>
+        <span className="shrink-0 font-mono text-xs tabular-nums text-neutral-500">
+          {entry.durationMs != null ? fmtDuration(entry.durationMs) : "—"}
+        </span>
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+        )}
+      </button>
+      <div className="truncate text-[11px] text-neutral-500" title={call.prompt}>
+        {call.prompt || (entry.state === "running" ? "运行中…" : "—")}
+      </div>
+      <StreamDrawer entry={entry} expanded={expanded} />
+    </div>
+  );
+}
+
+// stream 历史态紧凑行: 徽章 + 状态灯 + agent + 耗时 + 展开抽屉 (chevron 旋转)
+function StreamRow({ entry }: { entry: FleetEntry }) {
+  const [expanded, setExpanded] = useState(false);
+  const call = entry.call!;
+  return (
+    <div className="flex flex-col">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-2 px-4 py-1.5 text-left text-xs transition hover:bg-neutral-200/60"
+      >
+        <StatusDot state={entry.state} active={false} />
+        <span title="对话派发" className="shrink-0"><MessageSquareText className="h-3 w-3 text-neutral-400" /></span>
+        <span className="min-w-0 flex-1 truncate text-neutral-600">{call.agent}</span>
+        <span className="shrink-0 font-mono tabular-nums text-neutral-400">
+          {entry.durationMs != null ? fmtDuration(entry.durationMs) : "—"}
+        </span>
+        {expanded ? (
+          <ChevronDown className="h-3 w-3 shrink-0 text-neutral-400" />
+        ) : (
+          <ChevronRight className="h-3 w-3 shrink-0 text-neutral-400" />
+        )}
+      </button>
+      <StreamDrawer entry={entry} expanded={expanded} />
+    </div>
+  );
+}
+
+// 其他会话活动折叠行: 本会话视图下非本会话 running artifact 折叠为摘要 (design R5)
+// N=0 不渲染; 展开为紧凑列表 (只读, 不接下钻 → 切「全部」查看详情)
+function OtherActiveFold({ entries, now }: { entries: FleetEntry[]; now: number }) {
+  const [expanded, setExpanded] = useState(false);
+  if (entries.length === 0) return null; // 调用方已保证, 二次防御
+  return (
+    <div className="py-1">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-1.5 px-4 py-1.5 text-left text-[11px] text-neutral-500 transition hover:bg-neutral-200/60"
+      >
+        <ChevronRight className={`h-3 w-3 shrink-0 transition ${expanded ? "rotate-90" : ""}`} />
+        <span>其他会话 {entries.length} 个活动中</span>
+      </button>
+      {expanded && (
+        <div className="pb-1">
+          {entries.map((e) => (
+            <div key={e.key} className="flex items-center gap-2 px-6 py-1 text-xs">
+              <StatusDot state={e.state} active />
+              <span title="后台产物" className="shrink-0"><Database className="h-3 w-3 text-neutral-400" /></span>
+              <span className="min-w-0 flex-1 truncate text-neutral-600">{e.agent}</span>
+              <span className="shrink-0 font-mono tabular-nums text-neutral-400">
+                {e.run ? fmtDuration(e.run.active ? Math.max(0, now - e.run.started_at) : e.run.duration_ms) : "—"}
+              </span>
+              <span className="shrink-0 truncate text-neutral-400" title={e.run?.cwd}>
+                {e.run?.cwd.split(/[\\/]/).pop()}
+              </span>
+            </div>
+          ))}
+          <div className="px-6 py-1 text-[10px] text-neutral-400">切到「全部」视图查看详情</div>
         </div>
       )}
     </div>
@@ -381,7 +600,7 @@ function RunCard({
       <div className="flex items-center gap-2">
         <StatusDot state={run.state} active={run.active} />
         <span className="flex min-w-0 flex-1 items-center gap-1 text-xs font-medium text-neutral-800">
-          <Bot className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+          <span title="后台产物" className="shrink-0"><Database className="h-3.5 w-3.5 text-neutral-400" /></span>
           <span className="truncate">{currentStep?.agent || run.run_id.slice(0, 8)}</span>
         </span>
         <span className="shrink-0 font-mono text-xs tabular-nums text-neutral-500">{fmtDuration(liveDur)}</span>
@@ -440,7 +659,7 @@ function RunRow({ run, onOpen }: { run: FleetRunSummary; onOpen: (dir: string) =
       </span>
       {lastStep?.agent && (
         <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-neutral-600">
-          <Bot className="h-3 w-3 shrink-0 text-neutral-400" />
+          <span title="后台产物" className="shrink-0"><Database className="h-3 w-3 text-neutral-400" /></span>
           <span className="truncate">{lastStep.agent}</span>
         </span>
       )}

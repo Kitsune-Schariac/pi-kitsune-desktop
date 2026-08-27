@@ -4,6 +4,7 @@
 // invoke 失败只置 lastError 静默降级, 不弹错误 (PRD R4: 用户没装/没用 subagent 是正常状态)。
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import type { StreamEntry } from "../lib/fleetStream";
 
 // Rust 侧 (subagent_fleet.rs) 结构体无 serde rename_all, 字段 snake_case 原样透传
 // (与 session_fs / git 前端约定一致)。前端类型必须对齐下划线字段, 否则拿到 undefined。
@@ -38,6 +39,8 @@ export interface FleetRunSummary {
   active: boolean;
   steps: FleetStepSummary[];
   session_file: string; // 顶层 sessionFile (step 缺失时下钻兜底)
+  // 主会话 uuid (从 status.json sessionId 路径解析, 会话锚定用, 空串=无法归属)
+  session_id: string;
 }
 
 export interface FleetRunDetail {
@@ -54,6 +57,9 @@ interface FleetStore {
   detailLoading: boolean;
   detailError: string | null;
   // ToolCallCard 联动按钮触发: 递增计数器, App 订阅后开舰队面板 (与 Git 面板互斥)
+  // 视图范围: 本会话 / 全部, 默认本会话 (会话锚定, design §3)
+  scope: "current" | "all";
+  setScope: (scope: "current" | "all") => void;
   panelRequest: number;
   startPolling: () => void;
   stopPolling: () => void;
@@ -80,6 +86,8 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
   detailLoading: false,
   detailError: null,
   panelRequest: 0,
+  scope: "current",
+  setScope: (scope) => set({ scope }),
 
   startPolling: () => {
     pollRefCount++;
@@ -132,3 +140,90 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
   // ToolCallCard 「在舰队中查看」按钮调: 递增计数器, App effect 订阅后开面板 + 关 Git
   requestOpenPanel: () => set((s) => ({ panelRequest: s.panelRequest + 1 })),
 }));
+
+// --- 双源统一视图模型 (design §1) + 会话锚定辅助 (design §3) ---
+
+export type FleetSource = "artifact" | "stream";
+
+export interface FleetEntry {
+  key: string; // 唯一: `artifact:<run_id>` / `stream:<tool_call_id>`
+  source: FleetSource;
+  agent: string;
+  state: "running" | "completed" | "failed" | "unknown";
+  startedAt: number;
+  endedAt?: number;
+  durationMs?: number; // running 时 = now - startedAt (面板 tick 驱动); completed 用 endedAt - startedAt
+  isCurrentSession: boolean; // artifact: session_id 匹配; stream: 恒 true
+  // artifact 独有: v1 run 摘要整体引用 (详情/子会话下钻复用, 不动 v1 链路)
+  run?: FleetRunSummary;
+  // stream 独有: 推导出的前台子代理条目 (含 prompt/resultSummary/full*)
+  call?: StreamEntry;
+}
+
+// 终态字符串 → FleetEntry.state (artifact run.state 是 stringly-typed, 宽松映射, 与 Rust TERMINAL_STATES 对齐)
+const ARTIFACT_TERMINAL = new Set([
+  "complete", "completed", "success", "succeeded", "done", "finished",
+  "cancelled", "canceled", "stopped", // 与 Rust TERMINAL_STATES 对齐 (review SF1)
+]);
+const ARTIFACT_FAILED = new Set(["failed", "error", "aborted"]);
+
+// 从主会话 jsonl 文件路径解析出 uuid (与 Rust parse_session_uuid 对称)。
+// 文件名 `<ts>_<uuid>.jsonl`, 取最后 `_` 后段去 `.jsonl`。缺失/畸形 → 空串 (宁漏勿误)
+export function parseSessionUuid(path: string | null | undefined): string {
+  if (!path) return "";
+  const stem = path.split(/[\\/]/).pop() ?? path;
+  const idx = stem.lastIndexOf("_");
+  if (idx < 0) return "";
+  const after = stem.slice(idx + 1);
+  return after.endsWith(".jsonl") ? after.slice(0, -6) : "";
+}
+
+// artifact run → FleetEntry (会话锚定: isCurrentSession 由面板用 parseSessionUuid 比对后传入)
+export function toArtifactEntry(
+  run: FleetRunSummary,
+  isCurrentSession: boolean,
+): FleetEntry {
+  const state: FleetEntry["state"] = run.active
+    ? "running"
+    : ARTIFACT_FAILED.has(run.state)
+      ? "failed"
+      : ARTIFACT_TERMINAL.has(run.state)
+        ? "completed"
+        : "unknown";
+  // agent 取末步 (最近活动的子 agent), 缺失用 runId 前 8 位
+  const lastStep = run.steps[run.steps.length - 1];
+  return {
+    key: `artifact:${run.run_id}`,
+    source: "artifact",
+    agent: lastStep?.agent || run.run_id.slice(0, 8),
+    state,
+    startedAt: run.started_at,
+    endedAt: run.ended_at || undefined,
+    durationMs: run.duration_ms || undefined,
+    isCurrentSession,
+    run,
+  };
+}
+
+// stream 条目 → FleetEntry (isCurrentSession 恒 true; durationMs 由面板 now tick 驱动)
+export function toStreamEntry(s: StreamEntry, now: number): FleetEntry {
+  const durationMs =
+    s.state === "running"
+      ? s.startedAt
+        ? Math.max(0, now - s.startedAt)
+        : undefined
+      : s.startedAt && s.endedAt
+        ? s.endedAt - s.startedAt
+        : undefined;
+  return {
+    key: s.key,
+    source: "stream",
+    agent: s.agent,
+    state: s.state,
+    startedAt: s.startedAt,
+    endedAt: s.endedAt,
+    durationMs,
+    isCurrentSession: true,
+    call: s,
+  };
+}

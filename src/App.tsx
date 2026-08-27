@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSessionStore } from "./store/session";
 import { useProjectsStore } from "./store/projects";
 import { MessageList } from "./components/MessageList";
@@ -15,7 +15,8 @@ import { NotificationToasts, UiRequestModal } from "./components/UiRequestModal"
 import { QueueIndicator } from "./components/QueueIndicator";
 import { useThemeStore } from "./store/theme";
 import { useGitStore } from "./store/git";
-import { useFleetStore } from "./store/fleet";
+import { useFleetStore, parseSessionUuid } from "./store/fleet";
+import { useFleetStreamEntries } from "./hooks/useFleetStreamEntries";
 import { Loader2, X, GitBranch, Radar } from "lucide-react";
 
 export type PanelKind = "skills" | "packages" | "settings" | null;
@@ -40,9 +41,31 @@ export default function App() {
   const gitStatus = useGitStore((s) => (cwd ? s.statusByCwd[cwd] ?? null : null));
   const gitError = useGitStore((s) => (cwd ? s.errorByCwd[cwd] ?? null : null));
   const loadGitStatus = useGitStore((s) => s.loadStatus);
-  // 舰队药丸: 活动数 (App 挂载时 refresh 一次拿初始快照; 面板打开才 2s 高频轮询, 此处不轮询)
-  const fleetActiveCount = useFleetStore((s) => s.runs.filter((r) => r.active).length);
-  const fleetRunCount = useFleetStore((s) => s.runs.length);
+  // 舰队药丸: 本会话活动数 (stream running + 本会话 artifact running), 无会话退化全局 (design R6)
+  const runs = useFleetStore((s) => s.runs);
+  const fleetRunCount = runs.length;
+  const sessionPath = useSessionStore((s) => {
+    const id = s.activeSessionId;
+    return id ? s.sessions[id]?.sessionPath : null;
+  });
+  const currentUuid = useMemo(() => parseSessionUuid(sessionPath), [sessionPath]);
+  const streamEntries = useFleetStreamEntries();
+  const fleetActiveCount = useMemo(() => {
+    const streamRunning = streamEntries.filter((e) => e.state === "running").length;
+    if (!activeSessionId) {
+      // 无活动会话 → 全局 artifact 活动数 (stream 无来源恒 0)
+      return runs.filter((r) => r.active).length;
+    }
+    if (currentUuid === "") {
+      // 主会话路径未就绪: stream 恒属本会话可计; artifact 归属无法判定, 宁漏勿误不计
+      // (review SF3: 旧写法把全局 artifact 活动混入, 其他会话的活动会错误计入本会话药丸)
+      return streamRunning;
+    }
+    const localArtifactActive = runs.filter(
+      (r) => r.active && r.session_id === currentUuid,
+    ).length;
+    return streamRunning + localArtifactActive;
+  }, [activeSessionId, currentUuid, streamEntries, runs]);
   const [gitSidebarOpen, setGitSidebarOpen] = useState(false);
   const [fleetSidebarOpen, setFleetSidebarOpen] = useState(false);
 
@@ -118,9 +141,9 @@ export default function App() {
     );
   }
 
-  // 舰队药丸: 有 subagent 产物就显示入口 (活动数>0 带数字, 0 仅入口看历史, 满足 R2 面板列活动+历史)
+  // 舰队药丸入口: 有 artifact run 或本会话有 stream 条目就显示 (活动数>0 带数字, 0 仅入口看历史)
   let fleetPill: ReactNode = null;
-  if (fleetRunCount > 0) {
+  if (fleetRunCount > 0 || streamEntries.length > 0) {
     fleetPill = (
       <button
         onClick={() => { if (fleetSidebarOpen) setFleetSidebarOpen(false); else { setGitSidebarOpen(false); setFleetSidebarOpen(true); } }}

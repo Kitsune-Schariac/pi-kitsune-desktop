@@ -50,6 +50,9 @@ pub struct FleetRunSummary {
     pub active: bool,      // 前端分活动区/历史区用
     pub steps: Vec<FleetStepSummary>,
     pub session_file: String, // 顶层 sessionFile (step 缺失时下钻兜底)
+    // 主会话 uuid: 从 status.json 的 sessionId(主会话 jsonl 文件路径)解析, 会话锚定用。
+    // 空串 = 缺失/畸形, 该 run 在「本会话」视图视为不归属, 「全部」仍可见 (R5 宁漏勿误)。
+    pub session_id: String,
 }
 
 #[derive(Serialize)]
@@ -118,6 +121,26 @@ fn derive_duration(v: &Value, started: u64) -> u64 {
         }
     };
     end.saturating_sub(started)
+}
+
+/// 从 status.json 的 sessionId(主会话 jsonl 文件路径)解析出会话 uuid。
+/// 文件名形如 `<timestamp>Z_<uuid>.jsonl`: timestamp 用 `-`/`T`/`Z` 不含 `_`,
+/// uuid 用 `-` 不含 `_`, 故文件名中唯一的 `_` 即 ts/uuid 分隔。取最后一个 `_` 之后、
+/// 去 `.jsonl` 后缀即 uuid。缺失/畸形/非常规文件名 → 空串 (宁漏勿误, 不造半截 uuid 误匹配)。
+fn parse_session_uuid(raw: &str) -> String {
+    // rsplit(['/','\\']).next() 取文件名 (跨平台分隔符, 处理 Windows/Unix 路径)
+    let Some(stem) = raw.rsplit(['/', '\\']).next() else {
+        return String::new();
+    };
+    // rsplit_once('_') 取 ts 之后部分; 无 `_` → 非常规文件名 → 空串
+    let Some((_, uuid_with_ext)) = stem.rsplit_once('_') else {
+        return String::new();
+    };
+    // 必须是 .jsonl 后缀, 否则空串 (防 `a_b.txt` 这类误造 uuid)
+    uuid_with_ext
+        .strip_suffix(".jsonl")
+        .unwrap_or("")
+        .to_string()
 }
 
 fn parse_step(s: &Value) -> Option<FleetStepSummary> {
@@ -200,6 +223,7 @@ fn parse_run(dir: &Path, status: &Value) -> Option<FleetRunSummary> {
         active,
         steps: parse_steps(status.get("steps")),
         session_file: field_str(status, "sessionFile"),
+        session_id: parse_session_uuid(&field_str(status, "sessionId")),
     })
 }
 
@@ -360,6 +384,41 @@ mod tests {
         assert_eq!(st.tokens, 214363);
         assert_eq!(st.recent_output.len(), 5); // 6 行截到末 5
         assert_eq!(st.recent_output.last().unwrap(), "line6");
+        // FULL_STATUS 无 sessionId 字段 → session_id 空串 (R5: 缺失不误匹配)
+        assert_eq!(s.session_id, "");
+    }
+
+    #[test]
+    fn parse_run_extracts_session_id_uuid() {
+        // status.json 的 sessionId 是主会话 jsonl 文件路径, 取文件名 `<ts>_<uuid>.jsonl` 的 uuid 段
+        let v = serde_json::json!({
+            "runId": "r1", "state": "complete",
+            "sessionId": r"C:\Users\u\.pi\agent\sessions\--C--x--\2026-07-13T02-28-02-202Z_019f594d-8c1a-78ac-a11b-188a5cd6cd75.jsonl"
+        });
+        let s = parse_run(Path::new("/tmp/x"), &v).unwrap();
+        assert_eq!(s.session_id, "019f594d-8c1a-78ac-a11b-188a5cd6cd75");
+        // Unix 风格分隔符同样解析
+        let v = serde_json::json!({
+            "runId": "r2", "state": "complete",
+            "sessionId": "/home/u/.pi/agent/sessions/x/2026-08-18T08-24-19-171Z_01a013f8-abe3-7148-8549-e19b7a3a521b.jsonl"
+        });
+        assert_eq!(parse_run(Path::new("/tmp/x"), &v).unwrap().session_id, "01a013f8-abe3-7148-8549-e19b7a3a521b");
+    }
+
+    #[test]
+    fn parse_session_uuid_handles_irregular() {
+        // 正常路径
+        assert_eq!(parse_session_uuid(r"C:\x\2026-07-13T02-28-02-202Z_abc-123.jsonl"), "abc-123");
+        // 空 → 空
+        assert_eq!(parse_session_uuid(""), "");
+        // 无 `_` 分隔
+        assert_eq!(parse_session_uuid("foo.jsonl"), "");
+        // 有 `_` 但非 .jsonl
+        assert_eq!(parse_session_uuid("a_b.txt"), "");
+        // 无扩展名
+        assert_eq!(parse_session_uuid("no_ext"), "");
+        // 末段是目录名 (无合法结构)
+        assert_eq!(parse_session_uuid("/path/to/some_dir"), "");
     }
 
     #[test]
@@ -422,6 +481,7 @@ mod tests {
             started_at: 0, last_update: lu, ended_at: 0, duration_ms: 0, cwd: "".into(),
             total_tokens: 0, total_cost_usd: 0.0, turn_count: 0, tool_count: 0,
             error: "".into(), current_step: 0, active, steps: vec![], session_file: "".into(),
+            session_id: "".into(),
         };
         let mut runs = vec![
             mk("old_hist", false, 100),
