@@ -7,6 +7,7 @@ mod session_fs;
 mod skins;
 mod subagent_fleet;
 mod token_stats;
+mod trellis_tasks;
 
 use pi_runtime::PiRuntime;
 use std::collections::HashMap;
@@ -423,6 +424,7 @@ pub fn run() {
             behavior_stats::get_behavior_stats, behavior_stats::get_session_behavior,
             skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
             subagent_fleet::list_fleet_runs, subagent_fleet::read_fleet_run_detail,
+            trellis_tasks::list_trellis_tasks, trellis_tasks::read_trellis_task_doc,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
