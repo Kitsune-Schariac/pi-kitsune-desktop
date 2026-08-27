@@ -9,6 +9,7 @@ import { ChaosLoader } from "./components/ChaosLoader";
 import { SettingsWindow } from "./components/settings/SettingsWindow";
 import { GitSidebarPanel } from "./components/GitSidebarPanel";
 import { FleetSidebarPanel } from "./components/FleetSidebarPanel";
+import { TrellisSidebarPanel } from "./components/TrellisSidebarPanel";
 import { SkillsPanel } from "./components/panels/SkillsPanel";
 import { PackagesPanel } from "./components/panels/PackagesPanel";
 import { NotificationToasts, UiRequestModal } from "./components/UiRequestModal";
@@ -17,7 +18,8 @@ import { useThemeStore } from "./store/theme";
 import { useGitStore } from "./store/git";
 import { useFleetStore, parseSessionUuid } from "./store/fleet";
 import { useFleetStreamEntries } from "./hooks/useFleetStreamEntries";
-import { Loader2, X, GitBranch, Radar } from "lucide-react";
+import { useTrellisTasksStore } from "./store/trellisTasks";
+import { Loader2, X, GitBranch, Radar, ListTree } from "lucide-react";
 
 export type PanelKind = "skills" | "packages" | "settings" | null;
 
@@ -68,6 +70,7 @@ export default function App() {
   }, [activeSessionId, currentUuid, streamEntries, runs]);
   const [gitSidebarOpen, setGitSidebarOpen] = useState(false);
   const [fleetSidebarOpen, setFleetSidebarOpen] = useState(false);
+  const [trellisSidebarOpen, setTrellisSidebarOpen] = useState(false);
 
   const [panel, setPanel] = useState<PanelKind>(null);
   // 空状态: 项目选择器的选中值 (InputBar 发送时自动建会话用)
@@ -86,11 +89,12 @@ export default function App() {
     void useFleetStore.getState().refresh();
   }, []);
 
-  // ToolCallCard 联动按钮 → fleet store panelRequest 递增 → 开舰队面板 + 关 Git (互斥让位)
+  // ToolCallCard 联动按钮 → fleet store panelRequest 递增 → 开舰队面板 + 关 Git/任务 (互斥让位)
   const fleetPanelRequest = useFleetStore((s) => s.panelRequest);
   useEffect(() => {
     if (fleetPanelRequest > 0) {
       setGitSidebarOpen(false);
+      setTrellisSidebarOpen(false);
       setFleetSidebarOpen(true);
     }
   }, [fleetPanelRequest]);
@@ -100,6 +104,14 @@ export default function App() {
   useEffect(() => {
     if (cwd) loadGitStatus(cwd);
   }, [cwd]);
+
+  // Trellis 任务快照: cwd 变化拉一次, 主要服务于药丸显隐探测 (exists 判据, design §2 挂载)。
+  // 无 .trellis 的项目 exists=false → 药丸不显示 (R3 安静降级); 面板打开时面板内还会再拉刷新
+  const trellisExists = useTrellisTasksStore((s) => s.exists);
+  const loadTrellisTasks = useTrellisTasksStore((s) => s.load);
+  useEffect(() => {
+    if (cwd) loadTrellisTasks(cwd);
+  }, [cwd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 工作台状态药丸 (design 三-3.1): 会话区 header 右上常驻, 聚合多源摘要。本次只接 git,
   // 后续 trellis/analytics/fleet 摘要挂进同一药丸 (父任务挂载点统一决策)
@@ -112,7 +124,7 @@ export default function App() {
     // 非 git 仓库 → 灰显, 仍可点击展开 (PRD: 安静降级不报错, 侧栏内有提示)
     gitPill = (
       <button
-        onClick={() => { if (gitSidebarOpen) setGitSidebarOpen(false); else { setFleetSidebarOpen(false); setGitSidebarOpen(true); } }}
+        onClick={() => { if (gitSidebarOpen) setGitSidebarOpen(false); else { setFleetSidebarOpen(false); setTrellisSidebarOpen(false); setGitSidebarOpen(true); } }}
         className={`rounded-full border px-2.5 py-1 text-xs text-neutral-400 transition hover:text-neutral-600 ${
           gitSidebarOpen ? "border-neutral-300" : "border-neutral-200"
         }`}
@@ -125,7 +137,7 @@ export default function App() {
     const changeCount = gitStatus?.files.length ?? 0;
     gitPill = (
       <button
-        onClick={() => { if (gitSidebarOpen) setGitSidebarOpen(false); else { setFleetSidebarOpen(false); setGitSidebarOpen(true); } }}
+        onClick={() => { if (gitSidebarOpen) setGitSidebarOpen(false); else { setFleetSidebarOpen(false); setTrellisSidebarOpen(false); setGitSidebarOpen(true); } }}
         className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition tabular-nums ${
           gitSidebarOpen
             ? "border-[rgb(var(--primary-400))] text-[rgb(var(--primary-600))]"
@@ -141,12 +153,32 @@ export default function App() {
     );
   }
 
+  // 任务药丸入口: 项目装了 Trellis (tasks 目录存在) 才显示 (R3: 没装直接不显示, 无数字 ——
+  // 任务数无实时性价值, 仅入口)。与 Git/舰队药丸同槽互斥让位
+  let trellisPill: ReactNode = null;
+  if (trellisExists) {
+    trellisPill = (
+      <button
+        onClick={() => { if (trellisSidebarOpen) setTrellisSidebarOpen(false); else { setFleetSidebarOpen(false); setGitSidebarOpen(false); setTrellisSidebarOpen(true); } }}
+        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition ${
+          trellisSidebarOpen
+            ? "border-[rgb(var(--primary-400))] text-[rgb(var(--primary-600))]"
+            : "border-neutral-200 text-neutral-500 hover:text-neutral-700"
+        }`}
+        title="查看 Trellis 任务"
+      >
+        <ListTree className="h-3.5 w-3.5" />
+        <span>任务</span>
+      </button>
+    );
+  }
+
   // 舰队药丸入口: 有 artifact run 或本会话有 stream 条目就显示 (活动数>0 带数字, 0 仅入口看历史)
   let fleetPill: ReactNode = null;
   if (fleetRunCount > 0 || streamEntries.length > 0) {
     fleetPill = (
       <button
-        onClick={() => { if (fleetSidebarOpen) setFleetSidebarOpen(false); else { setGitSidebarOpen(false); setFleetSidebarOpen(true); } }}
+        onClick={() => { if (fleetSidebarOpen) setFleetSidebarOpen(false); else { setGitSidebarOpen(false); setTrellisSidebarOpen(false); setFleetSidebarOpen(true); } }}
         className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition tabular-nums ${
           fleetSidebarOpen
             ? "border-[rgb(var(--primary-400))] text-[rgb(var(--primary-600))]"
@@ -200,6 +232,7 @@ export default function App() {
               <div className="flex shrink-0 items-center gap-1">
                 {fleetPill}
                 {gitPill}
+                {trellisPill}
                 <QueueIndicator steering={active.steeringQueue} followUp={active.followUpQueue} />
                 <button
                   onClick={() => stopSession(activeSessionId!)}
@@ -237,6 +270,9 @@ export default function App() {
       )}
       {active && fleetSidebarOpen && (
         <FleetSidebarPanel onClose={() => setFleetSidebarOpen(false)} />
+      )}
+      {active && trellisSidebarOpen && (
+        <TrellisSidebarPanel cwd={active.cwd} onClose={() => setTrellisSidebarOpen(false)} />
       )}
 
       {/* 扩展 UI 请求弹窗: 只渲染活跃会话的队头请求 (FIFO, 关闭后自动弹下一个) */}
