@@ -714,7 +714,7 @@ function RunDetail({
         <span className="truncate text-neutral-400" title={summary.cwd}>{summary.cwd}</span>
       </div>
       {summary.error && (
-        <div className="flex items-start gap-1.5 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-600">
+        <div className="flex items-start gap-1.5 border-b border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] px-4 py-2 text-xs text-red-500">
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span className="whitespace-pre-line">{summary.error}</span>
         </div>
