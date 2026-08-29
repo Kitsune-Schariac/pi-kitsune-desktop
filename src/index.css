@@ -426,3 +426,19 @@ input[type="range"]:disabled::-webkit-slider-thumb {
 @media (prefers-reduced-motion: reduce) {
   .lorenz-wrap, .lorenz-flow { animation: none; }
 }
+
+/* 设置视图进场 / 分区切换淡入: 整窗进场位移大一点表明"切了界面", 分区切换只用轻量版
+   —— 设置界面要稳, 动效只作方向提示, 不做夸张转场 */
+@keyframes viewIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes viewInSoft {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.view-in { animation: viewIn 200ms ease-out; }
+.view-in-soft { animation: viewInSoft 160ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .view-in, .view-in-soft { animation: none; }
+}
