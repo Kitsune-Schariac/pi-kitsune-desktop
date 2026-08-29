@@ -3,6 +3,7 @@ mod behavior_stats;
 mod pi_runtime;
 mod search;
 mod git;
+mod models_config;
 mod session_fs;
 mod skins;
 mod subagent_fleet;
@@ -28,6 +29,10 @@ struct RuntimePool {
     warm_cwd: Option<String>,
     /// 预热 spawn 进行中 (防并发重复预热)
     warming: bool,
+    /// 预热代次: 每次作废预热槽 (drop_warm) 递增。飞行中的预热任务完成后凭代次自证
+    /// 有效性 —— 保存 models.json 会作废旧槽, 但那时可能有一个 spawn 已经在飞, 它读的是
+    /// 旧配置, 无条件回写会让「保存后新建会话立即生效」在这个时序下失效。
+    warm_epoch: u64,
 }
 
 impl RuntimePool {
@@ -38,6 +43,7 @@ impl RuntimePool {
             warm: None,
             warm_cwd: None,
             warming: false,
+            warm_epoch: 0,
         }
     }
 
@@ -58,7 +64,9 @@ impl RuntimePool {
     }
 
     /// 丢弃不匹配的 warm (cwd 变化): 异步 stop 不阻塞调用方
+    /// 递增代次, 使飞行中的预热任务完成后自行作废 (见 warm_epoch 注释)
     fn drop_warm(&mut self) {
+        self.warm_epoch = self.warm_epoch.wrapping_add(1);
         if let Some(mut rt) = self.warm.take() {
             self.warm_cwd = None;
             tauri::async_runtime::spawn(async move {
@@ -68,19 +76,28 @@ impl RuntimePool {
         self.warming = false;
     }
 
-    /// 标记预热进行中 (防并发重复); 返回 false = 已有预热在跑
-    fn mark_warming(&mut self) -> bool {
+    /// 标记预热进行中 (防并发重复); 返回 None = 已有预热在跑, 否则返回本轮代次供回写时校验
+    fn mark_warming(&mut self) -> Option<u64> {
         if self.warming || self.warm.is_some() {
-            false
+            None
         } else {
             self.warming = true;
-            true
+            Some(self.warm_epoch)
         }
     }
 
-    /// 预热完成回写 (无论成败都清标志)
-    fn finish_warming(&mut self, cwd: String, rt: Result<PiRuntime, String>) {
+    /// 预热完成回写 (无论成败都清标志)。epoch 与当前代次不符 = 预热期间配置被改动作废了,
+    /// 这个 runtime 读的是旧配置, 回写会让下个会话拿到过期配置 → 直接停掉
+    fn finish_warming(&mut self, cwd: String, epoch: u64, rt: Result<PiRuntime, String>) {
         self.warming = false;
+        if epoch != self.warm_epoch {
+            if let Ok(mut stale) = rt {
+                tauri::async_runtime::spawn(async move {
+                    let _ = stale.stop().await;
+                });
+            }
+            return;
+        }
         if let Ok(rt) = rt {
             self.warm = Some(rt);
             self.warm_cwd = Some(cwd);
@@ -118,10 +135,22 @@ impl RuntimePool {
         }
         self.warm_cwd = None;
         self.warming = false;
+        self.warm_epoch = self.warm_epoch.wrapping_add(1);
     }
 }
 
 type SharedRuntime = Arc<Mutex<RuntimePool>>;
+
+// --- 模型配置保存后的预热槽废弃 ---
+
+/// 废弃 warm 预热槽: pi 只在启动时读 models.json, 已就绪的预热槽里是旧配置的进程,
+/// 直接弃掉让下一个新建会话重新 spawn。已运行会话不受影响 (UI 侧提示重启)
+#[tauri::command]
+async fn discard_warm_runtime(state: State<'_, SharedRuntime>) -> Result<(), String> {
+    let mut guard = state.lock().await;
+    guard.drop_warm();
+    Ok(())
+}
 
 /// 启动一个 pi sidecar 会话, 返回 sessionId (不替换已有 session, 多个并存)
 /// session_path 存在时: switch_session 加载历史会话文件
@@ -158,7 +187,7 @@ async fn start_session(
 
     // 阶段 1 (锁内, 快速): 取 warm / 丢弃不匹配 warm / 标记预热 (防并发重复)
     let warm_rt;
-    let need_warm_up = {
+    let warm_epoch = {
         let mut guard = state.lock().await;
         warm_rt = match guard.take_warm(&cwd) {
             Some(rt) => Some(rt),
@@ -206,7 +235,7 @@ async fn start_session(
     }
     // 预热: spawn 同 cwd 的 pi 存槽 (spawn 本身 ~10ms, pi 的 3.5s 初始化在后台自然度过;
     // 预热不写 session 文件, 复用后 switch_session 绑定真实会话)
-    if need_warm_up {
+    if let Some(epoch) = warm_epoch {
         let state2 = state.inner().clone();
         let cwd2 = cwd.clone();
         let app2 = app.clone();
@@ -220,7 +249,7 @@ async fn start_session(
         tauri::async_runtime::spawn(async move {
             let rt = PiRuntime::spawn(app2, warm_sid, cwd2.clone(), None, None).await;
             let mut guard = state2.lock().await;
-            guard.finish_warming(cwd2, rt);
+            guard.finish_warming(cwd2, epoch, rt);
         });
     }
     Ok(serde_json::json!({"sessionId": session_id, "entries": entries}))
@@ -425,6 +454,8 @@ pub fn run() {
             skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
             subagent_fleet::list_fleet_runs, subagent_fleet::read_fleet_run_detail,
             trellis_tasks::list_trellis_tasks, trellis_tasks::read_trellis_task_doc,
+            models_config::read_models_config, models_config::write_models_config,
+            discard_warm_runtime,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
