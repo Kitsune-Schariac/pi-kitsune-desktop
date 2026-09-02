@@ -24,8 +24,18 @@ pub struct FleetStepSummary {
     pub duration_ms: u64,
     pub tokens: u64, // step.tokens.total, workflow 模式无 → 0
     pub error: String,
-    pub recent_output: Vec<String>, // 末 5 行文本 (天然适合进度展示)
+    pub recent_output: Vec<String>, // 末 30 行文本 (天然适合进度展示)
+    pub active_tools: Vec<FleetActiveTool>, // 进行中的工具调用; 空 = 思考中/不可读 (安静降级)
+    pub session_tail_at: u64, // 子会话尾读的时间戳 (ms); 0 = 未读到
     pub children: Vec<FleetStepSummary>, // 子 agent 再 fanout 时的嵌套 run (R2 递归渲染, 通常为空)
+}
+
+/// 进行中的工具调用 (未配对的 toolCall)。可能多个 —— 一条 assistant message 可并行发多个。
+#[derive(Serialize, Clone, PartialEq)]
+pub struct FleetActiveTool {
+    pub name: String,    // bash | read | edit | ...
+    pub summary: String, // 参数摘要, 已截断
+    pub done: bool,      // true = 窗口内已配对 (刚完成), false = 进行中
 }
 
 /// 单个 run 的精简摘要 (舰队面板列表行 + 活动区/历史区共用)。
@@ -144,7 +154,7 @@ fn parse_session_uuid(raw: &str) -> String {
 }
 
 fn parse_step(s: &Value) -> Option<FleetStepSummary> {
-    // recentOutput 取末 5 行 (整段保留给详情态, 列表态只展示末行预览由前端截)
+    // recentOutput 取末 30 行 (全量放开有内存风险, 30 行足够卡片滚动展示)
     let recent: Vec<String> = s
         .get("recentOutput")
         .and_then(|x| x.as_array())
@@ -154,8 +164,8 @@ fn parse_step(s: &Value) -> Option<FleetStepSummary> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let recent = if recent.len() > 5 {
-        recent[recent.len() - 5..].to_vec()
+    let recent = if recent.len() > 30 {
+        recent[recent.len() - 30..].to_vec()
     } else {
         recent
     };
@@ -172,6 +182,10 @@ fn parse_step(s: &Value) -> Option<FleetStepSummary> {
             .unwrap_or(0),
         error: field_str(s, "error"),
         recent_output: recent,
+        // active_tools / session_tail_at 由 scan_fleet_runs 对 active run 统一补读 (见 fill_active_tools),
+        // 纯解析不触 IO —— 解析函数保持无副作用, 测试不依赖真实文件
+        active_tools: Vec::new(),
+        session_tail_at: 0,
         children: parse_steps(s.get("children")),
     })
 }
@@ -257,12 +271,182 @@ pub(crate) fn scan_fleet_runs(base: &Path) -> Vec<FleetRunSummary> {
             let Ok(status) = serde_json::from_str::<Value>(&content) else {
                 continue; // 坏 JSON: 该 run 降级跳过, 其余正常展示 (R5)
             };
-            if let Some(summary) = parse_run(&run_dir, &status) {
+            if let Some(mut summary) = parse_run(&run_dir, &status) {
+                // 仅活动 run 补读子会话尾 (进行中的工具调用)。历史终态 run 不触 IO ——
+                // 尾读是对运行中文档流的实时观察, 对已结束的 run 没有意义
+                if summary.active {
+                    fill_active_tools(&mut summary);
+                }
                 runs.push(summary);
             }
         }
     }
     runs
+}
+
+/// 反向读文件尾部窗口并解析 toolCall 配对。窗口 64 KB (见 design): 覆盖最近数十条消息,
+/// 单条超长消息被窗口切断可接受 —— 下一轮工具调用会重新进入窗口。
+const TAIL_WINDOW_BYTES: u64 = 64 * 1024;
+
+/// 对活动 run 的每个 step 补读子会话尾: 找未配对的 toolCall (进行中工具) + 尾读时间戳。
+/// 子会话路径只从 steps[].session_file 取 (design 关键约束, 禁止自行拼接 —— scope 重算会错)。
+/// 文件不可读/坏行 → active_tools 留空, 安静降级 (PRD A6)。
+fn fill_active_tools(run: &mut FleetRunSummary) {
+    let fill = |step: &mut FleetStepSummary| {
+        if step.session_file.is_empty() {
+            return; // 无 sessionFile → 不可下钻也不可尾读
+        }
+        let path = PathBuf::from(&step.session_file);
+        // mtime 取值 (与 session_fs::get_session_file_mtime 同款)
+        step.session_tail_at = std::fs::metadata(&path)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        if step.session_tail_at == 0 {
+            return; // 文件不可读 → 不尾读
+        }
+        step.active_tools = read_active_tools(&path);
+    };
+    for step in &mut run.steps {
+        fill(step);
+        for child in &mut step.children {
+            fill(child);
+        }
+    }
+}
+
+/// 尾读子会话 session.jsonl, 配对 toolCall/toolResult, 返回进行中的工具。
+/// 规则 (design): 窗口内未配对的 toolCall = 进行中; 全部配对 → 取最后一个已完成并标 done。
+fn read_active_tools(path: &Path) -> Vec<FleetActiveTool> {
+    use std::io::{Read, Seek, SeekFrom};
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return Vec::new();
+    };
+    let Ok(file_len) = file.metadata().map(|m| m.len()) else {
+        return Vec::new();
+    };
+    // 反向窗口: 从尾部 seek 回 TAIL_WINDOW_BYTES, 不足则从头
+    let start = file_len.saturating_sub(TAIL_WINDOW_BYTES);
+    if file.seek(SeekFrom::Start(start)).is_err() {
+        return Vec::new();
+    }
+    let mut buf = Vec::with_capacity(TAIL_WINDOW_BYTES as usize);
+    if file.take(TAIL_WINDOW_BYTES).read_to_end(&mut buf).is_err() {
+        return Vec::new();
+    }
+    let content = String::from_utf8_lossy(&buf);
+    // 按行切: 仅当窗口起点在文件中部 (start>0) 时首行才是半行需丢弃;
+    // 文件不足窗口大小时从文件头读, 首行完整, 不能删
+    let mut lines: Vec<&str> = content.split('\n').collect();
+    if start > 0 && lines.len() > 1 {
+        lines.remove(0); // 丢弃窗口首行 (半行)
+    }
+    // 末行: split('\n') 在文件以 \n 结尾时末元素为空串, 否则是写入中的半行 —— 都丢弃
+    if matches!(lines.last(), Some(l) if l.is_empty() || !content.ends_with('\n')) {
+        lines.pop();
+    }
+    if lines.is_empty() {
+        return Vec::new();
+    }
+    // 扫描: 收集 toolCall (id → name,args) 与 toolResult (toolCallId set)
+    #[derive(Clone)]
+    struct PendingTool {
+        name: String,
+        summary: String,
+    }
+    let mut pending: Vec<(String, PendingTool)> = Vec::new(); // (id, tool) 保持顺序
+    let mut done_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for line in lines {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<Value>(line) else {
+            continue; // 坏行/半行跳过 (R5)
+        };
+        // 定位 content 数组里的 toolCall (assistant message) 或顶层 toolResult
+        let msg = v.get("message");
+        let role = msg.and_then(|m| m.get("role")).and_then(|r| r.as_str());
+        if role == Some("assistant") {
+            if let Some(content) = msg.and_then(|m| m.get("content")).and_then(|c| c.as_array()) {
+                for item in content {
+                    if item.get("type").and_then(|t| t.as_str()) != Some("toolCall") {
+                        continue;
+                    }
+                    let Some(id) = item.get("id").and_then(|x| x.as_str()) else {
+                        continue;
+                    };
+                    let name = item.get("name").and_then(|x| x.as_str()).unwrap_or("");
+                    pending.push((
+                        id.to_string(),
+                        PendingTool {
+                            name: name.to_string(),
+                            summary: tool_summary(name, item.get("arguments")),
+                        },
+                    ));
+                }
+            }
+        } else if let Some(tid) = v.get("toolCallId").and_then(|x| x.as_str()) {
+            // toolResult 行 (顶层或 message 内): 回指配对
+            done_ids.insert(tid.to_string());
+        }
+    }
+    // 结果: 未配对 = 进行中; 全部配对时取最后一个工具标 done (design: 避免卡片空白,
+    // 子代理正在输出/思考, 展示「刚完成」的工具更连贯)
+    if !pending.is_empty() {
+        let unfinished: Vec<FleetActiveTool> = pending
+            .iter()
+            .filter(|(id, _)| !done_ids.contains(id))
+            .map(|(_, t)| FleetActiveTool {
+                name: t.name.clone(),
+                summary: t.summary.clone(),
+                done: false,
+            })
+            .collect();
+        if !unfinished.is_empty() {
+            return unfinished;
+        }
+        // 窗口内全部配对: 取最后一个工具标 done
+        let last = pending.last().unwrap();
+        return vec![FleetActiveTool {
+            name: last.1.name.clone(),
+            summary: last.1.summary.clone(),
+            done: true,
+        }];
+    }
+    Vec::new()
+}
+
+/// 按工具名提取单字段参数摘要 (design 表): bash→command 首行; read/write/edit→path 尾两段;
+/// grep/glob→pattern; 其他工具仅名字 (summary 空, 由前端只显名)。
+fn tool_summary(name: &str, args: Option<&Value>) -> String {
+    let Some(args) = args else { return String::new() };
+    let pick = |key: &str| args.get(key).and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let truncate = |s: String, n: usize| {
+        if s.chars().count() > n {
+            let cut: String = s.chars().take(n).collect();
+            format!("{cut}…")
+        } else {
+            s
+        }
+    };
+    let path_tail = |p: &str| {
+        // 路径尾部两段
+        let segs: Vec<&str> = p.split(['/', '\\']).filter(|s| !s.is_empty()).collect();
+        if segs.len() >= 2 {
+            format!("…/{}/{}", segs[segs.len() - 2], segs[segs.len() - 1])
+        } else {
+            segs.last().map(|s| s.to_string()).unwrap_or_default()
+        }
+    };
+    match name {
+        "bash" => truncate(pick("command").lines().next().unwrap_or("").to_string(), 60),
+        "read" | "write" | "edit" => truncate(path_tail(&pick("path")), 60),
+        "grep" | "glob" => truncate(pick("pattern"), 60),
+        _ => String::new(), // 未知工具不猜字段, 只显名字
+    }
 }
 
 /// 列出所有 subagent run 的精简摘要。多 scope glob 全扫, 空目录静默跳过,
@@ -382,7 +566,7 @@ mod tests {
         assert_eq!(st.agent, "reviewer");
         assert_eq!(st.duration_ms, 366075); // step 有 durationMs 直接用
         assert_eq!(st.tokens, 214363);
-        assert_eq!(st.recent_output.len(), 5); // 6 行截到末 5
+        assert_eq!(st.recent_output.len(), 6); // 截断上限 30, 6 行全保留
         assert_eq!(st.recent_output.last().unwrap(), "line6");
         // FULL_STATUS 无 sessionId 字段 → session_id 空串 (R5: 缺失不误匹配)
         assert_eq!(s.session_id, "");
@@ -607,5 +791,76 @@ mod tests {
         }
         // 本机应有 14+ 历史 run (design 一 实测), 至少扫到 1 个
         assert!(runs.len() >= 1, "本机 tmp 应有 subagent 产物, 实际扫到 {} 个", runs.len());
+    }
+    // --- read_active_tools: 子会话尾读与工具配对 ---
+
+    /// 写临时子会话文件, 返回路径 (测试后由调用方清理)。
+    /// 目录含测试名: 并行测试互不踩踏 (同 pid 同路径会互相删目录)
+    fn write_temp_session(tag: &str, lines: &[&str]) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("fleet_tail_{}_{}", std::process::id(), tag));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("session.jsonl");
+        std::fs::write(&p, lines.join("\n") + "\n").unwrap();
+        p
+    }
+
+    const TOOLCALL_LINE: &str = r#"{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"ok"},{"type":"toolCall","id":"t1","name":"bash","arguments":{"command":"ls -la"}}]}}"#;
+    const TOOLCALL_READ: &str = r#"{"type":"message","message":{"role":"assistant","content":[{"type":"toolCall","id":"t2","name":"read","arguments":{"path":"C:\\workspace\\demo\\src\\main.rs"}}]}}"#;
+    const TOOLRESULT_T1: &str = r#"{"type":"toolResult","toolCallId":"t1","content":[{"type":"text","text":"done"}]}"#;
+
+    #[test]
+    fn active_tool_unpaired_identified() {
+        // 末尾 toolCall 未配对 → 进行中
+        let p = write_temp_session("unpaired", &[TOOLCALL_LINE]);
+        let tools = read_active_tools(&p);
+        std::fs::remove_dir_all(p.parent().unwrap()).ok();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "bash");
+        assert_eq!(tools[0].summary, "ls -la");
+        assert!(!tools[0].done);
+    }
+
+    #[test]
+    fn parallel_tools_all_returned() {
+        // 同批并行 toolCall (bash + read) 都未配对 → 全部返回 (不只取第一个)
+        let p = write_temp_session("parallel", &[TOOLCALL_LINE, TOOLCALL_READ]);
+        let tools = read_active_tools(&p);
+        std::fs::remove_dir_all(p.parent().unwrap()).ok();
+        assert_eq!(tools.len(), 2);
+        assert_eq!(tools[0].name, "bash");
+        assert_eq!(tools[1].name, "read");
+        assert!(tools[1].summary.contains("src/main.rs"), "summary 应含路径尾段: {}", tools[1].summary);
+    }
+
+    #[test]
+    fn paired_tool_falls_back_to_last_done() {
+        // toolCall 已配对 (toolResult 在窗口内) → 回落最后一个工具标 done
+        let p = write_temp_session("paired", &[TOOLCALL_LINE, TOOLRESULT_T1]);
+        let tools = read_active_tools(&p);
+        std::fs::remove_dir_all(p.parent().unwrap()).ok();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "bash");
+        assert!(tools[0].done);
+    }
+
+    #[test]
+    fn tail_half_line_and_bad_json_skipped() {
+        // 尾部半行 (写入中) + 坏行 → 跳过不 panic, 正常行仍解析
+        let p = write_temp_session("half", &[TOOLCALL_LINE, "this is not json", r#"{"type":"message","me"#]);
+        let tools = read_active_tools(&p);
+        std::fs::remove_dir_all(p.parent().unwrap()).ok();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "bash");
+    }
+
+    #[test]
+    fn empty_or_missing_file_quiet() {
+        // 文件不存在 → 空 Vec
+        let missing = std::env::temp_dir().join(format!("fleet_tail_{}_missing.jsonl", std::process::id()));
+        assert!(read_active_tools(&missing).is_empty());
+        // 空文件 → 空 Vec
+        let p = write_temp_session("empty", &[]);
+        assert!(read_active_tools(&p).is_empty());
+        std::fs::remove_dir_all(p.parent().unwrap()).ok();
     }
 }

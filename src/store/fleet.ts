@@ -16,8 +16,16 @@ export interface FleetStepSummary {
   duration_ms: number;
   tokens: number;
   error: string;
-  recent_output: string[]; // 末 5 行文本
+  recent_output: string[]; // 末 30 行文本
+  active_tools: FleetActiveTool[]; // 进行中的工具调用 (空 = 思考中/不可读)
+  session_tail_at: number; // 子会话尾读时间戳 ms; 0 = 未读到
   children: FleetStepSummary[]; // 子 agent 再 fanout 嵌套 (R2 递归渲染, 通常空)
+}
+
+export interface FleetActiveTool {
+  name: string;
+  summary: string;
+  done: boolean; // true = 刚完成 (窗口内已配对)
 }
 
 export interface FleetRunSummary {
@@ -69,10 +77,42 @@ interface FleetStore {
   requestOpenPanel: () => void;
 }
 
-// 轮询引用计数: 多组件挂载都 start 时计数累加, 卸载 stop 递减, 归零才真正停轮询。
-// 防止面板内子视图切换时重复启停定时器, 保证「面板开着才轮询, 关闭即停」零常驻成本。
+// 轮询变频状态机 (design §4): 单 timer, 每次 refresh 后重新评估频率。
+//   面板开                     → 2s
+//   面板关 且 有 running run    → 8s (后台活动也要被发现, 降频省 IO)
+//   面板关 且 无 running run    → 停 (零常驻成本)
+// 引用计数: 多组件挂载都 start 时累加, 卸载 stop 递减; 计数本身只反映面板订阅,
+// 真正的启停由 evaluatePolling 决定 (面板关但后台有活时 timer 不灭, 只是降频)
 let pollRefCount = 0;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+// 频率评估 (纯函数): 返回目标间隔 ms; null = 应停止
+function targetInterval(panelOpen: boolean, hasRunning: boolean): number | null {
+  if (panelOpen) return 2000;
+  if (hasRunning) return 8000;
+  return null;
+}
+
+// 应用目标频率: setInterval 间隔不可变, 每次 clear + 重建。单 timer 生命周期, 无泄漏面。
+function schedulePolling(intervalMs: number | null) {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+  if (intervalMs !== null) {
+    pollTimer = setInterval(() => void useFleetStore.getState().refresh(), intervalMs);
+  }
+}
+
+// 依 runs 状态 + 面板开关评估并应用频率 (refresh 完成后调用)
+function rearmPolling(hasRunning: boolean) {
+  schedulePolling(targetInterval(pollRefCount > 0, hasRunning));
+}
+
+// 是否有活动 run (R4: 后台 run 在 GUI 重启后仍可被发现 → 面板关也保持低频轮询)
+function hasRunningRun(runs: FleetRunSummary[]): boolean {
+  return runs.some((r) => r.active);
+}
 
 // 详情防串台守卫: 快速连点 run A→B 时, A 迟到的 resolve 不得覆盖 B 视图 (同 git.ts 模式)
 let detailEpoch = 0;
@@ -91,19 +131,19 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
 
   startPolling: () => {
     pollRefCount++;
-    // 首个订阅者立即拉一次 (面板刚开就有数据, 不干等 2s), 再起定时器
-    if (pollRefCount === 1 && !pollTimer) {
+    // 首个订阅者立即拉一次 (面板刚开就有数据, 不干等 2s), 完成后按频率重排
+    if (pollRefCount === 1) {
       void get().refresh();
-      pollTimer = setInterval(() => void get().refresh(), 2000);
+    } else {
+      // 计数>0 意味着面板开着 → 频率回到 2s (可能之前因面板关降频到 8s)
+      rearmPolling(hasRunningRun(get().runs));
     }
   },
 
   stopPolling: () => {
     pollRefCount = Math.max(0, pollRefCount - 1);
-    if (pollRefCount === 0 && pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
+    // 面板关但后台可能还有 running → 是否停由 rearmPolling 依 runs 决定 (变频而非硬停)
+    rearmPolling(hasRunningRun(get().runs));
   },
 
   refresh: async () => {
@@ -116,6 +156,8 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
       set({ lastError: String(e) });
     } finally {
       set({ loading: false });
+      // 每次数据落地后按最新状态重排频率 (含启动时后台已有 running 的首次拉取)
+      rearmPolling(hasRunningRun(get().runs));
     }
   },
 
