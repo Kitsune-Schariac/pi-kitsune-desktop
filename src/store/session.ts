@@ -627,6 +627,11 @@ export const useSessionStore = create<SessionStore>((set, get) => {
             settled.entries = cur.entries.filter((e) => e.id !== RETRY_ENTRY_ID);
           }
           patch(sessionId, settled);
+          // 补拉上下文统计: contextUsage 只在会话打开/重连时快照过一次, 新对话打开时 0 条
+          // 消息会永远停在 0%。agent_settled 是每轮唯一干净的终态信号 (无 retry/compaction
+          // retry/queued continuation), 在此拉 pi 权威值, 一轮一次天然限频。fire-and-forget:
+          // 不回写 isStreaming, 迟到的响应只会 patch 统计字段, 不会串到下一轮的状态
+          get().loadSessionStats(sessionId);
           // 后台完成任务: 若用户没在看这个会话, 标记未读 (侧边栏圈圈→点提醒看)
           if (get().activeSessionId !== sessionId) {
             patch(sessionId, { hasUnread: true });
