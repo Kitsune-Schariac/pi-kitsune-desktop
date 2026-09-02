@@ -416,8 +416,8 @@ export function InputBar({
       : null;
 
   return (
-    // 悬浮输入卡: 底部居中, 宽度与消息列表一致 (max-w-[min(65%,52rem)]), 与消息区分离成浮动层
-    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 mx-auto w-full max-w-[min(65%2c52rem)] px-4">
+    // 悬浮输入卡: 底部居中, 宽度与消息列表一致 (max-w-[min(60%,52rem)]), 与消息区分离成浮动层
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 mx-auto w-full max-w-[min(60%,52rem)] px-4">
       {bottomLayer}
       <div
         ref={cardRef}
