@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   Radar, Bot, Cpu, Clock, Coins, ListChecks, ChevronRight, ChevronLeft,
   X, RefreshCw, Loader2, AlertCircle, FileText, Database, MessageSquareText, ChevronDown,
+  CheckCircle2, Wrench,
 } from "lucide-react";
 import { useFleetStore, toArtifactEntry, toStreamEntry, parseSessionUuid, type FleetEntry } from "../store/fleet";
 import type { FleetRunSummary, FleetStepSummary } from "../store/fleet";
@@ -592,10 +593,11 @@ function RunCard({
   const liveDur = active ? Math.max(0, now - run.started_at) : run.duration_ms;
   const currentStep = run.steps[run.current_step] ?? run.steps[run.steps.length - 1] ?? null;
   const lastOutput = currentStep?.recent_output?.[currentStep.recent_output.length - 1];
+  const activeTools = currentStep?.active_tools ?? [];
   return (
     <button
       onClick={() => onOpen(run.dir)}
-      className="group mx-2 mb-1 flex w-[calc(100%-1rem)] flex-col gap-2 rounded-md border border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] px-3 py-2 text-left transition duration-fast ease-out duration-base ease-swift hover:-translate-y-px hover:border-[rgb(var(--border-strong))]"
+      className="group mx-2 mb-1 flex w-[calc(100%-1rem)] flex-col gap-2 rounded-md border border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] px-3 py-2 text-left transition duration-base ease-swift hover:-translate-y-px hover:border-[rgb(var(--border-strong))]"
     >
       <div className="flex items-center gap-2">
         <StatusDot state={run.state} active={run.active} />
@@ -631,6 +633,40 @@ function RunCard({
           </span>
         )}
       </div>
+      {/* 当前工具行 (活动态专属): 正在执行的工具调用。多工具并列 ≤3, 超出折叠 +N;
+          done 用弱化色 + 对勾图标区分「刚完成」; 空 (思考/输出中) 整行不渲染 */}
+      {active && activeTools.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1">
+          {activeTools.slice(0, 3).map((t, i) => (
+            <span
+              key={i}
+              className={`flex max-w-full items-center gap-1 rounded-sm px-2 py-1 text-xs ${
+                t.done
+                  ? "bg-[rgb(var(--border-subtle)/0.5)] text-neutral-400"
+                  : "bg-[rgb(var(--primary-500)/0.12)] text-[rgb(var(--primary-600))]"
+              }`}
+              title={`${t.name} ${t.summary}`}
+            >
+              {t.done ? (
+                <CheckCircle2 className="h-3 w-3 shrink-0" />
+              ) : (
+                <Wrench className="h-3 w-3 shrink-0" />
+              )}
+              <span className="truncate">{t.name}</span>
+              {t.summary && (
+                <span className={`truncate font-mono ${t.done ? "text-neutral-400/80" : "text-[rgb(var(--primary-700))]"}`}>
+                  {t.summary}
+                </span>
+              )}
+            </span>
+          ))}
+          {activeTools.length > 3 && (
+            <span className="rounded-sm px-2 py-1 text-xs text-neutral-400">
+              +{activeTools.length - 3}
+            </span>
+          )}
+        </div>
+      )}
       {lastOutput && (
         <div className="truncate font-mono text-xs text-neutral-400" title={lastOutput}>
           {lastOutput}
