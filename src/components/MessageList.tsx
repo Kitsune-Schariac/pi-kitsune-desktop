@@ -46,7 +46,7 @@ export function MessageList({ inputBarH = 0 }: { inputBarH?: number }) {
       style={{ paddingBottom: inputBarH + 40 }}
     >
       {/* px-6 放内层: 保证 65% 宽度与悬浮输入卡一致 (外层 padding 会使百分比相对内容区, 差 48px) */}
-      <div className="mx-auto max-w-[min(65%2c52rem)] space-y-4 px-6">
+      <div className="mx-auto max-w-[min(60%,52rem)] space-y-4 px-6">
         {entries.length === 0 && (
           <div className="py-20 text-center text-neutral-400">
             输入消息开始对话
