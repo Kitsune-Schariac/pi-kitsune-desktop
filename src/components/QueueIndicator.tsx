@@ -15,17 +15,17 @@ export function QueueIndicator({ steering, followUp }: { steering: string[]; fol
     <div className="relative shrink-0">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition hover:bg-neutral-100"
+        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition duration-fast ease-out hover:bg-neutral-100"
         title={`待处理队列 ${total} 条: steer ${steering.length} / followUp ${followUp.length}`}
       >
         {steering.length > 0 && (
-          <span className="flex items-center gap-0.5 rounded bg-primary-100 px-1.5 py-0.5 font-medium text-primary-600">
+          <span className="flex items-center gap-1 rounded-sm bg-primary-100 px-2 py-1 font-medium text-primary-600">
             <MessageSquarePlus className="h-3 w-3" />
             {steering.length}
           </span>
         )}
         {followUp.length > 0 && (
-          <span className="flex items-center gap-0.5 rounded bg-blue-100 px-1.5 py-0.5 font-medium text-blue-600">
+          <span className="flex items-center gap-1 rounded-sm bg-blue-100 px-2 py-1 font-medium text-blue-600">
             <ListPlus className="h-3 w-3" />
             {followUp.length}
           </span>
@@ -36,7 +36,7 @@ export function QueueIndicator({ steering, followUp }: { steering: string[]; fol
         <>
           {/* 透明遮罩: 点击任意处关闭 (与 SettingsWindow 遮罩同模式) */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-1 max-h-72 w-80 overflow-y-auto rounded-xl border border-neutral-200 bg-panel py-1 shadow-xl">
+          <div className="absolute right-0 top-full z-50 mt-1 max-h-72 w-80 overflow-y-auto rounded-md border border-neutral-200 bg-panel py-1 shadow-lg">
             <QueueGroup label="steer 指导" color="orange" icon={<MessageSquarePlus className="h-3 w-3" />} items={steering} />
             <QueueGroup label="followUp 后续" color="blue" icon={<ListPlus className="h-3 w-3" />} items={followUp} />
             {total === 0 && <div className="px-4 py-3 text-xs text-neutral-400">队列为空</div>}
@@ -57,7 +57,7 @@ function QueueGroup({ label, color, icon, items }: {
   const labelCls = color === "orange" ? "text-primary-600" : "text-blue-600";
   return (
     <div className="py-1">
-      <div className={`flex items-center gap-1 px-4 py-1 text-[10px] font-medium uppercase tracking-wide ${labelCls}`}>
+      <div className={`flex items-center gap-1 px-4 py-1 text-xs font-medium uppercase tracking-wide ${labelCls}`}>
         {icon}
         {label}
         <span className="text-neutral-300">{items.length}</span>

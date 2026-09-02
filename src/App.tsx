@@ -125,7 +125,7 @@ export default function App() {
     gitPill = (
       <button
         onClick={() => { if (gitSidebarOpen) setGitSidebarOpen(false); else { setFleetSidebarOpen(false); setTrellisSidebarOpen(false); setGitSidebarOpen(true); } }}
-        className={`rounded-full border px-2.5 py-1 text-xs text-neutral-400 transition hover:text-neutral-600 ${
+        className={`rounded-full border px-2 py-1 text-xs text-neutral-400 transition duration-fast ease-out hover:text-neutral-600 ${
           gitSidebarOpen ? "border-neutral-300" : "border-neutral-200"
         }`}
         title="非 Git 仓库"
@@ -138,14 +138,14 @@ export default function App() {
     gitPill = (
       <button
         onClick={() => { if (gitSidebarOpen) setGitSidebarOpen(false); else { setFleetSidebarOpen(false); setTrellisSidebarOpen(false); setGitSidebarOpen(true); } }}
-        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition tabular-nums ${
+        className={`flex items-center gap-2 rounded-full border px-2 py-1 text-xs transition duration-fast ease-out tabular-nums ${
           gitSidebarOpen
             ? "border-[rgb(var(--primary-400))] text-[rgb(var(--primary-600))]"
             : "border-neutral-200 text-neutral-500 hover:text-neutral-700"
         }`}
         title={`分支 ${gitStatus?.branch ?? "—"} · ${changeCount} 个变更`}
       >
-        <GitBranch className="h-3.5 w-3.5" />
+        <GitBranch className="h-4 w-4" />
         <span className="max-w-[120px] truncate">{gitStatus?.branch ?? "—"}</span>
         <span className="text-neutral-300">·</span>
         <span>{changeCount}</span>
@@ -160,14 +160,14 @@ export default function App() {
     trellisPill = (
       <button
         onClick={() => { if (trellisSidebarOpen) setTrellisSidebarOpen(false); else { setFleetSidebarOpen(false); setGitSidebarOpen(false); setTrellisSidebarOpen(true); } }}
-        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition ${
+        className={`flex items-center gap-2 rounded-full border px-2 py-1 text-xs transition duration-fast ease-out ${
           trellisSidebarOpen
             ? "border-[rgb(var(--primary-400))] text-[rgb(var(--primary-600))]"
             : "border-neutral-200 text-neutral-500 hover:text-neutral-700"
         }`}
         title="查看 Trellis 任务"
       >
-        <ListTree className="h-3.5 w-3.5" />
+        <ListTree className="h-4 w-4" />
         <span>任务</span>
       </button>
     );
@@ -179,14 +179,14 @@ export default function App() {
     fleetPill = (
       <button
         onClick={() => { if (fleetSidebarOpen) setFleetSidebarOpen(false); else { setGitSidebarOpen(false); setTrellisSidebarOpen(false); setFleetSidebarOpen(true); } }}
-        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition tabular-nums ${
+        className={`flex items-center gap-2 rounded-full border px-2 py-1 text-xs transition duration-fast ease-out tabular-nums ${
           fleetSidebarOpen
             ? "border-[rgb(var(--primary-400))] text-[rgb(var(--primary-600))]"
             : "border-neutral-200 text-neutral-500 hover:text-neutral-700"
         }`}
         title={fleetActiveCount > 0 ? `${fleetActiveCount} 个 subagent 活动中` : "查看 subagent 运行产物"}
       >
-        <Radar className="h-3.5 w-3.5" />
+        <Radar className="h-4 w-4" />
         <span>舰队{fleetActiveCount > 0 ? ` ${fleetActiveCount}` : ""}</span>
       </button>
     );
@@ -214,7 +214,7 @@ export default function App() {
           </div>
         ) : active ? (
           <>
-            <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
+            <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-2">
               <div className="flex min-w-0 items-center gap-2">
                 <span className="truncate font-medium">
                   {active.sessionName || active.cwd.split(/[\\/]/).filter(Boolean).pop()}
@@ -236,7 +236,7 @@ export default function App() {
                 <QueueIndicator steering={active.steeringQueue} followUp={active.followUpQueue} />
                 <button
                   onClick={() => stopSession(activeSessionId!)}
-                  className="rounded-md px-2 py-1 text-xs text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-600"
+                  className="rounded-md px-2 py-1 text-xs text-neutral-400 transition duration-fast ease-out hover:bg-neutral-100 hover:text-neutral-600"
                 >
                   关闭会话
                 </button>
@@ -295,14 +295,14 @@ export default function App() {
       {/* 右侧面板抽屉 (Skill/package): settings 走独立模态窗, 不进抽屉, 否则多出空白抽屉 */}
       {(panel === "skills" || panel === "packages") && (
         <div className="absolute inset-0 z-40 flex justify-end bg-black/10">
-          <div className="flex h-full w-[380px] flex-col border-l border-neutral-200 bg-panel shadow-2xl">
+          <div className="flex h-full w-[380px] flex-col border-l border-neutral-200 bg-panel shadow-lg">
             <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-3">
               <span className="font-medium">
                 {panel === "skills" ? "Skill 管理" : "pi Package"}
               </span>
               <button
                 onClick={() => setPanel(null)}
-                className="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+                className="rounded-md p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-100 hover:text-neutral-700"
               >
                 <X className="h-4 w-4" />
               </button>

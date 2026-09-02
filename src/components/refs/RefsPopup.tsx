@@ -124,26 +124,26 @@ export function RefsPopup({ root, onPick, onClose }: {
   };
 
   return (
-    <div className="absolute bottom-full left-0 z-50 mb-1 w-[520px] rounded-xl border border-neutral-200 bg-panel p-3 shadow-xl">
+    <div className="absolute bottom-full left-0 z-50 mb-1 w-[520px] rounded-md border border-neutral-200 bg-panel p-3 shadow-lg">
       {/* tabs */}
       <div className="mb-2 flex items-center gap-1 border-b border-neutral-100 pb-2">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => { setTab(key); setErr(null); }}
-            className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs transition ${
+            className={`flex items-center gap-1 rounded-md px-2 py-2 text-xs transition duration-fast ease-out ${
               tab === key
                 ? "bg-primary-50 font-medium text-primary-600"
                 : "text-neutral-500 hover:bg-neutral-100"
             }`}
           >
-            <Icon className="h-3.5 w-3.5" />
+            <Icon className="h-4 w-4" />
             {label}
           </button>
         ))}
         <button
           onClick={onClose}
-          className="ml-auto rounded-lg p-1.5 text-neutral-400 transition hover:bg-neutral-100"
+          className="ml-auto rounded-md p-2 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-100"
           title="完成"
         >
           <X className="h-4 w-4" />
@@ -155,9 +155,9 @@ export function RefsPopup({ root, onPick, onClose }: {
           <FileTreePicker root={root} onPick={onPick} onDone={() => {}} />
           <button
             onClick={addAnyFile}
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 px-3 py-2 text-xs text-neutral-500 transition hover:border-primary-300 hover:text-primary-600"
+            className="flex items-center justify-center gap-2 rounded-md border border-dashed border-neutral-300 px-3 py-2 text-xs text-neutral-500 transition duration-fast ease-out hover:border-primary-300 hover:text-primary-600"
           >
-            <FilePlus2 className="h-3.5 w-3.5" />
+            <FilePlus2 className="h-4 w-4" />
             引用项目外文件 (系统选择器)
           </button>
         </div>
@@ -173,7 +173,7 @@ export function RefsPopup({ root, onPick, onClose }: {
           <button
             onClick={pasteText}
             disabled={busy !== null}
-            className="flex w-full items-center gap-2.5 rounded-xl border border-neutral-200 px-4 py-3 text-left text-sm text-neutral-700 transition hover:border-primary-300 hover:bg-primary-50 disabled:opacity-50"
+            className="flex w-full items-center gap-2 rounded-md border border-neutral-200 px-4 py-3 text-left text-sm text-neutral-700 transition duration-fast ease-out hover:border-primary-300 hover:bg-primary-50 disabled:opacity-50"
           >
             {busy === "clipboard-text" ? (
               <Loader2 className="h-4 w-4 animate-spin text-primary-500" />
@@ -185,7 +185,7 @@ export function RefsPopup({ root, onPick, onClose }: {
           <button
             onClick={pasteImage}
             disabled={busy !== null}
-            className="flex w-full items-center gap-2.5 rounded-xl border border-neutral-200 px-4 py-3 text-left text-sm text-neutral-700 transition hover:border-primary-300 hover:bg-primary-50 disabled:opacity-50"
+            className="flex w-full items-center gap-2 rounded-md border border-neutral-200 px-4 py-3 text-left text-sm text-neutral-700 transition duration-fast ease-out hover:border-primary-300 hover:bg-primary-50 disabled:opacity-50"
           >
             {busy === "clipboard-image" ? (
               <Loader2 className="h-4 w-4 animate-spin text-primary-500" />
@@ -201,7 +201,7 @@ export function RefsPopup({ root, onPick, onClose }: {
           <button
             onClick={shoot}
             disabled={busy !== null}
-            className="flex w-full items-center gap-2.5 rounded-xl border border-neutral-200 px-4 py-3 text-left text-sm text-neutral-700 transition hover:border-primary-300 hover:bg-primary-50 disabled:opacity-50"
+            className="flex w-full items-center gap-2 rounded-md border border-neutral-200 px-4 py-3 text-left text-sm text-neutral-700 transition duration-fast ease-out hover:border-primary-300 hover:bg-primary-50 disabled:opacity-50"
           >
             {busy === "shot" ? (
               <Loader2 className="h-4 w-4 animate-spin text-primary-500" />
@@ -215,7 +215,7 @@ export function RefsPopup({ root, onPick, onClose }: {
       )}
 
       {err && (
-        <p className="mt-2 flex items-center gap-1 text-[11px] text-red-500">
+        <p className="mt-2 flex items-center gap-1 text-xs text-red-500">
           <AlertCircle className="h-3 w-3" />
           {err}
         </p>

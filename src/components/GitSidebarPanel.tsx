@@ -111,7 +111,7 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
 
   const [view, setView] = useState<View>({ kind: "list" });
   // 面板宽度自治: wrapper 自己持 width, flex 兄弟布局自适应, App 不感知。
-  // 拖拽中禁用 width transition 保证跟手; 拖过一次后自动拉宽退位 (以用户为准)
+  // 拖拽中禁用 width transition duration-fast ease-out 保证跟手; 拖过一次后自动拉宽退位 (以用户为准)
   const [width, setWidth] = useState(DEFAULT_W);
   const [dragging, setDragging] = useState(false);
   const dragStartRef = useRef<{ x: number; w: number } | null>(null);
@@ -341,20 +341,20 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
         <div
           onMouseDown={startResize}
           onDoubleClick={() => { userResizedRef.current = false; setWidth(DEFAULT_W); }}
-          className="group absolute bottom-2 left-0 top-2 z-10 flex w-1.5 cursor-col-resize items-center justify-center"
+          className="group absolute bottom-2 left-0 top-2 z-10 flex w-2 cursor-col-resize items-center justify-center"
           title="拖动调整宽度 · 双击复位"
         >
           <div
-            className={`h-10 w-[3px] rounded-full transition ${
+            className={`h-10 w-[3px] rounded-full transition duration-fast ease-out ${
               dragging ? "bg-[rgb(var(--primary-500))]" : "bg-transparent group-hover:bg-[rgb(var(--border-strong))]"
             }`}
           />
         </div>
-        <aside className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-base)/var(--chat-alpha))] shadow-sm">
+        <aside className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-base)/var(--chat-alpha))] shadow-sm">
         {view.kind === "list" ? (
           // list header: 分支(可点击切换) + upstream/ahead/behind + 历史 + 刷新 + 收起
           <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
-            <div className="flex min-w-0 items-center gap-1.5">
+            <div className="flex min-w-0 items-center gap-2">
               <GitBranch className="h-4 w-4 shrink-0 text-neutral-500" />
               {status?.is_repo && status.branch ? (
                 <button
@@ -363,7 +363,7 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
                     loadBranches(cwd);
                     setBranchPickerOpen(true);
                   }}
-                  className="truncate text-sm font-medium transition hover:text-[rgb(var(--primary-600))]"
+                  className="truncate text-sm font-medium transition duration-fast ease-out hover:text-[rgb(var(--primary-600))]"
                   title="切换分支"
                 >
                   {status.branch}
@@ -393,7 +393,7 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
               <button
                 onClick={() => setView({ kind: "history" })}
                 disabled={!status?.is_repo || writing}
-                className="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-200/70 hover:text-neutral-700 disabled:opacity-40"
+                className="rounded-md p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-200/70 hover:text-neutral-700 disabled:opacity-40"
                 title="提交历史"
               >
                 <History className="h-4 w-4" />
@@ -401,14 +401,14 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
               <button
                 onClick={() => cwd && loadStatus(cwd)}
                 disabled={!cwd || loading}
-                className="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-200/70 hover:text-neutral-700 disabled:opacity-40"
+                className="rounded-md p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-200/70 hover:text-neutral-700 disabled:opacity-40"
                 title="刷新"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               </button>
               <button
                 onClick={onClose}
-                className="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-200/70 hover:text-neutral-700"
+                className="rounded-md p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-200/70 hover:text-neutral-700"
                 title="收起"
               >
                 <X className="h-4 w-4" />
@@ -417,10 +417,10 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
           </div>
         ) : view.kind === "diff" ? (
           // diff 视图导航条: ‹ 返回 + 类型标签 + 文件路径 + staged 标记
-          <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2.5">
+          <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2">
             <button
               onClick={() => setView({ kind: "list" })}
-              className="flex items-center rounded-md p-0.5 text-neutral-500 transition hover:bg-neutral-200/70 hover:text-neutral-800"
+              className="flex items-center rounded-md p-1 text-neutral-500 transition duration-fast ease-out hover:bg-neutral-200/70 hover:text-neutral-800"
               title="返回 (Esc)"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -428,7 +428,7 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
             <div className="flex min-w-0 items-center gap-2">
               {selectedMeta && SelectedIcon && (
                 <span className="flex shrink-0 items-center gap-1 text-xs text-neutral-500">
-                  <SelectedIcon className="h-3.5 w-3.5" />
+                  <SelectedIcon className="h-4 w-4" />
                   {selectedMeta.label}
                 </span>
               )}
@@ -440,10 +440,10 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
           </div>
         ) : view.kind === "history" ? (
           // history 视图导航条: ‹ 返回 + 标题
-          <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2.5">
+          <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2">
             <button
               onClick={() => setView({ kind: "list" })}
-              className="flex items-center rounded-md p-0.5 text-neutral-500 transition hover:bg-neutral-200/70 hover:text-neutral-800"
+              className="flex items-center rounded-md p-1 text-neutral-500 transition duration-fast ease-out hover:bg-neutral-200/70 hover:text-neutral-800"
               title="返回 (Esc)"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -456,7 +456,7 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
             <div className="flex items-center gap-2 px-3 py-2">
               <button
                 onClick={() => setView({ kind: "history" })}
-                className="flex items-center rounded-md p-0.5 text-neutral-500 transition hover:bg-neutral-200/70 hover:text-neutral-800"
+                className="flex items-center rounded-md p-1 text-neutral-500 transition duration-fast ease-out hover:bg-neutral-200/70 hover:text-neutral-800"
                 title="返回 (Esc)"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -469,7 +469,7 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
               </div>
             </div>
             {showMatches && show && (
-              <div className="flex items-center gap-1.5 px-3 pb-1.5 text-[11px] text-neutral-400">
+              <div className="flex items-center gap-2 px-3 pb-2 text-xs text-neutral-400">
                 <span className="truncate">{show.author}</span>
                 <span>·</span>
                 <span className="tabular-nums">{fmtDate(show.date)}</span>
@@ -480,11 +480,11 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
 
         {/* 暂存/取消暂存全部 toolbar (仅 list 视图 + 仓库有变更时) */}
         {view.kind === "list" && status?.is_repo && (hasStaged || hasUnstaged) && (
-          <div className="flex items-center gap-2 border-b border-neutral-200 px-4 py-1.5">
+          <div className="flex items-center gap-2 border-b border-neutral-200 px-4 py-2">
             <button
               onClick={() => handleStage(allUnstagedPaths)}
               disabled={writing || !hasUnstaged}
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-neutral-500 transition hover:bg-neutral-200/70 hover:text-neutral-800 disabled:opacity-40"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-neutral-500 transition duration-fast ease-out hover:bg-neutral-200/70 hover:text-neutral-800 disabled:opacity-40"
               title="暂存所有未暂存与未跟踪文件"
             >
               <Plus className="h-3 w-3" />
@@ -493,7 +493,7 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
             <button
               onClick={() => handleUnstage(allStagedPaths)}
               disabled={writing || !hasStaged}
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-neutral-500 transition hover:bg-neutral-200/70 hover:text-neutral-800 disabled:opacity-40"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-neutral-500 transition duration-fast ease-out hover:bg-neutral-200/70 hover:text-neutral-800 disabled:opacity-40"
               title="取消所有暂存"
             >
               <Minus className="h-3 w-3" />
@@ -570,12 +570,12 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
                 <button
                   key={e.hash}
                   onClick={() => setView({ kind: "commit", hash: e.hash })}
-                  className="flex w-full flex-col gap-0.5 border-b border-neutral-100 px-4 py-2 text-left transition hover:bg-neutral-200/60"
+                  className="flex w-full flex-col gap-1 border-b border-neutral-100 px-4 py-2 text-left transition duration-fast ease-out hover:bg-neutral-200/60"
                 >
                   <span className="truncate text-xs font-medium text-neutral-800" title={e.subject}>
                     {e.subject}
                   </span>
-                  <div className="flex items-center gap-2 text-[11px] text-neutral-400">
+                  <div className="flex items-center gap-2 text-xs text-neutral-400">
                     <span className="truncate">{e.author}</span>
                     <span>·</span>
                     <span className="tabular-nums">{fmtDate(e.date)}</span>
@@ -610,18 +610,18 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
               placeholder="提交信息…"
               rows={2}
               disabled={!hasStaged || writing}
-              className="w-full resize-none rounded-md border border-neutral-200 bg-[rgb(var(--surface-base))] px-2 py-1.5 text-xs text-neutral-800 placeholder:text-neutral-400 focus:border-[rgb(var(--primary-400))] focus:outline-none disabled:opacity-50"
+              className="w-full resize-none rounded-md border border-neutral-200 bg-[rgb(var(--surface-base))] px-2 py-2 text-xs text-neutral-800 placeholder:text-neutral-400 focus:border-[rgb(var(--primary-400))] focus:outline-none disabled:opacity-50"
             />
             <div className="mt-2 flex items-center gap-2">
               <button
                 onClick={askCommit}
                 disabled={!hasStaged || !commitMsg.trim() || writing}
-                className="flex items-center gap-1 rounded-md bg-[rgb(var(--primary-500))] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[rgb(var(--primary-600))] disabled:opacity-40"
+                className="flex items-center gap-1 rounded-md bg-[rgb(var(--primary-500))] px-3 py-2 text-xs font-medium text-white transition duration-fast ease-out hover:bg-[rgb(var(--primary-600))] disabled:opacity-40"
               >
-                <GitCommitHorizontal className="h-3.5 w-3.5" />
+                <GitCommitHorizontal className="h-4 w-4" />
                 提交 ({groups.staged.length})
               </button>
-              {!hasStaged && <span className="text-[11px] text-neutral-400">无暂存改动</span>}
+              {!hasStaged && <span className="text-xs text-neutral-400">无暂存改动</span>}
             </div>
           </div>
         )}
@@ -636,12 +636,12 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
             if (e.target === e.currentTarget) setBranchPickerOpen(false);
           }}
         >
-          <div className="w-72 overflow-hidden rounded-xl border border-neutral-200 bg-panel shadow-2xl">
-            <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-2.5">
+          <div className="w-72 overflow-hidden rounded-md border border-neutral-200 bg-panel shadow-lg">
+            <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-2">
               <span className="text-sm font-medium">切换分支</span>
               <button
                 onClick={() => setBranchPickerOpen(false)}
-                className="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-200/70 hover:text-neutral-700"
+                className="rounded-md p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-200/70 hover:text-neutral-700"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -657,12 +657,12 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
                     key={b.name}
                     onClick={() => askCheckout(b.name)}
                     disabled={b.current || writing}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs transition hover:bg-neutral-200/60 disabled:opacity-50"
+                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs transition duration-fast ease-out hover:bg-neutral-200/60 disabled:opacity-50"
                   >
                     {b.current ? (
-                      <Check className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--primary-500))]" />
+                      <Check className="h-4 w-4 shrink-0 text-[rgb(var(--primary-500))]" />
                     ) : (
-                      <span className="h-3.5 w-3.5 shrink-0" />
+                      <span className="h-4 w-4 shrink-0" />
                     )}
                     <span className="truncate font-mono">{b.name}</span>
                     {b.upstream && (
@@ -686,20 +686,20 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
             if (e.target === e.currentTarget) confirm.onCancel();
           }}
         >
-          <div className="w-96 overflow-hidden rounded-xl border border-neutral-200 bg-panel shadow-2xl">
+          <div className="w-96 overflow-hidden rounded-md border border-neutral-200 bg-panel shadow-lg">
             <div className="border-b border-neutral-200 px-4 py-3 text-sm font-medium">{confirm.title}</div>
             <div className="whitespace-pre-line px-4 py-4 text-xs text-neutral-600">{confirm.message}</div>
             <div className="flex justify-end gap-2 border-t border-neutral-200 px-4 py-3">
               <button
                 onClick={confirm.onCancel}
-                className="rounded-md px-3 py-1.5 text-xs text-neutral-500 transition hover:bg-neutral-200/70"
+                className="rounded-md px-3 py-2 text-xs text-neutral-500 transition duration-fast ease-out hover:bg-neutral-200/70"
               >
                 取消
               </button>
               <button
                 onClick={confirm.onConfirm}
                 disabled={writing}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-40 ${
+                className={`rounded-md px-3 py-2 text-xs font-medium text-white transition duration-fast ease-out disabled:opacity-40 ${
                   confirm.danger ? "bg-red-500 hover:bg-red-600" : "bg-[rgb(var(--primary-500))] hover:bg-[rgb(var(--primary-600))]"
                 }`}
               >
@@ -740,7 +740,7 @@ function FileGroup({
   const actionLabel = isStaged ? "取消暂存" : "暂存";
   return (
     <div className="py-1">
-      <div className="px-4 py-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+      <div className="px-4 py-1 text-xs font-medium uppercase tracking-wide text-neutral-400">
         {title} ({items.length})
       </div>
       {items.map((f) => {
@@ -748,23 +748,23 @@ function FileGroup({
         const meta = type ? CHANGE_META[type] : null;
         const Icon = meta?.Icon ?? FileText;
         return (
-          <div key={f.path} className="group flex items-center transition hover:bg-neutral-200/60">
+          <div key={f.path} className="group flex items-center transition duration-fast ease-out hover:bg-neutral-200/60">
             <button
               onClick={() => onSelect({ path: f.path, staged: isStaged })}
-              className="flex flex-1 items-center gap-2 px-4 py-1.5 text-left text-xs text-neutral-600 transition hover:text-neutral-900"
+              className="flex flex-1 items-center gap-2 px-4 py-2 text-left text-xs text-neutral-600 transition duration-fast ease-out hover:text-neutral-900"
               title={f.old_path ? `${f.old_path} → ${f.path}` : f.path}
             >
-              <Icon className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+              <Icon className="h-4 w-4 shrink-0 text-neutral-400" />
               <span className="truncate font-mono">{f.path}</span>
             </button>
             {fileAction && (
               <button
                 onClick={() => fileAction(f.path)}
                 disabled={writing}
-                className="mr-2 shrink-0 rounded p-0.5 text-neutral-400 opacity-0 transition hover:text-neutral-700 group-hover:opacity-100 disabled:opacity-40"
+                className="mr-2 shrink-0 rounded-sm p-1 text-neutral-400 opacity-0 transition duration-fast ease-out hover:text-neutral-700 group-hover:opacity-100 disabled:opacity-40"
                 title={actionLabel}
               >
-                <ActionIcon className="h-3.5 w-3.5" />
+                <ActionIcon className="h-4 w-4" />
               </button>
             )}
           </div>

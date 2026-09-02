@@ -25,7 +25,7 @@ export const MessageItem = memo(function MessageItem({ entry }: { entry: ChatEnt
       {bubbleOn ? (
         // 气泡模式: 气泡底色/不透明率由 --bubble-bg / --bubble-opacity 驱动 (见 index.css .bubble)
         <div
-          className={`bubble min-w-0 text-sm leading-relaxed ${
+          className={`bubble min-w-0 text-base leading-relaxed ${
             isUser
               ? "max-w-[85%] text-[rgb(var(--text-on-bubble))]"
               : "max-w-[90%] text-[rgb(var(--text-on-bubble))]"
@@ -36,11 +36,11 @@ export const MessageItem = memo(function MessageItem({ entry }: { entry: ChatEnt
       ) : isUser ? (
         // 关闭气泡: user 套实色轻气泡 (中性底 + 边框, 非主题色底), 右对齐; assistant 全宽平铺。
         // 气泡开关语义因此变为「是否让 AI 回复也进气泡」, 关闭后仍能分清谁在说话
-        <div className="bubble-user min-w-0 max-w-[85%] text-sm leading-relaxed text-[rgb(var(--text-user))]">
+        <div className="bubble-user min-w-0 max-w-[85%] text-base leading-relaxed text-[rgb(var(--text-user))]">
           {content}
         </div>
       ) : (
-        <div className="min-w-0 w-full text-sm leading-relaxed text-neutral-800">
+        <div className="min-w-0 w-full text-base leading-relaxed text-neutral-800">
           {content}
         </div>
       )}

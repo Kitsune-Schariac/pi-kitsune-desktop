@@ -78,7 +78,7 @@ export function SessionPicker({ onPick, onDone }: {
   return (
     <div className="flex h-72 gap-2">
       {/* 左: 会话列表 */}
-      <div className="w-1/2 overflow-auto rounded-lg border border-neutral-200 bg-panel p-1.5">
+      <div className="w-1/2 overflow-auto rounded-md border border-neutral-200 bg-panel p-2">
         {!projects ? (
           <div className="flex h-full items-center justify-center gap-2 text-xs text-neutral-400">
             <Loader2 className="h-4 w-4 animate-spin" /> 加载中…
@@ -86,21 +86,21 @@ export function SessionPicker({ onPick, onDone }: {
         ) : (
           projects.map((p) => (
             <div key={p.path} className="mb-1">
-              <div className="px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+              <div className="px-2 py-1 text-xs font-medium uppercase tracking-wide text-neutral-400">
                 {p.display_name}
               </div>
               {p.sessions.map((s) => (
                 <button
                   key={s.session_path}
                   onClick={() => openSession(p, s)}
-                  className={`flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition ${
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition duration-fast ease-out ${
                     selSession?.session_path === s.session_path
                       ? "bg-primary-50 text-primary-700"
                       : "text-neutral-600 hover:bg-neutral-100"
                   }`}
                   title={s.preview}
                 >
-                  <MessageSquare className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+                  <MessageSquare className="h-4 w-4 shrink-0 text-neutral-400" />
                   <span className="truncate">{s.preview || s.file_name}</span>
                 </button>
               ))}
@@ -110,7 +110,7 @@ export function SessionPicker({ onPick, onDone }: {
       </div>
       {/* 右: 消息列表 (单选) */}
       <div className="flex w-1/2 flex-col">
-        <div className="flex-1 overflow-auto rounded-lg border border-neutral-200 bg-panel p-1.5">
+        <div className="flex-1 overflow-auto rounded-md border border-neutral-200 bg-panel p-2">
           {!selSession ? (
             <div className="flex h-full items-center justify-center text-xs text-neutral-300">
               先选一个会话
@@ -130,32 +130,32 @@ export function SessionPicker({ onPick, onDone }: {
                 <button
                   key={e.id}
                   onClick={() => setSelMsg(sel ? null : e)}
-                  className={`mb-0.5 flex w-full items-start gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition ${
+                  className={`mb-1 flex w-full items-start gap-2 rounded-md px-2 py-1 text-left text-xs transition duration-fast ease-out ${
                     sel ? "bg-primary-50 text-primary-700" : "text-neutral-600 hover:bg-neutral-100"
                   }`}
                 >
                   {e.role === "user" ? (
-                    <User className="mt-0.5 h-3 w-3 shrink-0 text-neutral-400" />
+                    <User className="mt-1 h-3 w-3 shrink-0 text-neutral-400" />
                   ) : (
-                    <Bot className="mt-0.5 h-3 w-3 shrink-0 text-neutral-400" />
+                    <Bot className="mt-1 h-3 w-3 shrink-0 text-neutral-400" />
                   )}
                   <span className="line-clamp-2">
                     {e.role === "user" ? "用户" : "助手"}: {e.text?.slice(0, 120)}
                   </span>
-                  {sel && <Check className="mt-0.5 h-3 w-3 shrink-0 text-primary-500" />}
+                  {sel && <Check className="mt-1 h-3 w-3 shrink-0 text-primary-500" />}
                 </button>
               );
             })
           )}
         </div>
         <div className="mt-2 flex items-center justify-between">
-          <span className="text-[11px] text-neutral-400">
+          <span className="text-xs text-neutral-400">
             {selMsg ? "已选 1 条消息" : "点击消息单选"}
           </span>
           <button
             onClick={confirm}
             disabled={!selMsg}
-            className="flex items-center gap-1 rounded-lg bg-primary-500 px-3 py-1.5 text-xs text-white transition hover:bg-primary-600 disabled:opacity-40"
+            className="flex items-center gap-1 rounded-md bg-primary-500 px-3 py-2 text-xs text-white transition duration-fast ease-out hover:bg-primary-600 disabled:opacity-40"
           >
             <ChevronRight className="h-3 w-3" />
             添加引用
@@ -163,7 +163,7 @@ export function SessionPicker({ onPick, onDone }: {
         </div>
       </div>
       {error && (
-        <p className="absolute bottom-14 left-3 flex items-center gap-1 text-[11px] text-red-500">
+        <p className="absolute bottom-14 left-3 flex items-center gap-1 text-xs text-red-500">
           <AlertCircle className="h-3 w-3" />
           {error}
         </p>

@@ -119,7 +119,7 @@ function TurnWaterfall({ turns }: { turns: SessionBehaviorResult["turns"] }) {
           : null;
         return (
           <div key={t.idx} className="group relative flex items-center gap-2">
-            <span className="w-8 shrink-0 text-right text-[10px] tabular-nums text-neutral-400">
+            <span className="w-8 shrink-0 text-right text-xs tabular-nums text-neutral-400">
               #{t.idx + 1}
             </span>
             <div className="h-[9px] flex-1 rounded-sm bg-neutral-100/80">
@@ -138,11 +138,11 @@ function TurnWaterfall({ turns }: { turns: SessionBehaviorResult["turns"] }) {
                 }}
               />
             </div>
-            <span className="w-14 shrink-0 text-[10px] tabular-nums text-neutral-500">
+            <span className="w-14 shrink-0 text-xs tabular-nums text-neutral-500">
               {fmtDuration(t.durationMs)}
             </span>
             {/* 自定义 tooltip: 实底 bg-panel + 细边 (皮肤体系铁律: 禁 backdrop-filter) */}
-            <div className="pointer-events-none absolute left-10 top-full z-20 mt-1 hidden w-52 rounded-lg border border-neutral-200 bg-panel p-2.5 text-[11px] leading-relaxed text-neutral-600 shadow-lg group-hover:block">
+            <div className="pointer-events-none absolute left-10 top-full z-20 mt-1 hidden w-52 rounded-md border border-neutral-200 bg-panel p-2 text-xs leading-relaxed text-neutral-600 shadow-lg group-hover:block">
               <div className="mb-1 font-medium text-neutral-800">
                 第 {t.idx + 1} 轮 · {fmtDuration(t.durationMs)}
               </div>
@@ -184,13 +184,13 @@ function ThinkingRing({ ratio }: { ratio: number | null }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         {ratio === null ? (
-          <span className="text-[10px] text-neutral-400">无数据</span>
+          <span className="text-xs text-neutral-400">无数据</span>
         ) : (
           <>
             <span className="text-lg font-semibold tabular-nums text-neutral-900">
               {Math.round(pct * 100)}%
             </span>
-            <span className="text-[10px] text-neutral-400">thinking</span>
+            <span className="text-xs text-neutral-400">thinking</span>
           </>
         )}
       </div>
@@ -208,13 +208,13 @@ function SummaryCard({
 }) {
   const display = useCountUp(value, animate);
   return (
-    <div className="rounded-xl border border-neutral-200 bg-panel p-3 transition-shadow hover:shadow-md">
+    <div className="rounded-md border border-neutral-200 bg-panel p-3 transition-shadow-sm duration-fast ease-out hover:shadow-md">
       <div className="mb-1 flex items-center gap-1 text-xs text-neutral-400">
-        <Icon className="h-3.5 w-3.5 text-primary-500" />
+        <Icon className="h-4 w-4 text-primary-500" />
         {label}
       </div>
       <div className="text-lg font-semibold tabular-nums text-neutral-900">{format(display)}</div>
-      {foot && <div className="mt-0.5 text-[10px] text-neutral-400">{foot}</div>}
+      {foot && <div className="mt-1 text-xs text-neutral-400">{foot}</div>}
     </div>
   );
 }
@@ -275,16 +275,16 @@ export function BehaviorStatsPanel() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setDrillPath(null)}
-            className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-panel px-2.5 py-1.5 text-xs text-neutral-600 transition hover:bg-neutral-100"
+            className="flex items-center gap-1 rounded-md border border-neutral-200 bg-panel px-2 py-2 text-xs text-neutral-600 transition duration-fast ease-out hover:bg-neutral-100"
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
+            <ArrowLeft className="h-4 w-4" />
             返回
           </button>
           {drillLoading && <Loader2 className="h-4 w-4 animate-spin text-primary-500" />}
           {drill && (
             <div className="flex min-w-0 items-center gap-2 text-xs text-neutral-500">
               {drill.isSubagent && (
-                <span className="flex items-center gap-0.5 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-500" title="嵌套 run 目录下的 subagent 会话">
+                <span className="flex items-center gap-1 rounded-sm bg-neutral-100 px-2 py-1 text-xs text-neutral-500" title="嵌套 run 目录下的 subagent 会话">
                   <Bot className="h-3 w-3" />
                   subagent
                 </span>
@@ -296,7 +296,7 @@ export function BehaviorStatsPanel() {
         </div>
         {drillError && (
           <p className="flex items-center gap-1 text-xs text-red-500">
-            <AlertCircle className="h-3.5 w-3.5" /> {drillError}
+            <AlertCircle className="h-4 w-4" /> {drillError}
           </p>
         )}
         {drill && (
@@ -313,19 +313,19 @@ export function BehaviorStatsPanel() {
               ].map(({ icon: Icon, text }) => (
                 <span
                   key={text}
-                  className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-panel px-3 py-1.5 text-neutral-600"
+                  className="flex items-center gap-2 rounded-full border border-neutral-200 bg-panel px-3 py-2 text-neutral-600"
                 >
-                  <Icon className="h-3.5 w-3.5 text-primary-500" />
+                  <Icon className="h-4 w-4 text-primary-500" />
                   {text}
                 </span>
               ))}
             </div>
 
             {/* 轮耗时瀑布 */}
-            <section className="rounded-xl border border-neutral-200 bg-panel p-4">
+            <section className="rounded-md border border-neutral-200 bg-panel p-4">
               <div className="mb-3 flex items-baseline justify-between">
                 <h3 className="text-sm font-medium text-neutral-700">轮耗时瀑布</h3>
-                <div className="flex items-center gap-3 text-[10px] text-neutral-400">
+                <div className="flex items-center gap-3 text-xs text-neutral-400">
                   <span className="flex items-center gap-1">
                     <span className="inline-block h-2 w-2 rounded-sm bg-primary-400/70" />正常
                   </span>
@@ -369,7 +369,7 @@ export function BehaviorStatsPanel() {
         {loading && <Loader2 className="h-4 w-4 animate-spin text-primary-500" />}
         {error && (
           <span className="flex items-center gap-1 text-xs text-red-500">
-            <AlertCircle className="h-3.5 w-3.5" /> {error}
+            <AlertCircle className="h-4 w-4" /> {error}
           </span>
         )}
       </div>
@@ -378,7 +378,7 @@ export function BehaviorStatsPanel() {
 
       {/* 汇总卡片 */}
       {summary && (
-        <div className="grid grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-4 gap-2">
           <SummaryCard icon={MessagesSquare} label="轮数" value={summary.turns} animate={!loading}
             foot={`${summary.sessions} 个会话`} />
           <SummaryCard icon={Wrench} label="工具调用" value={summary.toolCalls} animate={!loading}
@@ -393,11 +393,11 @@ export function BehaviorStatsPanel() {
             format={fmtDuration}
             foot={summary.sessions > 0 ? `${fmtDuration(Math.round(summary.durationMs / summary.sessions))} / 会话` : undefined} />
           {/* thinking 占比卡: 环图嵌卡, 跨两列 */}
-          <div className="col-span-2 flex items-center gap-4 rounded-xl border border-neutral-200 bg-panel p-3 transition-shadow hover:shadow-md">
+          <div className="col-span-2 flex items-center gap-4 rounded-md border border-neutral-200 bg-panel p-3 transition-shadow-sm duration-fast ease-out hover:shadow-md">
             <ThinkingRing ratio={summary.thinkingRatio} />
             <div className="min-w-0">
               <div className="mb-1 flex items-center gap-1 text-xs text-neutral-400">
-                <Brain className="h-3.5 w-3.5 text-primary-500" />
+                <Brain className="h-4 w-4 text-primary-500" />
                 thinking 占比
               </div>
               {summary.thinkingRatio === null ? (
@@ -417,10 +417,10 @@ export function BehaviorStatsPanel() {
 
       {/* 按天趋势: grouped 双系列 (轮数 / 工具调用) */}
       {byDay.length > 0 && (
-        <section className="rounded-xl border border-neutral-200 bg-panel p-4">
+        <section className="rounded-md border border-neutral-200 bg-panel p-4">
           <div className="mb-3 flex items-baseline justify-between">
             <h3 className="text-sm font-medium text-neutral-700">按天趋势</h3>
-            <div className="flex items-center gap-3 text-[10px] text-neutral-400">
+            <div className="flex items-center gap-3 text-xs text-neutral-400">
               <span className="flex items-center gap-1">
                 <span className="inline-block h-2 w-2 rounded-sm bg-primary-500" />轮数
               </span>
@@ -447,11 +447,11 @@ export function BehaviorStatsPanel() {
                     title={`${d.date} · ${d.turns} 轮 · ${d.toolCalls} 次工具${d.retries > 0 ? ` · ${d.retries} 次重试` : ""}${d.compactions > 0 ? ` · ${d.compactions} 次压缩` : ""}`}
                   >
                     <div
-                      className="flex-1 rounded-t bg-primary-500/80 transition hover:bg-primary-500"
+                      className="flex-1 rounded-t-sm bg-primary-500/80 transition duration-fast ease-out hover:bg-primary-500"
                       style={{ height: `${Math.max((d.turns / maxTurns) * 100, d.turns > 0 ? 3 : 0)}%` }}
                     />
                     <div
-                      className="flex-1 rounded-t bg-primary-300/70 transition hover:bg-primary-400"
+                      className="flex-1 rounded-t-sm bg-primary-300/70 transition duration-fast ease-out hover:bg-primary-400"
                       style={{ height: `${Math.max((d.toolCalls / maxTools) * 100, d.toolCalls > 0 ? 3 : 0)}%` }}
                     />
                   </div>
@@ -467,17 +467,17 @@ export function BehaviorStatsPanel() {
         <div className="grid grid-cols-2 gap-4">
           {toolDist.length > 0 && <ToolDistChart dist={toolDist} title="工具分布" />}
           {slowTurns.length > 0 && (
-            <section className="rounded-xl border border-neutral-200 bg-panel p-4">
-              <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-neutral-700">
+            <section className="rounded-md border border-neutral-200 bg-panel p-4">
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-neutral-700">
                 <Hourglass className="h-4 w-4 text-primary-500" />
                 最慢轮次
               </h3>
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {slowTurns.slice(0, 6).map((s, i) => (
                   <button
                     key={`${s.path}-${s.turnIdx}`}
                     onClick={() => setDrillPath(s.path)}
-                    className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition hover:bg-neutral-50"
+                    className="group flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs transition duration-fast ease-out hover:bg-neutral-50"
                     title={`钻取会话: ${s.fileName}`}
                   >
                     <span className={`w-5 shrink-0 text-center font-semibold tabular-nums ${
@@ -491,7 +491,7 @@ export function BehaviorStatsPanel() {
                     <span className="min-w-0 flex-1 truncate text-neutral-500" title={s.project}>
                       {projectLabel(s.project)} · 第 {s.turnIdx + 1} 轮
                     </span>
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-300 transition group-hover:text-primary-500" />
+                    <ChevronRight className="h-4 w-4 shrink-0 text-neutral-300 transition duration-fast ease-out group-hover:text-primary-500" />
                   </button>
                 ))}
               </div>
@@ -502,7 +502,7 @@ export function BehaviorStatsPanel() {
 
       {/* 会话明细 (点击行钻取) */}
       {sessions.length > 0 && (
-        <section className="rounded-xl border border-neutral-200 bg-panel">
+        <section className="rounded-md border border-neutral-200 bg-panel">
           <h3 className="border-b border-neutral-100 px-4 py-3 text-sm font-medium text-neutral-700">
             会话明细 ({sessions.length})
           </h3>
@@ -520,7 +520,7 @@ export function BehaviorStatsPanel() {
                   <tr
                     key={s.path}
                     onClick={() => setDrillPath(s.path)}
-                    className="cursor-pointer transition hover:bg-neutral-50"
+                    className="cursor-pointer transition duration-fast ease-out hover:bg-neutral-50"
                     title={`钻取会话: ${s.fileName}`}
                   >
                     <td className="whitespace-nowrap px-3 py-2 tabular-nums text-neutral-500">
@@ -556,7 +556,7 @@ export function BehaviorStatsPanel() {
                     </td>
                     <td className="px-3 py-2 tabular-nums">{s.compactions}</td>
                     <td className="px-2 py-2">
-                      <ChevronRight className="h-3.5 w-3.5 text-neutral-300" />
+                      <ChevronRight className="h-4 w-4 text-neutral-300" />
                     </td>
                   </tr>
                 ))}
@@ -568,7 +568,7 @@ export function BehaviorStatsPanel() {
 
       {/* 空态 */}
       {!loading && !error && summary && summary.turns === 0 && (
-        <p className="rounded-xl border border-dashed border-neutral-200 px-4 py-10 text-center text-sm text-neutral-400">
+        <p className="rounded-md border border-dashed border-neutral-200 px-4 py-10 text-center text-sm text-neutral-400">
           该筛选范围内暂无行为数据
         </p>
       )}
@@ -576,7 +576,7 @@ export function BehaviorStatsPanel() {
   );
 }
 
-/** 工具分布横向条形: top8 逐条 + 其余归「其它」(未知工具名不丢弃) */
+/** 工具分布横向条形: top-8 逐条 + 其余归「其它」(未知工具名不丢弃) */
 function ToolDistChart({ dist, title }: { dist: { name: string; count: number }[]; title: string }) {
   const top = dist.slice(0, 8);
   const rest = dist.slice(8);
@@ -585,12 +585,12 @@ function ToolDistChart({ dist, title }: { dist: { name: string; count: number }[
   const max = Math.max(...rows.map((d) => d.count), 1);
   const grand = dist.reduce((s, d) => s + d.count, 0);
   return (
-    <section className="rounded-xl border border-neutral-200 bg-panel p-4">
-      <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-neutral-700">
+    <section className="rounded-md border border-neutral-200 bg-panel p-4">
+      <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-neutral-700">
         <Wrench className="h-4 w-4 text-primary-500" />
         {title}
       </h3>
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         {rows.map((d) => (
           <div key={d.name} className="group flex items-center gap-2" title={rest.length > 0 && d.name === "其它" ? `含 ${rest.map((r) => `${r.name}×${r.count}`).join("、")}` : undefined}>
             <span className={`w-20 shrink-0 truncate text-right text-xs ${d.name === "其它" ? "text-neutral-400" : "text-neutral-600"}`}>
@@ -598,7 +598,7 @@ function ToolDistChart({ dist, title }: { dist: { name: string; count: number }[
             </span>
             <div className="h-4 flex-1 rounded-sm bg-neutral-100/80">
               <div
-                className={`h-full rounded-sm transition-all duration-500 ${
+                className={`h-full rounded-sm transition-[width,background-color] duration-500 ease-out ${
                   d.name === "其它" ? "bg-neutral-300/70" : "bg-gradient-to-r from-primary-400/60 to-primary-500/80 group-hover:from-primary-400 group-hover:to-primary-500"
                 }`}
                 style={{ width: `${Math.max((d.count / max) * 100, 2)}%` }}
@@ -606,7 +606,7 @@ function ToolDistChart({ dist, title }: { dist: { name: string; count: number }[
             </div>
             <span className="w-16 shrink-0 text-xs tabular-nums text-neutral-500">
               {fmt(d.count)}
-              <span className="ml-1 text-[10px] text-neutral-400">
+              <span className="ml-1 text-xs text-neutral-400">
                 {Math.round((d.count / grand) * 100)}%
               </span>
             </span>
