@@ -436,9 +436,17 @@ fn aggregate(index: &token_stats::TokenIndex, range: &DayRange, project: Option<
     let mut slow_all: Vec<Value> = Vec::new();
 
     for (path, fa) in &index.files {
-        filter_projects.insert(fa.cwd.clone());
+        // 项目归属与过滤口径必须与 token_stats::aggregate 完全一致 —— 两个面板共享同一个
+        // 项目下拉 (StatsFilterBar), 只改一边会让同一筛选条件在两处覆盖不同的会话集合。
+        // 子会话跟父会话走: 子代理 cwd 可能是项目子目录, 按自身 cwd 归类会掉出筛选
+        let owner_cwd = fa
+            .parent_path
+            .as_ref()
+            .and_then(|pp| index.files.get(pp))
+            .map_or(fa.cwd.as_str(), |parent| parent.cwd.as_str());
+        filter_projects.insert(owner_cwd.to_string());
         if let Some(p) = project {
-            if !fa.cwd.eq_ignore_ascii_case(p) {
+            if !token_stats::project_matches(owner_cwd, p) {
                 continue;
             }
         }
