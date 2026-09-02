@@ -92,6 +92,16 @@
   --diff-add-fg: 34 134 58;    /* 增行字 #22863a (无高亮降级用; 有高亮时 shiki span 覆盖) */
   --diff-del-bg: 255 238 240;  /* 删行底 #ffeef0 (GitHub 浅红) */
   --diff-del-fg: 203 36 49;    /* 删行字 #cb2431 */
+
+  /* 阴影: 双层带色相 (环境光叠直射光), 色相取基座冷调而非纯黑, 压在彩色底/暗色上不发灰发脏
+     浅色: --shadow-hue 与 --surface-sunken 同源冷调深蓝灰 */
+  --shadow-hue: 30 41 59;
+  --shadow-sm: 0 1px 2px rgb(var(--shadow-hue) / 0.06),
+               0 1px 1px rgb(var(--shadow-hue) / 0.04);
+  --shadow-md: 0 2px 8px rgb(var(--shadow-hue) / 0.08),
+               0 1px 2px rgb(var(--shadow-hue) / 0.06);
+  --shadow-lg: 0 8px 24px rgb(var(--shadow-hue) / 0.12),
+               0 2px 6px rgb(var(--shadow-hue) / 0.08);
 }
 
 /* 暗色方向: 皮肤 base=dark 时挂在 <html data-base="dark"> 上
@@ -142,6 +152,15 @@
   --diff-add-fg: 126 231 135;   /* 亮绿字 #7ee787 */
   --diff-del-bg: 60 26 28;      /* 深红底 */
   --diff-del-fg: 255 161 152;   /* 亮红字 #ffa198 */
+
+  /* 暗色阴影: 色相归零 (暗色下阴影靠暗度而非色相), alpha 整体提高一档 */
+  --shadow-hue: 0 0 0;
+  --shadow-sm: 0 1px 2px rgb(var(--shadow-hue) / 0.5),
+               0 1px 1px rgb(var(--shadow-hue) / 0.35);
+  --shadow-md: 0 2px 8px rgb(var(--shadow-hue) / 0.55),
+               0 1px 2px rgb(var(--shadow-hue) / 0.4);
+  --shadow-lg: 0 8px 24px rgb(var(--shadow-hue) / 0.6),
+               0 2px 6px rgb(var(--shadow-hue) / 0.45);
 }
 
 /* 暗色下覆盖根容器浅色渐变: 无背景图时露 body 暗底, 有背景图时背景层 (z-0) 盖住渐变 */
@@ -152,6 +171,10 @@
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "Symbols Nerd Font Mono", sans-serif;
+  /* 等宽数字: 统计面板数字流式更新时比例数字会横向抖动 (1 比 8 窄), tnum 让数字宽度一致 */
+  font-feature-settings: "tnum" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   background: rgb(var(--surface));
 }
 
@@ -441,4 +464,14 @@ input[type="range"]:disabled::-webkit-slider-thumb {
 .view-in-soft { animation: viewInSoft 160ms ease-out; }
 @media (prefers-reduced-motion: reduce) {
   .view-in, .view-in-soft { animation: none; }
+}
+
+/* 无障碍全局兑底: 系统开启减少动效时, 所有过渡/动画压到近零时长
+   (覆盖组件内联的 duration-* 与 animation-*) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

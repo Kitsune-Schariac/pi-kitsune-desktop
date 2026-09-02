@@ -137,7 +137,7 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
     // 底色走 --overlay-alpha: 纯色皮肤下实色撑层次, 背景图皮肤下半透明, 不糊掉背景。
     // 用内联 style 写边框避免 tailwind border-color longhand 与 shorthand 任意值优先级不确定。
     <div
-      className="rounded-lg p-2 text-sm"
+      className="rounded-md p-2 text-sm"
       style={{
         background: "rgb(var(--surface-sunken) / var(--overlay-alpha))",
         border: "1px solid rgb(var(--border-subtle))",
@@ -147,22 +147,22 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
       {/* 折叠行: 工具名 + 状态 + 参数摘要 / subagent 进度尾行 */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 text-left text-neutral-600 transition hover:text-neutral-900"
+        className="flex w-full items-center gap-2 text-left text-neutral-600 transition-colors duration-fast ease-out hover:text-neutral-900"
       >
-        <Icon className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+        <Icon className="h-4 w-4 shrink-0 text-neutral-400" />
         <span className="shrink-0 font-medium">{showSubagent ? agentName : entry.toolName}</span>
         {entry.status === "running" &&
           (showSubagent ? (
             // subagent 运行中: primary 呼吸灯 (animate-pulse 2s), 替代通用 spinner, 表达"子 agent 在跑"
             <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[rgb(var(--primary-500))] animate-pulse" />
           ) : (
-            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-neutral-400" />
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-neutral-400" />
           ))}
         {entry.status === "done" && (
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-500" />
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
         )}
         {entry.status === "error" && (
-          <XCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
+          <XCircle className="h-4 w-4 shrink-0 text-red-500" />
         )}
         {/* 摘要区: subagent 运行中显示进度尾行, done 显示耗时/cost; 普通工具显示 args 首行 */}
         {showSubagent && entry.status === "running" && progressTail && (
@@ -187,9 +187,9 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
           <span className="min-w-0 flex-1 truncate text-xs text-neutral-400">{summary}</span>
         )}
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+          <ChevronDown className="h-4 w-4 shrink-0 text-neutral-400" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+          <ChevronRight className="h-4 w-4 shrink-0 text-neutral-400" />
         )}
       </button>
       {/* 展开: 参数 + 结果 (差异化渲染)
@@ -201,17 +201,17 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
           {showSubagent && entry.status === "running" && resultText && (
             <pre
               ref={progressRef}
-              className="max-h-40 overflow-auto rounded bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 font-mono text-xs text-[rgb(var(--term-text))]"
+              className="max-h-40 overflow-auto rounded-sm bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 font-mono text-xs text-[rgb(var(--term-text))]"
             >
               {resultText}
             </pre>
           )}
           {showSubagent && entry.status === "done" && (
-            <div className="flex items-center gap-1.5 text-xs">
-              <Radar className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--primary-500))]" />
+            <div className="flex items-center gap-2 text-xs">
+              <Radar className="h-4 w-4 shrink-0 text-[rgb(var(--primary-500))]" />
               <button
                 onClick={() => useFleetStore.getState().requestOpenPanel()}
-                className="text-[rgb(var(--primary-600))] transition hover:text-[rgb(var(--primary-700))]"
+                className="text-[rgb(var(--primary-600))] transition-colors duration-fast ease-out hover:text-[rgb(var(--primary-700))]"
                 title="打开舰队面板查看此子 agent"
               >
                 在舰队中查看
@@ -220,7 +220,7 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
           )}
           {/* 保留普通工具的参数展示 (subagent 也不丢信息: args 可展开查看) */}
           {argsStr && (
-            <pre className="overflow-x-auto rounded bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 text-xs text-neutral-700">
+            <pre className="overflow-x-auto rounded-sm bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 text-xs text-neutral-700">
               {argsStr}
             </pre>
           )}
@@ -230,12 +230,12 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
           {diff?.patch && <DiffView patch={diff.patch} cwd={cwd} />}
           {!diff?.patch && diff?.diff && <PlainDiffView text={diff.diff} />}
           {resultText && !diff && isBash && (
-            <pre className="max-h-48 overflow-auto rounded bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 font-mono text-xs text-[rgb(var(--term-text))]">
+            <pre className="max-h-48 overflow-auto rounded-sm bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 font-mono text-xs text-[rgb(var(--term-text))]">
               {resultText}
             </pre>
           )}
           {resultText && !diff && !isBash && (
-            <pre className="max-h-48 overflow-auto rounded bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 text-xs text-neutral-700">
+            <pre className="max-h-48 overflow-auto rounded-sm bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 text-xs text-neutral-700">
               {resultText}
             </pre>
           )}
