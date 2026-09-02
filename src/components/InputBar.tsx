@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/session";
 import {
   Send, Square, Paperclip, X, ChevronDown, Cpu, Layers, Brain, Loader2,
-  ArrowUp, ArrowDown, Clock, DollarSign,
+  ArrowUp, ArrowDown, Clock, DollarSign, Gauge,
 } from "lucide-react";
 import { buildRefsParts, refIcon, refMetaText, type Ref } from "../lib/refs";
 import type { PaletteCommand } from "../lib/commands";
@@ -406,6 +406,14 @@ export function InputBar({
     const total = Math.floor(ms / 1000);
     return total < 60 ? `${total}s` : `${Math.floor(total / 60)}m ${total % 60}s`;
   };
+  // 输出速度 = 本轮累计输出 ÷ 已耗时 (平均速度, 与其余四项同为累计口径;
+  // elapsedMs 含 TTFT, 思考久时前期偏低属预期, 旁边就是耗时可自行判断)
+  // 耗时 <1s 或尚无输出时显示 —, 避免除零噪声 (PRD B3)
+  const outputTotal = turnStats ? turnStats.output + turnStats.liveOutput : 0;
+  const speedTokPerSec =
+    turnStats && elapsedMs >= 1000 && outputTotal > 0
+      ? (outputTotal / (elapsedMs / 1000)).toFixed(1)
+      : null;
 
   return (
     // 悬浮输入卡: 底部居中, 宽度与消息列表一致 (max-w-[65%]), 与消息区分离成浮动层
@@ -639,6 +647,10 @@ export function InputBar({
             <span className="flex items-center gap-1" title="本轮成本">
               <DollarSign className="h-3 w-3" />
               {turnStats.cost.toFixed(4)}
+            </span>
+            <span className="flex items-center gap-1" title="本轮输出速度">
+              <Gauge className="h-3 w-3" />
+              {speedTokPerSec === null ? "—" : `${speedTokPerSec} tok/s`}
             </span>
             <span className="flex items-center gap-1" title="本轮耗时">
               <Clock className="h-3 w-3" />
