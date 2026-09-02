@@ -19,6 +19,7 @@ pub struct SessionInfo {
     pub timestamp: String,    // 文件名里的 UTC 时间戳
     pub session_id: String,   // uuid
     pub preview: String,      // 首条 user 消息摘要
+    pub mtime_ms: Option<u64>, // 文件最后修改时间 (毫秒); 元数据不可得时为 None
 }
 
 pub(crate) fn agent_dir() -> Result<PathBuf, String> {
@@ -53,6 +54,47 @@ fn decode_project_dir(dir_name: &str) -> String {
         }
     }
     out
+}
+
+/// 文件名时间戳 (如 `2026-06-15T16-43-55-288Z`) 转 UNIX 毫秒。
+/// 注意格式与 ISO 不同: Windows 文件名不能含 `:`, pi 把时分秒间的冒号换成了 `-`。
+/// 解析失败返回 None (回退排序路径不 panic)。
+fn parse_file_ts_ms(s: &str) -> Option<u64> {
+    let b = s.as_bytes();
+    // 固定 24 字符: YYYY-MM-DD(10) T HH-MM-SS(8) - mmm(3) Z
+    if b.len() != 24 || b[4] != b'-' || b[7] != b'-' || b[10] != b'T'
+        || b[13] != b'-' || b[16] != b'-' || b[19] != b'-' || b[23] != b'Z' {
+        return None;
+    }
+    let num = |from: usize, to: usize| -> Option<i64> {
+        let mut v: i64 = 0;
+        for &c in &b[from..to] {
+            if !c.is_ascii_digit() {
+                return None;
+            }
+            v = v * 10 + (c - b'0') as i64;
+        }
+        Some(v)
+    };
+    let (y, mo, d) = (num(0, 4)?, num(5, 7)?, num(8, 10)?);
+    let (h, mi, se, ms) = (num(11, 13)?, num(14, 16)?, num(17, 19)?, num(20, 23)?);
+    if !(1..=12).contains(&mo) || h > 23 || mi > 59 || se > 59 || ms > 999 {
+        return None;
+    }
+    // 日有效性: 当月天数 (闰年 2 月 29)
+    let leap = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) as i64;
+    let dim = [31, 28 + leap, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][(mo - 1) as usize];
+    if d < 1 || d > dim {
+        return None;
+    }
+    // days_from_civil (Howard Hinnant): 公历日期 → 距 1970-01-01 天数, 与 behavior_stats::parse_iso_ms 同款
+    let yy = if mo <= 2 { y - 1 } else { y };
+    let era = yy / 400;
+    let yoe = yy - era * 400;
+    let doy = (153 * (if mo > 2 { mo - 3 } else { mo + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146097 + doe - 719468;
+    Some((days * 86_400 + h * 3_600 + mi * 60 + se) as u64 * 1000 + ms as u64)
 }
 
 /// 会话预览: 读首行 session 头 (取 cwd + uuid) + 最新 session_info name + 首条 user 消息前 100 字符
@@ -154,8 +196,7 @@ pub fn list_projects_and_sessions() -> Result<Vec<ProjectInfo>, String> {
         let Some(dir_name) = entry.file_name().to_str().map(|s| s.to_string()) else {
             continue;
         };
-        // 会话文件按文件名时间戳倒序 (UTC ISO 字符串可直接字典序比较)
-        // 同时收集会话头 cwd (权威项目路径) — 有损反解无法可靠还原
+        // 会话按最后修改时间倒序 (见下方 sort_by), 同时收集会话头 cwd (权威项目路径)
         let mut sessions: Vec<SessionInfo> = Vec::new();
         let mut project_cwd: Option<String> = None;
         let Ok(files) = std::fs::read_dir(&path) else { continue };
@@ -176,15 +217,28 @@ pub fn list_projects_and_sessions() -> Result<Vec<ProjectInfo>, String> {
             if project_cwd.is_none() && !cwd.is_empty() {
                 project_cwd = Some(cwd);
             }
+            // mtime: 排序键 (刚活动过的会话排最前)。取不到时置 None, 排序回退文件名时间戳
+            let mtime_ms = std::fs::metadata(&fpath)
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as u64);
             sessions.push(SessionInfo {
                 session_id: if id.is_empty() { uuid } else { id },
                 file_name,
                 session_path: fpath.to_string_lossy().to_string(),
                 timestamp: ts,
                 preview,
+                mtime_ms,
             });
         }
-        sessions.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        // 会话按最后修改时间倒序 (最近活动在前); mtime 不可得时回退文件名时间戳,
+        // 不让个别元数据异常的文件把整个列表顺序打乱
+        sessions.sort_by(|a, b| {
+            b.mtime_ms
+                .unwrap_or_else(|| parse_file_ts_ms(&b.timestamp).unwrap_or(0))
+                .cmp(&a.mtime_ms.unwrap_or_else(|| parse_file_ts_ms(&a.timestamp).unwrap_or(0)))
+        });
         // 项目路径: 会话头的 cwd 是权威 (pi 编码有损, 目录名不可信); 无会话时回退有损反解
         let path_str = project_cwd.unwrap_or_else(|| decode_project_dir(&dir_name));
         projects.push(ProjectInfo {
@@ -586,5 +640,58 @@ mod tests {
         let p = std::env::temp_dir().join(format!("sfe_missing_{}.jsonl", std::process::id()));
         let err = read_session_entries(&p).unwrap_err();
         assert!(err.contains("读取会话文件失败"), "错误信息应带定位: {err}");
+    }
+
+    /// 文件名时间戳解析: 与 ISO 时间戳 (behavior_stats 已测) 跨格式对拍,
+    /// 确保排序回退键与 mtime 同域可比
+    #[test]
+    fn parses_file_name_timestamp() {
+        assert_eq!(parse_file_ts_ms("1970-01-01T00-00-00-000Z"), Some(0));
+        assert_eq!(parse_file_ts_ms("2026-06-15T16-43-55-288Z"), Some(1781541835288));
+        // 非闰年 2 月无 29 日; 日历累计正确性: 2024 闰年 2-29 有效, 2023 无效
+        assert_eq!(parse_file_ts_ms("2024-02-29T00-00-00-000Z"), Some(1709164800000));
+        assert_eq!(parse_file_ts_ms("2023-02-29T00-00-00-000Z"), None);
+        // 非法输入回 None
+        assert_eq!(parse_file_ts_ms(""), None);
+        assert_eq!(parse_file_ts_ms("2026-06-15T16:43:55.288Z"), None); // ISO 冒号格式不是文件名格式
+        assert_eq!(parse_file_ts_ms("2026-06-15T16-43-55-288"), None); // 缺 Z
+        assert_eq!(parse_file_ts_ms("2026-13-01T00-00-00-000Z"), None); // 月越界
+        assert_eq!(parse_file_ts_ms("2026-06-15T99-00-00-000Z"), None); // 时越界
+    }
+
+    /// 排序: mtime 优先, mtime 缺失时回退文件名时间戳, 均按新→旧
+    #[test]
+    fn session_sort_uses_mtime_with_name_fallback() {
+        let mk = |ts: &str, mtime_ms: Option<u64>| SessionInfo {
+            file_name: format!("{ts}_uuid.jsonl"),
+            session_path: String::new(),
+            timestamp: ts.to_string(),
+            session_id: String::new(),
+            preview: String::new(),
+            mtime_ms,
+        };
+        // 时间戳 → 对应毫秒 (量级一致, 避免夹具自身引入倒挂)
+        let jan = parse_file_ts_ms("2026-01-01T00-00-00-000Z").unwrap();
+        let jun = parse_file_ts_ms("2026-06-01T00-00-00-000Z").unwrap();
+        let mut sessions = vec![
+            // 旧文件名 + 新 mtime (刚活动过) → 应排最前
+            mk("2026-01-01T00-00-00-000Z", Some(jun)),
+            // 新文件名 + 无 mtime → 回退文件名, 应排第二
+            mk("2026-06-01T00-00-00-000Z", None),
+            // 旧文件名 + 无 mtime → 回退文件名, 应排第三
+            mk("2026-01-01T00-00-00-000Z", None),
+            // 文件名解析失败 (异常名) + 无 mtime → 当 0 排最后, 不 panic
+            mk("garbage", None),
+        ];
+        sessions.sort_by(|a, b| {
+            b.mtime_ms
+                .unwrap_or_else(|| parse_file_ts_ms(&b.timestamp).unwrap_or(0))
+                .cmp(&a.mtime_ms.unwrap_or_else(|| parse_file_ts_ms(&a.timestamp).unwrap_or(0)))
+        });
+        // 新→旧: 新 mtime > 回退新名 > 回退旧名 > 解析失败兜底
+        assert_eq!(sessions[0].mtime_ms, Some(jun));
+        assert_eq!(sessions[1].timestamp, "2026-06-01T00-00-00-000Z");
+        assert_eq!(sessions[2].timestamp, "2026-01-01T00-00-00-000Z");
+        assert_eq!(sessions[3].timestamp, "garbage");
     }
 }
