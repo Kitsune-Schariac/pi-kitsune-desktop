@@ -293,14 +293,14 @@ export function ProjectList() {
                 className="rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-200 hover:text-neutral-700"
                 title="新建会话"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3 w-3" />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); isVirtual ? stopAllCwdSessions(p.path) : removeProject(p.path); }}
                 className="rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-200 hover:text-red-500"
                 title="移除项目"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3 w-3" />
               </button>
             </span>
           </div>
