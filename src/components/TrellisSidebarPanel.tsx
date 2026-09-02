@@ -174,20 +174,20 @@ export function TrellisSidebarPanel({ cwd, onClose }: Props) {
       <div
         onMouseDown={startResize}
         onDoubleClick={() => setWidth(DEFAULT_W)}
-        className="group absolute bottom-2 left-0 top-2 z-10 flex w-1.5 cursor-col-resize items-center justify-center"
+        className="group absolute bottom-2 left-0 top-2 z-10 flex w-2 cursor-col-resize items-center justify-center"
         title="拖动调整宽度 · 双击复位"
       >
         <div
-          className={`h-10 w-[3px] rounded-full transition ${
+          className={`h-10 w-[3px] rounded-full transition duration-fast ease-out ${
             dragging ? "bg-[rgb(var(--primary-500))]" : "bg-transparent group-hover:bg-[rgb(var(--border-strong))]"
           }`}
         />
       </div>
-      <aside className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-base)/var(--chat-alpha))] shadow-sm">
+      <aside className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-base)/var(--chat-alpha))] shadow-sm">
         {view.kind === "list" ? (
           // list header: 标题 + 计数 + 归档切换 + 刷新 + 收起
           <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
-            <div className="flex min-w-0 items-center gap-1.5">
+            <div className="flex min-w-0 items-center gap-2">
               <ListTree className="h-4 w-4 shrink-0 text-neutral-500" />
               <span className="text-sm font-medium">任务</span>
               {visibleTasks.length > 0 && (
@@ -198,28 +198,28 @@ export function TrellisSidebarPanel({ cwd, onClose }: Props) {
               {archiveCount > 0 && (
                 <button
                   onClick={() => setShowArchived(!showArchived)}
-                  className={`flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] transition ${
+                  className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs transition duration-fast ease-out ${
                     showArchived
                       ? "bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] text-neutral-700"
                       : "text-neutral-400 hover:bg-neutral-200/70 hover:text-neutral-700"
                   }`}
                   title={showArchived ? "隐藏归档任务" : `显示归档任务 (${archiveCount})`}
                 >
-                  <Archive className="h-3.5 w-3.5" />
+                  <Archive className="h-4 w-4" />
                   归档
                 </button>
               )}
               <button
                 onClick={() => load(cwd)}
                 disabled={loading}
-                className="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-200/70 hover:text-neutral-700 disabled:opacity-40"
+                className="rounded-md p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-200/70 hover:text-neutral-700 disabled:opacity-40"
                 title="刷新"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               </button>
               <button
                 onClick={onClose}
-                className="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-200/70 hover:text-neutral-700"
+                className="rounded-md p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-200/70 hover:text-neutral-700"
                 title="收起"
               >
                 <X className="h-4 w-4" />
@@ -228,10 +228,10 @@ export function TrellisSidebarPanel({ cwd, onClose }: Props) {
           </div>
         ) : (
           // detail header: ‹ 返回 + 状态灯 + 标题 (+ 归档标记)
-          <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2.5">
+          <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2">
             <button
               onClick={() => setView({ kind: "list" })}
-              className="flex items-center rounded-md p-0.5 text-neutral-500 transition hover:bg-neutral-200/70 hover:text-neutral-800"
+              className="flex items-center rounded-md p-1 text-neutral-500 transition duration-fast ease-out hover:bg-neutral-200/70 hover:text-neutral-800"
               title="返回 (Esc)"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -243,7 +243,7 @@ export function TrellisSidebarPanel({ cwd, onClose }: Props) {
                   {detailTask.title}
                 </span>
                 {detailTask.is_archived && (
-                  <span className="flex shrink-0 items-center gap-0.5 text-[11px] text-neutral-400">
+                  <span className="flex shrink-0 items-center gap-1 text-xs text-neutral-400">
                     <Archive className="h-3 w-3" />
                     归档
                   </span>
@@ -350,7 +350,7 @@ function TaskRow({
     <button
       onClick={() => onOpen(task.dir)}
       style={{ paddingLeft: `${depth * 4}px` }}
-      className={`flex w-full items-center gap-2 py-1.5 pr-3 text-left transition hover:bg-neutral-200/60 ${
+      className={`flex w-full items-center gap-2 py-2 pr-3 text-left transition duration-fast ease-out hover:bg-neutral-200/60 ${
         isCurrent
           ? "border-l-2 border-[rgb(var(--primary-400))] bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))]"
           : "border-l-2 border-transparent"
@@ -366,13 +366,13 @@ function TaskRow({
         {task.title}
       </span>
       {isCurrent && (
-        <span className="shrink-0 rounded-full border border-[rgb(var(--primary-400))] px-1.5 py-px text-[10px] font-medium text-[rgb(var(--primary-600))]">
+        <span className="shrink-0 rounded-full border border-[rgb(var(--primary-400))] px-2 py-px text-xs font-medium text-[rgb(var(--primary-600))]">
           活动
         </span>
       )}
       {task.priority && (
         <span
-          className={`shrink-0 text-[10px] tabular-nums ${
+          className={`shrink-0 text-xs tabular-nums ${
             task.priority === "P1" ? "font-medium text-[rgb(var(--primary-600))]" : "text-neutral-400"
           }`}
         >
@@ -381,16 +381,16 @@ function TaskRow({
       )}
       {assigneeInitial && (
         <span
-          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-[9px] text-neutral-600"
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-xs text-neutral-600"
           title={task.assignee}
         >
           {assigneeInitial}
         </span>
       )}
       {docCount > 0 && (
-        <span className="flex shrink-0 items-center gap-0.5 text-neutral-400" title={`${docCount} 个规划产物`}>
+        <span className="flex shrink-0 items-center gap-1 text-neutral-400" title={`${docCount} 个规划产物`}>
           <FileText className="h-3 w-3" />
-          <span className="text-[10px] tabular-nums">{docCount}</span>
+          <span className="text-xs tabular-nums">{docCount}</span>
         </span>
       )}
     </button>
@@ -438,7 +438,7 @@ function TaskDetail({ cwd, task }: { cwd: string; task: TrellisTaskSummary }) {
   return (
     <div className="flex flex-col">
       {/* 元信息条 */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-neutral-200 px-4 py-2 text-[11px] text-neutral-500">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-neutral-200 px-4 py-2 text-xs text-neutral-500">
         {task.status && <span>{statusLabel(task.status)}</span>}
         {meta.map((m) => (
           <span key={m} className="flex items-center gap-2">
@@ -446,13 +446,13 @@ function TaskDetail({ cwd, task }: { cwd: string; task: TrellisTaskSummary }) {
             <span className="truncate tabular-nums" title={m}>{m}</span>
           </span>
         ))}
-        <span className="ml-auto flex items-center gap-0.5 truncate font-mono text-neutral-400" title={task.dir}>
+        <span className="ml-auto flex items-center gap-1 truncate font-mono text-neutral-400" title={task.dir}>
           <Archive className="h-3 w-3 shrink-0" />
           {task.dir}
         </span>
       </div>
       {/* 产物 tab: 有则亮, 无则置灰标「未创建」 (轻量任务合法状态, 非错误) */}
-      <div className="flex items-center gap-1 border-b border-neutral-200 px-3 py-1.5">
+      <div className="flex items-center gap-1 border-b border-neutral-200 px-3 py-2">
         {DOC_ORDER.map((d) => {
           const available = docAvailable(task, d);
           const active = tab === d;
@@ -461,7 +461,7 @@ function TaskDetail({ cwd, task }: { cwd: string; task: TrellisTaskSummary }) {
               key={d}
               onClick={() => available && setTab(d)}
               disabled={!available}
-              className={`rounded-md px-2.5 py-1 text-xs transition ${
+              className={`rounded-md px-2 py-1 text-xs transition duration-fast ease-out ${
                 active
                   ? "bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] font-medium text-neutral-800"
                   : available
@@ -471,7 +471,7 @@ function TaskDetail({ cwd, task }: { cwd: string; task: TrellisTaskSummary }) {
               title={available ? `查看 ${DOC_META[d].file}` : `${DOC_META[d].file} 未创建`}
             >
               {DOC_META[d].label}
-              {!available && <span className="ml-1 text-[10px]">未创建</span>}
+              {!available && <span className="ml-1 text-xs">未创建</span>}
             </button>
           );
         })}

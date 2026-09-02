@@ -43,11 +43,11 @@ export function SkillPicker({ onPick, onDone }: {
     onDone();
   };
 
-  if (error) return <p className="flex items-center gap-1 p-4 text-xs text-red-500"><AlertCircle className="h-3.5 w-3.5" />{error}</p>;
+  if (error) return <p className="flex items-center gap-1 p-4 text-xs text-red-500"><AlertCircle className="h-4 w-4" />{error}</p>;
 
   return (
     <div className="flex h-72 flex-col">
-      <div className="flex-1 overflow-auto rounded-lg border border-neutral-200 bg-panel p-1.5">
+      <div className="flex-1 overflow-auto rounded-md border border-neutral-200 bg-panel p-2">
         {!skills ? (
           <div className="flex h-full items-center justify-center gap-2 text-xs text-neutral-400">
             <Loader2 className="h-4 w-4 animate-spin" /> 加载中…
@@ -63,15 +63,15 @@ export function SkillPicker({ onPick, onDone }: {
               <button
                 key={s.path}
                 onClick={() => toggle(s.path)}
-                className={`mb-0.5 flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition ${
+                className={`mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition duration-fast ease-out ${
                   sel ? "bg-primary-50 text-primary-700" : "text-neutral-600 hover:bg-neutral-100"
                 }`}
                 title={s.description}
               >
                 {sel ? (
-                  <Check className="h-3.5 w-3.5 shrink-0 text-primary-500" />
+                  <Check className="h-4 w-4 shrink-0 text-primary-500" />
                 ) : (
-                  <Sparkles className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+                  <Sparkles className="h-4 w-4 shrink-0 text-neutral-400" />
                 )}
                 <span className="truncate">{s.name}</span>
               </button>
@@ -80,11 +80,11 @@ export function SkillPicker({ onPick, onDone }: {
         )}
       </div>
       <div className="mt-2 flex items-center justify-between">
-        <span className="text-[11px] text-neutral-400">已选 {selected.size} 个技能</span>
+        <span className="text-xs text-neutral-400">已选 {selected.size} 个技能</span>
         <button
           onClick={confirm}
           disabled={selected.size === 0}
-          className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs text-white transition hover:bg-primary-600 disabled:opacity-40"
+          className="rounded-md bg-primary-500 px-3 py-2 text-xs text-white transition duration-fast ease-out hover:bg-primary-600 disabled:opacity-40"
         >
           添加引用
         </button>

@@ -46,7 +46,7 @@ export function SkillsPanel() {
   return (
     <div className="p-5">
       {skills.length === 0 ? (
-        <p className="rounded-lg bg-neutral-50 px-3 py-6 text-center text-sm text-neutral-400">
+        <p className="rounded-md bg-neutral-50 px-3 py-6 text-center text-sm text-neutral-400">
           未发现已安装的 skill
         </p>
       ) : (
@@ -55,7 +55,7 @@ export function SkillsPanel() {
             <li key={s.path}>
               <button
                 onClick={() => openSkill(s)}
-                className={`w-full rounded-xl border p-3 text-left transition ${
+                className={`w-full rounded-md border p-3 text-left transition duration-fast ease-out ${
                   selected?.path === s.path
                     ? "border-primary-300 bg-primary-50"
                     : "border-neutral-200 bg-panel hover:border-neutral-300 hover:bg-neutral-50"
@@ -75,8 +75,8 @@ export function SkillsPanel() {
                 )}
               </button>
               {selected?.path === s.path && (
-                <div className="mt-1 rounded-xl border border-neutral-200 bg-neutral-50 p-3">
-                  <p className="mb-2 flex items-center gap-1 text-[11px] uppercase tracking-wide text-neutral-400">
+                <div className="mt-1 rounded-md border border-neutral-200 bg-neutral-50 p-3">
+                  <p className="mb-2 flex items-center gap-1 text-xs uppercase tracking-wide text-neutral-400">
                     <FileText className="h-3 w-3" />
                     SKILL.md
                   </p>

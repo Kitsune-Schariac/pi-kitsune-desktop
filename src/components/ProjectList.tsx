@@ -37,7 +37,7 @@ export function ContextMenu({ x, y, items, onClose }: {
 
   return (
     <div
-      className="fixed z-50 min-w-[160px] rounded-lg border border-neutral-200 bg-panel py-1 shadow-xl"
+      className="fixed z-50 min-w-[160px] rounded-md border border-neutral-200 bg-panel py-1 shadow-lg"
       style={{ left, top }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -49,13 +49,13 @@ export function ContextMenu({ x, y, items, onClose }: {
             if (!item.disabled) item.onClick();
             onClose();
           }}
-          className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition disabled:opacity-40 ${
+          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition duration-fast ease-out disabled:opacity-40 ${
             item.danger
               ? "text-red-600 hover:bg-red-50"
               : "text-neutral-700 hover:bg-neutral-100"
           }`}
         >
-          {item.icon && <item.icon className="h-3.5 w-3.5" />}
+          {item.icon && <item.icon className="h-4 w-4" />}
           {item.label}
         </button>
       ))}
@@ -255,11 +255,11 @@ export function ProjectList() {
             if (dragIndex !== null && dragIndex !== index) moveProject(dragIndex, index);
             setDragIndex(null);
           }}
-          className="mb-0.5"
+          className="mb-1"
         >
           {/* 项目行 */}
           <div
-            className="group flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1.5 transition hover:bg-neutral-200/60"
+            className="group flex cursor-pointer items-center gap-1 rounded-md px-2 py-2 transition duration-fast ease-out hover:bg-neutral-200/60"
             onClick={() => toggleProject(p.path)}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -278,29 +278,29 @@ export function ProjectList() {
             }}
           >
             {p.expanded ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+              <ChevronDown className="h-4 w-4 shrink-0 text-neutral-400" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+              <ChevronRight className="h-4 w-4 shrink-0 text-neutral-400" />
             )}
-            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-neutral-500" />
+            <FolderOpen className="h-4 w-4 shrink-0 text-neutral-500" />
             <span className="min-w-0 flex-1 truncate text-sm text-neutral-700" title={p.path}>
               {p.display_name}
             </span>
-            <span className="text-[10px] text-neutral-400">{p.sessions.length}</span>
-            <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
+            <span className="text-xs text-neutral-400">{p.sessions.length}</span>
+            <span className="hidden shrink-0 items-center gap-1 group-hover:flex">
               <button
                 onClick={(e) => { e.stopPropagation(); handleNewSession(p.path); }}
-                className="rounded p-0.5 text-neutral-400 transition hover:bg-neutral-200 hover:text-neutral-700"
+                className="rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-200 hover:text-neutral-700"
                 title="新建会话"
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="h-4 w-4" />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); isVirtual ? stopAllCwdSessions(p.path) : removeProject(p.path); }}
-                className="rounded p-0.5 text-neutral-400 transition hover:bg-neutral-200 hover:text-red-500"
+                className="rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-200 hover:text-red-500"
                 title="移除项目"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-4 w-4" />
               </button>
             </span>
           </div>
@@ -315,7 +315,7 @@ export function ProjectList() {
                 return (
                   <div
                     key={s.session_path}
-                    className={`group flex cursor-pointer items-center gap-1.5 rounded-md py-1 pl-1.5 pr-1 text-sm transition ${
+                    className={`group flex cursor-pointer items-center gap-2 rounded-md py-1 pl-2 pr-1 text-sm transition duration-fast ease-out ${
                       isActive
                         ? "bg-primary-100 text-primary-700"
                         : "text-neutral-600 hover:bg-neutral-200/60"
@@ -346,13 +346,13 @@ export function ProjectList() {
                     {openId && sessions[openId]?.isStreaming ? (
                       <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary-400" />
                     ) : openId && sessions[openId]?.hasUnread ? (
-                      <span className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-primary-500" />
+                      <span className="h-2 w-2 shrink-0 self-center rounded-full bg-primary-500" />
                     ) : (
-                      <span className="shrink-0 text-[10px] text-neutral-600">{formatTime(s.timestamp)}</span>
+                      <span className="shrink-0 text-xs text-neutral-600">{formatTime(s.timestamp)}</span>
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteSession(p.path, s); }}
-                      className="hidden shrink-0 rounded p-0.5 text-neutral-400 transition hover:text-red-500 group-hover:block"
+                      className="hidden shrink-0 rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:text-red-500 group-hover:block"
                       title="删除会话"
                     >
                       <Trash2 className="h-3 w-3" />
@@ -363,7 +363,7 @@ export function ProjectList() {
               {p.sessions.length > p.visibleCount && (
                 <button
                   onClick={() => loadMore(p.path)}
-                  className="w-full rounded-md py-1 pl-1.5 text-left text-xs text-neutral-600 transition hover:bg-neutral-200/60 hover:text-neutral-700"
+                  className="w-full rounded-md py-1 pl-2 text-left text-xs text-neutral-600 transition duration-fast ease-out hover:bg-neutral-200/60 hover:text-neutral-700"
                 >
                   显示更多 ({p.sessions.length - p.visibleCount})…
                 </button>
@@ -374,7 +374,7 @@ export function ProjectList() {
                 return (
                   <div
                     key={`open:${sid}`}
-                    className={`group flex cursor-pointer items-center gap-1.5 rounded-md py-1 pl-1.5 pr-1 text-sm transition ${
+                    className={`group flex cursor-pointer items-center gap-2 rounded-md py-1 pl-2 pr-1 text-sm transition duration-fast ease-out ${
                       isActive
                         ? "bg-primary-100 text-primary-700"
                         : "text-neutral-600 hover:bg-neutral-200/60"
@@ -395,13 +395,13 @@ export function ProjectList() {
                     {s.isStreaming ? (
                       <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary-400" />
                     ) : s.hasUnread ? (
-                      <span className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-primary-500" />
+                      <span className="h-2 w-2 shrink-0 self-center rounded-full bg-primary-500" />
                     ) : (
-                      <span className="shrink-0 text-[10px] text-neutral-400">新会话</span>
+                      <span className="shrink-0 text-xs text-neutral-400">新会话</span>
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); stopSession(sid); removeSessionState(sid); }}
-                      className="hidden shrink-0 rounded p-0.5 text-neutral-400 transition hover:text-red-500 group-hover:block"
+                      className="hidden shrink-0 rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:text-red-500 group-hover:block"
                       title="删除会话"
                     >
                       <Trash2 className="h-3 w-3" />
@@ -420,26 +420,26 @@ export function ProjectList() {
       {/* 重命名输入: 会话行内联编辑 */}
       {renamingPath && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20">
-          <div className="w-72 rounded-xl border border-neutral-200 bg-panel p-4 shadow-2xl">
+          <div className="w-72 rounded-md border border-neutral-200 bg-panel p-4 shadow-lg">
             <p className="mb-2 text-sm font-medium">重命名会话</p>
             <input
               autoFocus
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submitRename()}
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
               placeholder="会话名称"
             />
             <div className="mt-3 flex justify-end gap-2">
               <button
                 onClick={() => setRenamingPath(null)}
-                className="rounded-lg px-3 py-1.5 text-sm text-neutral-500 transition hover:bg-neutral-100"
+                className="rounded-md px-3 py-2 text-sm text-neutral-500 transition duration-fast ease-out hover:bg-neutral-100"
               >
                 取消
               </button>
               <button
                 onClick={submitRename}
-                className="rounded-lg bg-primary-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-primary-600"
+                className="rounded-md bg-primary-500 px-3 py-2 text-sm font-medium text-white transition duration-fast ease-out hover:bg-primary-600"
               >
                 确定
               </button>

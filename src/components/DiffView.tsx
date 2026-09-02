@@ -49,7 +49,7 @@ export const DiffView = memo(function DiffView({ patch, cwd }: { patch: string; 
   if (!files) {
     return (
       <pre
-        className="mt-2 overflow-auto rounded p-2 text-xs text-neutral-700"
+        className="mt-2 overflow-auto rounded-sm p-2 text-xs text-neutral-700"
         style={{
           background: "rgb(var(--code-bg) / var(--code-alpha))",
           border: "1px solid rgb(var(--border-subtle))",
@@ -62,7 +62,7 @@ export const DiffView = memo(function DiffView({ patch, cwd }: { patch: string; 
 
   return (
     <div
-      className="mt-2 max-h-[60vh] overflow-auto rounded text-xs"
+      className="mt-2 max-h-[60vh] overflow-auto rounded-sm text-xs"
       style={{ border: "1px solid rgb(var(--border-subtle))" }}
     >
       {files.map((file: PatchFile, fi: number) => {
@@ -76,7 +76,7 @@ export const DiffView = memo(function DiffView({ patch, cwd }: { patch: string; 
             style={fi > 0 ? { borderTop: "1px solid rgb(var(--border-subtle))" } : undefined}
           >
             <div
-              className="truncate px-2 py-1 font-mono text-[11px] text-neutral-500"
+              className="truncate px-2 py-1 font-mono text-xs text-neutral-500"
               title={file.newPath}
             >
               {head}
@@ -171,7 +171,7 @@ function HunkRows({
     const oldSkip = hunk.oldStart - (prevHunk.oldStart + prevHunk.oldLines);
     rows.push(
       <tr key="sep" style={{ borderTop: "1px solid rgb(var(--border-subtle))" }}>
-        <td colSpan={4} className="py-0.5 text-center text-[11px] text-neutral-400">
+        <td colSpan={4} className="py-1 text-center text-xs text-neutral-400">
           {oldSkip > 0 ? `⋯ 跳过 ${oldSkip} 行 ⋯` : "⋯"}
         </td>
       </tr>,
@@ -184,7 +184,7 @@ function HunkRows({
       key="head"
       style={{ background: "rgb(var(--surface-sunken) / var(--overlay-alpha))" }}
     >
-      <td colSpan={4} className="px-2 py-0.5 text-[11px] text-neutral-600">
+      <td colSpan={4} className="px-2 py-1 text-xs text-neutral-600">
         {`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`}
       </td>
     </tr>,
@@ -203,10 +203,10 @@ function HunkRows({
   if (!showAll && foldedCount > 0) {
     rows.push(
       <tr key="fold">
-        <td colSpan={4} className="py-0.5">
+        <td colSpan={4} className="py-1">
           <button
             onClick={() => setFolded(false)}
-            className="flex w-full items-center justify-center gap-1 text-[11px] text-neutral-500 transition hover:text-neutral-700"
+            className="flex w-full items-center justify-center gap-1 text-xs text-neutral-500 transition duration-fast ease-out hover:text-neutral-700"
           >
             <ChevronDown className="h-3 w-3" />
             展开中间 {foldedCount} 行
@@ -264,7 +264,7 @@ export const PlainDiffView = memo(function PlainDiffView({ text }: { text: strin
   const lines = text.split("\n");
   return (
     <pre
-      className="mt-2 max-h-[40vh] overflow-auto rounded p-2 text-xs leading-relaxed"
+      className="mt-2 max-h-[40vh] overflow-auto rounded-sm p-2 text-xs leading-relaxed"
       style={{
         background: "rgb(var(--code-bg) / var(--code-alpha))",
         border: "1px solid rgb(var(--border-subtle))",

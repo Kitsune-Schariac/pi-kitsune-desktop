@@ -28,10 +28,10 @@ export function ProjectCard({ project, onProjectChange }: {
   return (
     // 露出 35% 输入卡高: top 百分比相对输入卡容器 (wrapper) 高度, textarea 增高时自动跟随
     // 按钮绝对定位在露出区中部 (top 5% 卡片高 ≈ 单行输入卡时恰好居中)
-    <div className="pointer-events-auto absolute inset-x-8 -top-[35%] bottom-0 z-0 rounded-2xl bg-neutral-100 shadow-sm">
+    <div className="pointer-events-auto absolute inset-x-8 -top-[35%] bottom-0 z-0 rounded-md bg-neutral-100 shadow-sm">
       <button
         onClick={() => setOpen(!open)}
-        className="absolute left-4 top-[5%] inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] text-neutral-500 transition hover:shadow-md hover:text-primary-600"
+        className="absolute left-4 top-[5%] inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs text-neutral-500 transition duration-fast ease-out hover:shadow-md hover:text-primary-600"
         title="切换项目"
       >
         <FolderOpen className="h-3 w-3 shrink-0" />
@@ -39,7 +39,7 @@ export function ProjectCard({ project, onProjectChange }: {
       </button>
       {/* 项目列表弹层: 在卡片上方展开, z-50 压过输入卡 */}
       {open && (
-        <div className="absolute bottom-full left-4 z-50 mb-1 max-h-56 w-[40%] overflow-auto rounded-xl border border-neutral-200 bg-panel py-1 shadow-xl">
+        <div className="absolute bottom-full left-4 z-50 mb-1 max-h-56 w-[40%] overflow-auto rounded-md border border-neutral-200 bg-panel py-1 shadow-lg">
           {projects.length === 0 ? (
             <div className="px-3 py-2 text-xs text-neutral-400">暂无项目</div>
           ) : (
@@ -47,7 +47,7 @@ export function ProjectCard({ project, onProjectChange }: {
               <button
                 key={p.path}
                 onClick={() => { onProjectChange(p.path); setOpen(false); }}
-                className={`block w-full truncate px-3 py-1.5 text-left text-xs transition hover:bg-neutral-100 ${
+                className={`block w-full truncate px-3 py-2 text-left text-xs transition duration-fast ease-out hover:bg-neutral-100 ${
                   p.path === project ? "text-primary-600" : "text-neutral-600"
                 }`}
               >

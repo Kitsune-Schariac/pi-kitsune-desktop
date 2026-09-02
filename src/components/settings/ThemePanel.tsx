@@ -101,7 +101,7 @@ export function ThemePanel() {
                 key={skin.id}
                 onClick={() => onPick(skin)}
                 disabled={busy !== null}
-                className={`group overflow-hidden rounded-xl border text-left transition ${
+                className={`group overflow-hidden rounded-md border text-left transition duration-fast ease-out ${
                   isActive
                     ? "border-primary-500 ring-2 ring-primary-500/25"
                     : "border-neutral-200 hover:border-neutral-300"
@@ -121,10 +121,10 @@ export function ThemePanel() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center justify-between px-2.5 py-1.5">
+                <div className="flex items-center justify-between px-2 py-2">
                   <div className="min-w-0">
                     <div className="truncate text-xs font-medium text-neutral-800">{skin.name}</div>
-                    <div className="text-[10px] text-neutral-500">
+                    <div className="text-xs text-neutral-500">
                       {skin.base === "dark" ? "暗色" : "浅色"}
                       {skin.author ? ` · ${skin.author}` : ""}
                     </div>
@@ -136,23 +136,23 @@ export function ThemePanel() {
           })}
         </div>
         {/* 皮肤目录入口 */}
-        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             onClick={() => void invoke("open_skins_dir")}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-600 transition hover:border-neutral-300 hover:bg-neutral-100"
+            className="inline-flex items-center gap-2 rounded-md border border-neutral-200 px-2 py-2 text-xs text-neutral-600 transition duration-fast ease-out hover:border-neutral-300 hover:bg-neutral-100"
           >
-            <FolderOpen className="h-3.5 w-3.5" />
+            <FolderOpen className="h-4 w-4" />
             打开皮肤目录
           </button>
           <button
             onClick={() => void onRefresh()}
             disabled={refreshing}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-600 transition hover:border-neutral-300 hover:bg-neutral-100 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-md border border-neutral-200 px-2 py-2 text-xs text-neutral-600 transition duration-fast ease-out hover:border-neutral-300 hover:bg-neutral-100 disabled:opacity-50"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             刷新皮肤列表
           </button>
-          <span className="inline-flex items-center gap-1 text-[10px] text-neutral-500">
+          <span className="inline-flex items-center gap-1 text-xs text-neutral-500">
             <Info className="h-3 w-3" />
             自定义皮肤放入皮肤目录，刷新后即可切换
           </span>
@@ -179,7 +179,7 @@ export function ThemePanel() {
           disabled={!activeSkin?.has_bg}
         />
         {!activeSkin?.has_bg && (
-          <p className="text-[10px] text-neutral-500">当前皮肤无背景图，不透明率不生效</p>
+          <p className="text-xs text-neutral-500">当前皮肤无背景图，不透明率不生效</p>
         )}
       </section>
 
@@ -194,7 +194,7 @@ export function ThemePanel() {
           onChange={setBgBlur}
         />
         {!activeSkin?.has_bg && (
-          <p className="text-[10px] text-neutral-500">当前皮肤无背景图，模糊度不生效</p>
+          <p className="text-xs text-neutral-500">当前皮肤无背景图，模糊度不生效</p>
         )}
       </section>
 
@@ -203,18 +203,18 @@ export function ThemePanel() {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-neutral-800">消息气泡框</h3>
-            <p className="text-[10px] text-neutral-500">消息显示为毛玻璃气泡块，任何主题均可开关</p>
-            <p className="text-[10px] text-neutral-500">这组设置按皮肤分别保存，切换皮肤会切到对应皮肤的记忆</p>
+            <p className="text-xs text-neutral-500">消息显示为毛玻璃气泡块，任何主题均可开关</p>
+            <p className="text-xs text-neutral-500">这组设置按皮肤分别保存，切换皮肤会切到对应皮肤的记忆</p>
           </div>
           <button
             onClick={() => setBubbleEnabled(!bubbleEnabled)}
             aria-pressed={bubbleEnabled}
-            className={`relative h-5 w-9 shrink-0 rounded-full transition ${
+            className={`relative h-5 w-9 shrink-0 rounded-full transition duration-fast ease-out ${
               bubbleEnabled ? "bg-primary-500" : "bg-neutral-300"
             }`}
           >
             <span
-              className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
+              className="absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-[left] duration-base ease-swift"
               style={{ left: bubbleEnabled ? 18 : 2 }}
             />
           </button>
@@ -235,7 +235,7 @@ export function ThemePanel() {
                 {bubbleColor && (
                   <button
                     onClick={() => setBubbleColor(null)}
-                    className="rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-500 transition hover:bg-neutral-100"
+                    className="rounded-sm border border-neutral-200 px-2 py-1 text-xs text-neutral-500 transition duration-fast ease-out hover:bg-neutral-100"
                   >
                     跟随皮肤
                   </button>

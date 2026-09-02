@@ -207,20 +207,20 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
   const fileCount = firstSkill === -1 ? candidates.length : firstSkill;
 
   return (
-    <div className="absolute bottom-full left-0 z-50 mb-1 w-[460px] rounded-xl border border-neutral-200 bg-panel p-2 shadow-xl">
+    <div className="absolute bottom-full left-0 z-50 mb-1 w-[460px] rounded-md border border-neutral-200 bg-panel p-2 shadow-lg">
       <div className="flex items-center justify-between px-2 pb-1">
-        <span className="text-[11px] text-neutral-400">引用文件或技能 · ↑↓ 选择, Enter 确认</span>
+        <span className="text-xs text-neutral-400">引用文件或技能 · ↑↓ 选择, Enter 确认</span>
         <button
           onClick={onClose}
-          className="rounded p-0.5 text-neutral-400 transition hover:bg-neutral-100"
+          className="rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-100"
           title="关闭 (Esc)"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="h-4 w-4" />
         </button>
       </div>
 
       {error && (
-        <p className="mx-2 mb-1 flex items-center gap-1 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] text-red-500">
+        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-red-50 px-2 py-2 text-xs text-red-500">
           <AlertCircle className="h-3 w-3 shrink-0" />
           {error}
         </p>
@@ -243,28 +243,28 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
               return (
                 <div key={c.path}>
                   {(i === 0 || i === firstSkill) && (
-                    <div className="px-2 pb-0.5 pt-1.5 text-[10px] font-medium text-neutral-400">
+                    <div className="px-2 pb-1 pt-2 text-xs font-medium text-neutral-400">
                       {isFile ? `文件 · ${fileCount}` : "技能"}
                     </div>
                   )}
                   <button
                     onClick={() => { setActive(i); pick(c); }}
                     onMouseEnter={() => setActive(i)}
-                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition ${
+                    className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs transition duration-fast ease-out ${
                       sel ? "bg-primary-50" : "hover:bg-neutral-100"
                     }`}
                     title={c.path}
                   >
                     {isFile ? (
-                      <FileText className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+                      <FileText className="h-4 w-4 shrink-0 text-neutral-400" />
                     ) : (
-                      <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary-400" />
+                      <Sparkles className="h-4 w-4 shrink-0 text-primary-400" />
                     )}
                     <span className="min-w-0 flex-1">
                       <span className={`block truncate font-medium ${sel ? "text-primary-700" : "text-neutral-700"}`}>
                         {c.title}
                       </span>
-                      <span className="block truncate text-[10px] text-neutral-400">{c.sub}</span>
+                      <span className="block truncate text-xs text-neutral-400">{c.sub}</span>
                     </span>
                   </button>
                 </div>

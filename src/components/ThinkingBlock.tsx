@@ -6,10 +6,10 @@ export function ThinkingBlock({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   if (!text) return null;
   return (
-    <div className="mb-1.5">
+    <div className="mb-2">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1.5 text-xs text-neutral-500 transition hover:text-neutral-600"
+        className="flex items-center gap-2 text-xs text-neutral-500 transition duration-fast ease-out hover:text-neutral-600"
       >
         {expanded ? (
           <ChevronDown className="h-3 w-3" />

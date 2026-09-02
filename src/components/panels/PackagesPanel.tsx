@@ -29,22 +29,22 @@ export function PackagesPanel() {
   return (
     <div className="space-y-6 p-5">
       <section>
-        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-neutral-700">
+        <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-neutral-700">
           <Package className="h-4 w-4 text-neutral-500" />
           已安装 Package
         </h3>
         {packages.length === 0 ? (
-          <p className="rounded-lg bg-neutral-50 px-3 py-4 text-center text-sm text-neutral-400">
+          <p className="rounded-md bg-neutral-50 px-3 py-4 text-center text-sm text-neutral-400">
             未配置 package
           </p>
         ) : (
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {packages.map((p) => (
               <li
                 key={p}
-                className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-700"
+                className="flex items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-700"
               >
-                <Package className="h-3.5 w-3.5 shrink-0 text-neutral-500" />
+                <Package className="h-4 w-4 shrink-0 text-neutral-500" />
                 <span className="truncate font-mono text-xs" title={p}>{p}</span>
               </li>
             ))}
@@ -53,20 +53,20 @@ export function PackagesPanel() {
       </section>
 
       <section>
-        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-neutral-700">
+        <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-neutral-700">
           <Layers className="h-4 w-4 text-neutral-500" />
           Provider (models.json)
         </h3>
         {providers && providers.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {providers.map((p) => (
-              <span key={p} className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs text-neutral-600">
+              <span key={p} className="rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-600">
                 {p}
               </span>
             ))}
           </div>
         ) : (
-          <p className="rounded-lg bg-neutral-50 px-3 py-4 text-center text-sm text-neutral-400">
+          <p className="rounded-md bg-neutral-50 px-3 py-4 text-center text-sm text-neutral-400">
             未读取到 provider 配置
           </p>
         )}
