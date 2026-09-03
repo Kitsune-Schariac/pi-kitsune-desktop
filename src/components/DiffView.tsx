@@ -159,7 +159,7 @@ function HunkRows({
     }
     if (line.noNewline) {
       base +=
-        '<span style="color:var(--neutral-400);font-size:10px;margin-left:.25em">no newline</span>';
+        '<span style="color:var(--neutral-400);font-size:var(--fs-micro);margin-left:.25em">no newline</span>';
     }
     return base;
   };
