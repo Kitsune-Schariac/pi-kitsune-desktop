@@ -274,7 +274,11 @@ body,
 
 /* 键盘焦点可见性 (可访问性): 仅键盘 Tab 导航时显示 accent 描边;
    鼠标点击不显示 (与 :focus 区分, 避免点按钮留框)。覆盖各组件 outline-none */
-:focus-visible {
+/* 键盘焦点可见性 (可访问性): 仅键盘 Tab 导航时显示 accent 描边;
+   鼠标点击不显示 (与 :focus 区分, 避免点按钮留框)。
+   文本输入元素 (input/textarea) 豁免 — 光标本身就是焦点指示,
+   再套 outline 会变成输入框里的框线 */
+:focus-visible:not(input):not(textarea):not([contenteditable="true"]) {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   border-radius: 4px;
