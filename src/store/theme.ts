@@ -183,6 +183,16 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
       // 内容流里的小面板 (工具卡片/user 轻气泡) 降为半透明: 实色块会糊掉背景图, 破坏毛玻璃观感
       setSurfaceVar("--overlay-alpha", "0.35");
       setSurfaceVar("--code-alpha", "0.75");
+      // 会话区纸面 --chat-bg (main 区背景的唯一纸面真相, 消费 color-mix(chat-bg × chat-alpha)):
+      // 暗色壁纸皮肤 (rin/sakura 等) = var(--surface) 深表面层, 半透明由 chat-alpha 承担 → 毛玻璃透壁纸;
+      // 亮色壁纸皮肤 (sakura-light) = colors 声明的半透明纸面 (自带 alpha), chat-alpha 置 1 防双重变淡
+      if (skin.base === "dark") {
+        setSurfaceVar("--chat-bg", "var(--surface)");
+      } else {
+        const skinChatBg = skin.colors?.["chat-bg"];
+        setSurfaceVar("--chat-bg", skinChatBg && skinChatBg !== "transparent" ? skinChatBg : "var(--surface)");
+        setSurfaceVar("--chat-alpha", "1");
+      }
     } else {
       // 纯色皮肤: surface 三件套走 index.css 默认值 (皮肤 colors 自带 surface-* 则上面循环已覆盖),
       // 三个 alpha 全置 1 — 半透明在无背景图下是视觉空操作, 实色靠表面色阶差撑层次
@@ -191,6 +201,17 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
       setSurfaceVar("--raised-alpha", "1");
       setSurfaceVar("--overlay-alpha", "1");
       setSurfaceVar("--code-alpha", "1");
+      // 纯色皮肤会话区纸面: 亮色 = colors 纸面实色 (flame 等暗色 colors 声明 transparent 是陷阱,
+      // 无壁纸时 main 会透到 app-root 浅渐变翻车, 强制 var(--surface) 深底)
+      if (skin.base === "dark") {
+        setSurfaceVar("--chat-bg", "var(--surface)");
+      } else {
+        const skinChatBg = skin.colors?.["chat-bg"];
+        setSurfaceVar(
+          "--chat-bg",
+          skinChatBg && skinChatBg !== "transparent" ? skinChatBg : "oklch(99.079% 0.0013 106.4)",
+        );
+      }
     }
     lastAppliedVars = appliedVars;
 

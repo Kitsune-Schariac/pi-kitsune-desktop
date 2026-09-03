@@ -234,6 +234,20 @@ body,
   overscroll-behavior: none;
 }
 
+/* 显隐保底 (踩坑 §4.9): 面板/页签显隐若用 hidden 属性, 必须全局盖过 display:flex 等
+   布局 class, 否则 flex 容器里 hidden 元素仍占位/同显 */
+[hidden] {
+  display: none !important;
+}
+
+/* 键盘焦点可见性 (可访问性): 仅键盘 Tab 导航时显示 accent 描边;
+   鼠标点击不显示 (与 :focus 区分, 避免点按钮留框)。覆盖各组件 outline-none */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
 /* 自定义滚动条: 浅色下用中性灰, 保持细窄 */
 ::-webkit-scrollbar {
   width: 8px;
