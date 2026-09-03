@@ -94,20 +94,9 @@ export function Sidebar({
 
   return (
     <aside className="flex w-[288px] shrink-0 flex-col bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--sidebar-alpha)_*_100%),transparent)]">
-      {/* 头部: 折叠钮 + 品牌; 折叠钮放头部左侧, 悬停/点击收起 (改版稿 rail toggle 位置语义) */}
-      <div className="flex items-center px-2 py-2">
-        <button
-          onClick={onToggleCollapsed}
-          className="rounded-md p-2 text-[var(--faint)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
-          title="收起侧栏"
-        >
-          <PanelLeftClose className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* 顶部搜索: "/" 全局聚焦; 输入后树切全局拍平过滤 (query 传给 ProjectList) */}
-      <div className="px-3 pb-1">
-        <div className="group relative flex items-center">
+      {/* 顶部行: 搜索框 (左侧, flex-1) + 折叠钮 (搜索框右边同一行, 不再独占一行) */}
+      <div className="flex items-center gap-1 px-3 pb-1 pt-2">
+        <div className="group relative flex min-w-0 flex-1 items-center">
           <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[var(--faint)]" />
           <input
             ref={searchRef}
@@ -128,6 +117,13 @@ export function Sidebar({
             /
           </span>
         </div>
+        <button
+          onClick={onToggleCollapsed}
+          className="shrink-0 rounded-md p-2 text-[var(--faint)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
+          title="收起侧栏"
+        >
+          <PanelLeftClose className="h-4 w-4" />
+        </button>
       </div>
 
       {/* 功能区 (Skill / Package) */}

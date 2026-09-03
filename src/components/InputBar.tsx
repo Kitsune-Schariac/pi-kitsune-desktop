@@ -526,7 +526,7 @@ export function InputBar({
         ref={cardRef}
         // 半透明悬浮卡: 消息从卡片后方滑过时可见 (不挡内容), 轻模糊防文字混叠;
         // 圆角 16px (设计稿 .input-card) — 圆润不与系统直角冲突
-        className="pointer-events-auto rounded-[16px] border border-[var(--border-soft)] bg-[color-mix(in_oklch,var(--surface-raised)_calc(var(--raised-alpha)_*_100%),transparent)] shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition duration-fast ease-out focus-within:border-[var(--border)] focus-within:shadow-[0_0_0_1px_color-mix(in_oklch,var(--accent)_22%,transparent),0_0_20px_color-mix(in_oklch,var(--accent)_12%,transparent),0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)]"
+        className="pointer-events-auto rounded-[16px] border border-[var(--border-soft)] bg-[color-mix(in_oklch,var(--surface-raised)_calc(var(--raised-alpha)_*_100%),transparent)] shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition duration-fast ease-out focus-within:shadow-[0_0_24px_color-mix(in_oklch,var(--accent)_14%,transparent),0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)]"
       >
         <div className="px-4 pt-3">
           {/* @引用 / /命令 浮层: 悬浮在输入卡上方 (与 RefsPopup 同模式), 不占卡片布局 */}
