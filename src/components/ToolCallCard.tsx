@@ -139,9 +139,9 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
     <div
       className="rounded-md p-2 text-sm"
       style={{
-        background: "rgb(var(--surface-sunken) / var(--overlay-alpha))",
-        border: "1px solid rgb(var(--border-subtle))",
-        borderLeft: "2px solid rgb(var(--primary-500))",
+        background: "color-mix(in oklch, var(--surface-sunken) calc(var(--overlay-alpha) * 100%), transparent)",
+        border: "1px solid var(--border-subtle)",
+        borderLeft: "2px solid var(--primary-500)",
       }}
     >
       {/* 折叠行: 工具名 + 状态 + 参数摘要 / subagent 进度尾行 */}
@@ -154,7 +154,7 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
         {entry.status === "running" &&
           (showSubagent ? (
             // subagent 运行中: primary 呼吸灯 (animate-pulse 2s), 替代通用 spinner, 表达"子 agent 在跑"
-            <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[rgb(var(--primary-500))] animate-pulse" />
+            <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--primary-500)] animate-pulse" />
           ) : (
             <Loader2 className="h-4 w-4 shrink-0 animate-spin text-neutral-400" />
           ))}
@@ -201,17 +201,17 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
           {showSubagent && entry.status === "running" && resultText && (
             <pre
               ref={progressRef}
-              className="max-h-40 overflow-auto rounded-sm bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 font-mono text-xs text-[rgb(var(--term-text))]"
+              className="max-h-40 overflow-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 font-mono text-xs text-[var(--term-text)]"
             >
               {resultText}
             </pre>
           )}
           {showSubagent && entry.status === "done" && (
             <div className="flex items-center gap-2 text-xs">
-              <Radar className="h-4 w-4 shrink-0 text-[rgb(var(--primary-500))]" />
+              <Radar className="h-4 w-4 shrink-0 text-[var(--primary-500)]" />
               <button
                 onClick={() => useFleetStore.getState().requestOpenPanel()}
-                className="text-[rgb(var(--primary-600))] transition-colors duration-fast ease-out hover:text-[rgb(var(--primary-700))]"
+                className="text-[var(--primary-600)] transition-colors duration-fast ease-out hover:text-[var(--primary-700)]"
                 title="打开舰队面板查看此子 agent"
               >
                 在舰队中查看
@@ -220,7 +220,7 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
           )}
           {/* 保留普通工具的参数展示 (subagent 也不丢信息: args 可展开查看) */}
           {argsStr && (
-            <pre className="overflow-x-auto rounded-sm bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 text-xs text-neutral-700">
+            <pre className="overflow-x-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 text-xs text-neutral-700">
               {argsStr}
             </pre>
           )}
@@ -230,12 +230,12 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
           {diff?.patch && <DiffView patch={diff.patch} cwd={cwd} />}
           {!diff?.patch && diff?.diff && <PlainDiffView text={diff.diff} />}
           {resultText && !diff && isBash && (
-            <pre className="max-h-48 overflow-auto rounded-sm bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 font-mono text-xs text-[rgb(var(--term-text))]">
+            <pre className="max-h-48 overflow-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 font-mono text-xs text-[var(--term-text)]">
               {resultText}
             </pre>
           )}
           {resultText && !diff && !isBash && (
-            <pre className="max-h-48 overflow-auto rounded-sm bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 text-xs text-neutral-700">
+            <pre className="max-h-48 overflow-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 text-xs text-neutral-700">
               {resultText}
             </pre>
           )}

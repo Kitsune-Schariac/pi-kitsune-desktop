@@ -140,7 +140,7 @@ export default function App() {
         onClick={() => { if (gitSidebarOpen) setGitSidebarOpen(false); else { setFleetSidebarOpen(false); setTrellisSidebarOpen(false); setGitSidebarOpen(true); } }}
         className={`flex items-center gap-2 rounded-full border px-2 py-1 text-xs transition duration-fast ease-out tabular-nums ${
           gitSidebarOpen
-            ? "border-[rgb(var(--primary-400))] text-[rgb(var(--primary-600))]"
+            ? "border-[var(--primary-400)] text-[var(--primary-600)]"
             : "border-neutral-200 text-neutral-500 hover:text-neutral-700"
         }`}
         title={`分支 ${gitStatus?.branch ?? "—"} · ${changeCount} 个变更`}
@@ -162,7 +162,7 @@ export default function App() {
         onClick={() => { if (trellisSidebarOpen) setTrellisSidebarOpen(false); else { setFleetSidebarOpen(false); setGitSidebarOpen(false); setTrellisSidebarOpen(true); } }}
         className={`flex items-center gap-2 rounded-full border px-2 py-1 text-xs transition duration-fast ease-out ${
           trellisSidebarOpen
-            ? "border-[rgb(var(--primary-400))] text-[rgb(var(--primary-600))]"
+            ? "border-[var(--primary-400)] text-[var(--primary-600)]"
             : "border-neutral-200 text-neutral-500 hover:text-neutral-700"
         }`}
         title="查看 Trellis 任务"
@@ -181,7 +181,7 @@ export default function App() {
         onClick={() => { if (fleetSidebarOpen) setFleetSidebarOpen(false); else { setGitSidebarOpen(false); setTrellisSidebarOpen(false); setFleetSidebarOpen(true); } }}
         className={`flex items-center gap-2 rounded-full border px-2 py-1 text-xs transition duration-fast ease-out tabular-nums ${
           fleetSidebarOpen
-            ? "border-[rgb(var(--primary-400))] text-[rgb(var(--primary-600))]"
+            ? "border-[var(--primary-400)] text-[var(--primary-600)]"
             : "border-neutral-200 text-neutral-500 hover:text-neutral-700"
         }`}
         title={fleetActiveCount > 0 ? `${fleetActiveCount} 个 subagent 活动中` : "查看 subagent 运行产物"}
@@ -207,7 +207,7 @@ export default function App() {
       <Sidebar onOpenPanel={setPanel} />
       {/* relative: 供底部悬浮输入框 absolute 定位
           不压缩滚动区: 消息可滑到输入卡后方 (半透明可见), 底部留白由 MessageList 内部 padding 承担 */}
-      <main className="relative flex min-w-0 flex-1 flex-col bg-[rgb(var(--surface-base)/var(--chat-alpha))] shadow-[-10px_0_24px_-12px_rgba(0,0,0,0.08)]">
+      <main className="relative flex min-w-0 flex-1 flex-col bg-[color-mix(in_oklch,var(--surface-base)_calc(var(--chat-alpha)_*_100%),transparent)] shadow-[-10px_0_24px_-12px_rgba(0,0,0,0.08)]">
         {isSwitching ? (
           <div className="flex flex-1 items-center justify-center">
             <ChaosLoader />

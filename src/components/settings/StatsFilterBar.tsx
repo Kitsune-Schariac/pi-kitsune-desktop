@@ -40,7 +40,7 @@ export function StatsFilterBar({
               onClick={() => setRange(r)}
               className={`px-3 py-2 transition duration-fast ease-out ${
                 range === r && !customStart && !customEnd
-                  ? "bg-primary-500 font-medium text-white"
+                  ? "bg-[var(--sel-bg)] font-medium text-[var(--fg)]"
                   : "text-neutral-600 hover:bg-neutral-100"
               }`}
             >

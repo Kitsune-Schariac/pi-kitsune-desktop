@@ -27,8 +27,8 @@ export const MessageItem = memo(function MessageItem({ entry }: { entry: ChatEnt
         <div
           className={`bubble min-w-0 text-base leading-relaxed ${
             isUser
-              ? "max-w-[85%] text-[rgb(var(--text-on-bubble))]"
-              : "max-w-[90%] text-[rgb(var(--text-on-bubble))]"
+              ? "max-w-[85%] text-[var(--text-on-bubble)]"
+              : "max-w-[90%] text-[var(--text-on-bubble)]"
           }`}
         >
           {content}
@@ -36,7 +36,7 @@ export const MessageItem = memo(function MessageItem({ entry }: { entry: ChatEnt
       ) : isUser ? (
         // 关闭气泡: user 套实色轻气泡 (中性底 + 边框, 非主题色底), 右对齐; assistant 全宽平铺。
         // 气泡开关语义因此变为「是否让 AI 回复也进气泡」, 关闭后仍能分清谁在说话
-        <div className="bubble-user min-w-0 max-w-[85%] text-base leading-relaxed text-[rgb(var(--text-user))]">
+        <div className="bubble-user min-w-0 max-w-[85%] text-base leading-relaxed text-[var(--text-user)]">
           {content}
         </div>
       ) : (

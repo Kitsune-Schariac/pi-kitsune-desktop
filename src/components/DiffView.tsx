@@ -51,8 +51,8 @@ export const DiffView = memo(function DiffView({ patch, cwd }: { patch: string; 
       <pre
         className="mt-2 overflow-auto rounded-sm p-2 text-xs text-neutral-700"
         style={{
-          background: "rgb(var(--code-bg) / var(--code-alpha))",
-          border: "1px solid rgb(var(--border-subtle))",
+          background: "color-mix(in oklch, var(--code-bg) calc(var(--code-alpha) * 100%), transparent)",
+          border: "1px solid var(--border-subtle)",
         }}
       >
         {patch}
@@ -63,7 +63,7 @@ export const DiffView = memo(function DiffView({ patch, cwd }: { patch: string; 
   return (
     <div
       className="mt-2 max-h-[60vh] overflow-auto rounded-sm text-xs"
-      style={{ border: "1px solid rgb(var(--border-subtle))" }}
+      style={{ border: "1px solid var(--border-subtle)" }}
     >
       {files.map((file: PatchFile, fi: number) => {
         const lang = langFromFilename(file.newPath) ?? undefined;
@@ -73,7 +73,7 @@ export const DiffView = memo(function DiffView({ patch, cwd }: { patch: string; 
         return (
           <div
             key={fi}
-            style={fi > 0 ? { borderTop: "1px solid rgb(var(--border-subtle))" } : undefined}
+            style={fi > 0 ? { borderTop: "1px solid var(--border-subtle)" } : undefined}
           >
             <div
               className="truncate px-2 py-1 font-mono text-xs text-neutral-500"
@@ -159,7 +159,7 @@ function HunkRows({
     }
     if (line.noNewline) {
       base +=
-        '<span style="color:rgb(var(--neutral-400));font-size:10px;margin-left:.25em">no newline</span>';
+        '<span style="color:var(--neutral-400);font-size:10px;margin-left:.25em">no newline</span>';
     }
     return base;
   };
@@ -170,7 +170,7 @@ function HunkRows({
   if (prevHunk) {
     const oldSkip = hunk.oldStart - (prevHunk.oldStart + prevHunk.oldLines);
     rows.push(
-      <tr key="sep" style={{ borderTop: "1px solid rgb(var(--border-subtle))" }}>
+      <tr key="sep" style={{ borderTop: "1px solid var(--border-subtle)" }}>
         <td colSpan={4} className="py-1 text-center text-xs text-neutral-400">
           {oldSkip > 0 ? `⋯ 跳过 ${oldSkip} 行 ⋯` : "⋯"}
         </td>
@@ -182,7 +182,7 @@ function HunkRows({
   rows.push(
     <tr
       key="head"
-      style={{ background: "rgb(var(--surface-sunken) / var(--overlay-alpha))" }}
+      style={{ background: "color-mix(in oklch, var(--surface-sunken) calc(var(--overlay-alpha) * 100%), transparent)" }}
     >
       <td colSpan={4} className="px-2 py-1 text-xs text-neutral-600">
         {`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`}
@@ -228,16 +228,16 @@ function DiffRow({ line, html }: { line: PatchLine; html: string }) {
   const prefix = line.kind === "add" ? "+" : line.kind === "del" ? "-" : " ";
   const bg =
     line.kind === "add"
-      ? "rgb(var(--diff-add-bg) / var(--code-alpha))"
+      ? "color-mix(in oklch, var(--diff-add-bg) calc(var(--code-alpha) * 100%), transparent)"
       : line.kind === "del"
-        ? "rgb(var(--diff-del-bg) / var(--code-alpha))"
+        ? "color-mix(in oklch, var(--diff-del-bg) calc(var(--code-alpha) * 100%), transparent)"
         : undefined;
   const fg =
     line.kind === "add"
-      ? "rgb(var(--diff-add-fg))"
+      ? "var(--diff-add-fg)"
       : line.kind === "del"
-        ? "rgb(var(--diff-del-fg))"
-        : "rgb(var(--neutral-700))";
+        ? "var(--diff-del-fg)"
+        : "var(--neutral-700)";
   return (
     <tr style={bg ? { background: bg } : undefined}>
       <td className="w-12 select-none px-2 text-right tabular-nums text-neutral-400">
@@ -266,16 +266,16 @@ export const PlainDiffView = memo(function PlainDiffView({ text }: { text: strin
     <pre
       className="mt-2 max-h-[40vh] overflow-auto rounded-sm p-2 text-xs leading-relaxed"
       style={{
-        background: "rgb(var(--code-bg) / var(--code-alpha))",
-        border: "1px solid rgb(var(--border-subtle))",
+        background: "color-mix(in oklch, var(--code-bg) calc(var(--code-alpha) * 100%), transparent)",
+        border: "1px solid var(--border-subtle)",
       }}
     >
       {lines.map((line, i) => {
-        let color = "rgb(var(--neutral-600))";
-        if (line.startsWith("+")) color = "rgb(var(--diff-add-fg))";
-        else if (line.startsWith("-")) color = "rgb(var(--diff-del-fg))";
+        let color = "var(--neutral-600)";
+        if (line.startsWith("+")) color = "var(--diff-add-fg)";
+        else if (line.startsWith("-")) color = "var(--diff-del-fg)";
         // pi 的 details.diff 省略段 (字面 ...) 与行号前缀行都归次要色
-        else if (line.startsWith("...") || /^\s*\d/.test(line)) color = "rgb(var(--neutral-400))";
+        else if (line.startsWith("...") || /^\s*\d/.test(line)) color = "var(--neutral-400)";
         return (
           <div key={i} style={{ color }}>
             {line || " "}

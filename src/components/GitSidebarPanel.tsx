@@ -346,11 +346,11 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
         >
           <div
             className={`h-10 w-[3px] rounded-full transition duration-fast ease-out ${
-              dragging ? "bg-[rgb(var(--primary-500))]" : "bg-transparent group-hover:bg-[rgb(var(--border-strong))]"
+              dragging ? "bg-[var(--primary-500)]" : "bg-transparent group-hover:bg-[var(--border-strong)]"
             }`}
           />
         </div>
-        <aside className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-base)/var(--chat-alpha))] shadow-sm">
+        <aside className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-base)_calc(var(--chat-alpha)_*_100%),transparent)] shadow-sm">
         {view.kind === "list" ? (
           // list header: 分支(可点击切换) + upstream/ahead/behind + 历史 + 刷新 + 收起
           <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
@@ -363,7 +363,7 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
                     loadBranches(cwd);
                     setBranchPickerOpen(true);
                   }}
-                  className="truncate text-sm font-medium transition duration-fast ease-out hover:text-[rgb(var(--primary-600))]"
+                  className="truncate text-sm font-medium transition duration-fast ease-out hover:text-[var(--primary-600)]"
                   title="切换分支"
                 >
                   {status.branch}
@@ -610,13 +610,13 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
               placeholder="提交信息…"
               rows={2}
               disabled={!hasStaged || writing}
-              className="w-full resize-none rounded-md border border-neutral-200 bg-[rgb(var(--surface-base))] px-2 py-2 text-xs text-neutral-800 placeholder:text-neutral-400 focus:border-[rgb(var(--primary-400))] focus:outline-none disabled:opacity-50"
+              className="w-full resize-none rounded-md border border-neutral-200 bg-[var(--surface-base)] px-2 py-2 text-xs text-neutral-800 placeholder:text-neutral-400 focus:border-[var(--primary-400)] focus:outline-none disabled:opacity-50"
             />
             <div className="mt-2 flex items-center gap-2">
               <button
                 onClick={askCommit}
                 disabled={!hasStaged || !commitMsg.trim() || writing}
-                className="flex items-center gap-1 rounded-md bg-[rgb(var(--primary-500))] px-3 py-2 text-xs font-medium text-white transition duration-fast ease-out hover:bg-[rgb(var(--primary-600))] disabled:opacity-40"
+                className="flex items-center gap-1 rounded-md bg-[var(--primary-500)] px-3 py-2 text-xs font-medium text-white transition duration-fast ease-out hover:bg-[var(--primary-600)] disabled:opacity-40"
               >
                 <GitCommitHorizontal className="h-4 w-4" />
                 提交 ({groups.staged.length})
@@ -660,7 +660,7 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
                     className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs transition duration-fast ease-out hover:bg-neutral-200/60 disabled:opacity-50"
                   >
                     {b.current ? (
-                      <Check className="h-4 w-4 shrink-0 text-[rgb(var(--primary-500))]" />
+                      <Check className="h-4 w-4 shrink-0 text-[var(--primary-500)]" />
                     ) : (
                       <span className="h-4 w-4 shrink-0" />
                     )}
@@ -700,7 +700,7 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
                 onClick={confirm.onConfirm}
                 disabled={writing}
                 className={`rounded-md px-3 py-2 text-xs font-medium text-white transition duration-fast ease-out disabled:opacity-40 ${
-                  confirm.danger ? "bg-red-500 hover:bg-red-600" : "bg-[rgb(var(--primary-500))] hover:bg-[rgb(var(--primary-600))]"
+                  confirm.danger ? "bg-red-500 hover:bg-red-600" : "bg-[var(--primary-500)] hover:bg-[var(--primary-600)]"
                 }`}
               >
                 {confirm.confirmText}

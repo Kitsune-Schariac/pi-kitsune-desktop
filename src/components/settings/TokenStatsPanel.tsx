@@ -185,7 +185,7 @@ export function TokenStatsPanel() {
                 <Icon className="h-4 w-4 text-primary-500" />
                 {label}
               </div>
-              <div className="text-lg font-semibold tabular-nums text-neutral-900">{value}</div>
+              <div className="text-num font-semibold tabular-nums text-neutral-900">{value}</div>
             </div>
           ))}
         </div>

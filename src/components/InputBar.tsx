@@ -422,7 +422,7 @@ export function InputBar({
       <div
         ref={cardRef}
         // 半透明悬浮卡: 消息从卡片后方滑过时可见 (不挡内容), 轻模糊防文字混叠
-        className="pointer-events-auto rounded-md border border-neutral-200 bg-[rgb(var(--surface-raised)/var(--raised-alpha))] shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition duration-fast ease-out focus-within:border-primary-400"
+        className="pointer-events-auto rounded-md border border-neutral-200 bg-[color-mix(in_oklch,var(--surface-raised)_calc(var(--raised-alpha)_*_100%),transparent)] shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition duration-fast ease-out focus-within:border-primary-400"
       >
         <div className="px-4 pt-3">
           {/* @引用 / /命令 浮层: 悬浮在输入卡上方 (与 RefsPopup 同模式), 不占卡片布局 */}

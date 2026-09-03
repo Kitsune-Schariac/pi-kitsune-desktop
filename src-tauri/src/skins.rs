@@ -18,7 +18,8 @@ pub struct SkinMeta {
     pub version: String,
     /// "light" | "dark", 驱动中性色阶方向 + Shiki 主题 + markdown 文字色
     pub base: String,
-    /// RGB 通道值 (空格分隔), 前端写 :root 变量
+    /// 任意 CSS 颜色值 (oklch / hex / color-mix / 旧 RGB 通道三段数字), 前端写 :root 变量;
+    /// 旧格式三段数字在加载时包成 rgb() 以兼容存量皮肤包 (值格式嗅探, 见 normalize_color)
     pub colors: HashMap<String, String>,
     pub has_bg: bool,
     pub has_override: bool,
@@ -77,6 +78,22 @@ fn bundled_skins_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(candidates[0].clone())
 }
 
+/// 旧版颜色格式 (RGB 通道 "r g b") → 包成 rgb() 透传; 新格式 (oklch/hex/color-mix 等) 原样返回。
+/// 嗅探规则: 恰好三段 1-3 位数字、空白分隔 → 视为旧 RGB 通道 (合法 CSS 颜色值不会是这个形态);
+/// 不加版本字段 — 嗅探对皮肤包作者完全透明, 存量第三方包零改动继续工作
+fn normalize_color(v: &str) -> String {
+    let parts: Vec<&str> = v.split_whitespace().collect();
+    let is_legacy_rgb = parts.len() == 3
+        && parts.iter().all(|p| {
+            !p.is_empty() && p.len() <= 3 && p.chars().all(|c| c.is_ascii_digit())
+        });
+    if is_legacy_rgb {
+        format!("rgb({})", v.trim())
+    } else {
+        v.to_string()
+    }
+}
+
 /// 解析单个皮肤目录 → SkinMeta; 目录无有效 skin.json 或 base 非法时返回 None (跳过)
 fn parse_skin(dir: &Path) -> Option<SkinMeta> {
     let text = std::fs::read_to_string(dir.join("skin.json")).ok()?;
@@ -84,6 +101,11 @@ fn parse_skin(dir: &Path) -> Option<SkinMeta> {
     if cfg.id.trim().is_empty() || (cfg.base != "light" && cfg.base != "dark") {
         return None;
     }
+    let colors: HashMap<String, String> = cfg
+        .colors
+        .into_iter()
+        .map(|(k, v)| (k, normalize_color(&v)))
+        .collect();
     let preview_data_uri = cfg.preview.as_ref().and_then(|name| {
         let data = std::fs::read(dir.join(name)).ok()?;
         Some(format!("data:{};base64,{}", mime_for(name), BASE64.encode(data)))
@@ -94,7 +116,7 @@ fn parse_skin(dir: &Path) -> Option<SkinMeta> {
         author: cfg.author,
         version: cfg.version,
         base: cfg.base,
-        colors: cfg.colors,
+        colors,
         has_bg: cfg.background.as_ref().is_some_and(|n| dir.join(n).exists()),
         has_override: cfg.override_css.as_ref().is_some_and(|n| dir.join(n).exists()),
         preview_data_uri,

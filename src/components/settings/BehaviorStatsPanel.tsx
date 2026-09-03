@@ -187,7 +187,7 @@ function ThinkingRing({ ratio }: { ratio: number | null }) {
           <span className="text-xs text-neutral-400">无数据</span>
         ) : (
           <>
-            <span className="text-lg font-semibold tabular-nums text-neutral-900">
+            <span className="text-num font-semibold tabular-nums text-neutral-900">
               {Math.round(pct * 100)}%
             </span>
             <span className="text-xs text-neutral-400">thinking</span>
@@ -213,7 +213,7 @@ function SummaryCard({
         <Icon className="h-4 w-4 text-primary-500" />
         {label}
       </div>
-      <div className="text-lg font-semibold tabular-nums text-neutral-900">{format(display)}</div>
+      <div className="text-num font-semibold tabular-nums text-neutral-900">{format(display)}</div>
       {foot && <div className="mt-1 text-xs text-neutral-400">{foot}</div>}
     </div>
   );
