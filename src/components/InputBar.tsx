@@ -34,28 +34,28 @@ function MiniSelect({ label, icon: Icon, value, options, onChange, disabled, ope
       <button
         onClick={() => setOpenSel(!openSel)}
         disabled={disabled}
-        className="flex items-center gap-1 rounded-md px-2 py-2 text-xs text-neutral-600 transition duration-fast ease-out hover:bg-neutral-100 disabled:opacity-40"
+        className="flex items-center gap-1 rounded-md px-2 py-2 text-label text-[var(--muted)] transition duration-fast ease-out hover:bg-[var(--surface-2)] disabled:opacity-40"
         title={label}
       >
-        <Icon className="h-3 w-3 text-neutral-400" />
+        <Icon className="h-3 w-3 text-[var(--faint)]" />
         <span className="max-w-[90px] truncate">{value}</span>
-        <ChevronDown className="h-2 w-2 text-neutral-400" />
+        <ChevronDown className="h-2 w-2 text-[var(--faint)]" />
       </button>
       {openSel && (
-        <div className="absolute bottom-full right-0 z-50 mb-1 max-h-56 overflow-auto rounded-md border border-neutral-200 bg-panel py-1 shadow-lg">
+        <div className="absolute bottom-full right-0 z-50 mb-1 max-h-56 overflow-auto rounded-md border border-[var(--border-soft)] bg-[var(--panel)] py-1 shadow-lg">
           {options.map((opt) => (
             <button
               key={opt}
               onClick={() => { onChange(opt); setOpenSel(false); }}
-              className={`block w-full whitespace-nowrap px-3 py-2 text-left text-xs transition duration-fast ease-out hover:bg-neutral-100 ${
-                opt === value ? "text-primary-600" : "text-neutral-600"
+              className={`block w-full whitespace-nowrap px-3 py-2 text-left text-label transition duration-fast ease-out hover:bg-[var(--surface-2)] ${
+                opt === value ? "text-[var(--accent)]" : "text-[var(--muted)]"
               }`}
             >
               {opt}
             </button>
           ))}
           {options.length === 0 && (
-            <div className="px-3 py-2 text-xs text-neutral-400">无选项</div>
+            <div className="px-3 py-2 text-label text-[var(--faint)]">无选项</div>
           )}
         </div>
       )}
@@ -422,7 +422,7 @@ export function InputBar({
       <div
         ref={cardRef}
         // 半透明悬浮卡: 消息从卡片后方滑过时可见 (不挡内容), 轻模糊防文字混叠
-        className="pointer-events-auto rounded-md border border-neutral-200 bg-[color-mix(in_oklch,var(--surface-raised)_calc(var(--raised-alpha)_*_100%),transparent)] shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition duration-fast ease-out focus-within:border-primary-400"
+        className="pointer-events-auto rounded-md border border-[var(--border-soft)] bg-[color-mix(in_oklch,var(--surface-raised)_calc(var(--raised-alpha)_*_100%),transparent)] shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition duration-fast ease-out focus-within:border-[var(--border)] focus-within:shadow-[0_0_0_1px_color-mix(in_oklch,var(--accent)_22%,transparent),0_0_20px_color-mix(in_oklch,var(--accent)_12%,transparent),0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)]"
       >
         <div className="px-4 pt-3">
           {/* @引用 / /命令 浮层: 悬浮在输入卡上方 (与 RefsPopup 同模式), 不占卡片布局 */}
@@ -456,7 +456,7 @@ export function InputBar({
                 return (
                   <span
                     key={i}
-                    className="flex items-center gap-2 rounded-md border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-700"
+                    className="flex items-center gap-2 rounded-md border border-[color-mix(in_oklch,var(--accent)_35%,transparent)] bg-[color-mix(in_oklch,var(--accent)_10%,transparent)] px-2 py-1 text-label text-[var(--accent-strong)]"
                   >
                     <Icon className="h-3 w-3" />
                     <button
@@ -466,10 +466,10 @@ export function InputBar({
                     >
                       {r.title}
                     </button>
-                    {meta && <span className="text-xs text-primary-400">{meta}</span>}
+                    {meta && <span className="text-label text-[var(--faint)]">{meta}</span>}
                     <button
                       onClick={() => setRefs((prev) => prev.filter((_, j) => j !== i))}
-                      className="rounded-sm p-1 transition duration-fast ease-out hover:bg-primary-100"
+                      className="rounded-sm p-1 transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--accent)_15%,transparent)]"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -481,25 +481,25 @@ export function InputBar({
           {/* 引用预览 popover */}
           {preview && (
             <div className="relative">
-              <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-md border border-neutral-200 bg-panel shadow-lg">
-                <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-2">
-                  <span className="flex items-center gap-2 text-xs font-medium text-neutral-700">
+              <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-md border border-[var(--border-soft)] bg-[var(--panel)] shadow-lg">
+                <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-2">
+                  <span className="flex items-center gap-2 text-label font-medium text-[var(--fg)]">
                     {(() => {
                       const Icon = refIcon(preview.ref);
-                      return <Icon className="h-4 w-4 text-primary-500" />;
+                      return <Icon className="h-4 w-4 text-[var(--accent)]" />;
                     })()}
                     {preview.ref.title}
                   </span>
                   <button
                     onClick={() => setPreview(null)}
-                    className="rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-100"
+                    className="rounded-sm p-1 text-[var(--faint)] transition duration-fast ease-out hover:bg-[var(--surface-2)]"
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
                 <div className="max-h-64 overflow-auto p-3">
                   {preview.loading ? (
-                    <div className="flex items-center gap-2 text-xs text-neutral-400">
+                    <div className="flex items-center gap-2 text-label text-[var(--faint)]">
                       <Loader2 className="h-4 w-4 animate-spin" /> 加载预览…
                     </div>
                   ) : preview.ref.kind === "image" ||
@@ -508,10 +508,10 @@ export function InputBar({
                     <img
                       src={`data:${preview.ref.mimeType};base64,${preview.ref.data}`}
                       alt={preview.ref.title}
-                      className="max-h-56 rounded-md border border-neutral-100"
+                      className="max-h-56 rounded-md border border-[var(--border-soft)]"
                     />
                   ) : (
-                    <pre className="whitespace-pre-wrap text-xs leading-relaxed text-neutral-600">
+                    <pre className="whitespace-pre-wrap text-label leading-relaxed text-[var(--muted)]">
                       {preview.content ?? ""}
                     </pre>
                   )}
@@ -529,17 +529,17 @@ export function InputBar({
           onMouseUp={handleCursorMove}
           placeholder={isStreaming ? "运行中: Enter 发 steer 指导, Alt+Enter 排队后续" : "输入消息, Enter 发送 (@ 引用文件/技能, / 命令)"}
           rows={2}
-          className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-sm text-neutral-800 outline-none placeholder:text-neutral-500"
+          className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-ui text-[var(--fg)] outline-none placeholder:text-[var(--faint)]"
         />
 
         {/* 输入框内底部工具行: 左上下文 / 右 context window + 选择器 + 发送 */}
-        {hint && <p className="px-4 text-right text-xs text-primary-600">{hint}</p>}
+        {hint && <p className="px-4 text-right text-label text-[var(--accent-strong)]">{hint}</p>}
         <div className="flex items-center justify-between px-2 pb-2">
           {/* 左下: 上下文添加 */}
           <div className="relative">
             <button
               onClick={() => setCtxOpen(!ctxOpen)}
-              className="flex items-center gap-2 rounded-md px-2 py-2 text-xs text-neutral-500 transition duration-fast ease-out hover:bg-neutral-100 hover:text-neutral-700"
+              className="flex items-center gap-2 rounded-md px-2 py-2 text-label text-[var(--muted)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
               title="添加上下文"
             >
               <Paperclip className="h-4 w-4" />
@@ -558,18 +558,18 @@ export function InputBar({
           <div className="flex items-center gap-2">
             {/* context window 使用情况 */}
             <div
-              className="flex items-center gap-2 rounded-md px-2 py-2 transition duration-fast ease-out hover:bg-neutral-100"
+              className="flex items-center gap-2 rounded-md px-2 py-2 text-label transition duration-fast ease-out hover:bg-[var(--surface-2)]"
               title={cuText ? `上下文 ${cuText} tokens` : "暂无上下文统计"}
             >
-              <div className="h-2 w-16 overflow-hidden rounded-full bg-neutral-200">
+              <div className="h-2 w-16 overflow-hidden rounded-full bg-[var(--surface-2)]">
                 <div
                   className={`h-full rounded-full transition-[width,background-color] duration-base ease-out ${
-                    percent === null ? "bg-neutral-300" : percent > 85 ? "bg-red-500" : "bg-primary-500"
+                    percent === null ? "bg-[var(--faint)]" : percent > 85 ? "bg-[var(--danger)]" : "bg-[var(--accent)]"
                   }`}
                   style={{ width: percent === null ? "0%" : `${Math.min(100, percent)}%` }}
                 />
               </div>
-              <span className="text-xs tabular-nums text-neutral-400">
+              <span className="text-label tabular-nums text-[var(--faint)]">
                 {percent === null ? "--" : `${Math.round(percent)}%`}
               </span>
             </div>
@@ -610,7 +610,7 @@ export function InputBar({
             {isStreaming ? (
               <button
                 onClick={() => activeSessionId && abort(activeSessionId)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-red-100 text-red-500 transition duration-fast ease-out hover:bg-red-200"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--danger)_15%,transparent)] text-[var(--danger)] transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--danger)_25%,transparent)]"
                 title="中止 (Enter 发 steer 指导)"
               >
                 <Square className="h-4 w-4" />
@@ -619,7 +619,7 @@ export function InputBar({
               <button
                 onClick={() => handleSend("prompt")}
                 disabled={!text.trim()}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-500 text-white shadow-sm shadow-primary-500/30 transition duration-fast ease-out hover:bg-primary-600 disabled:opacity-40"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--on-accent)] shadow-sm shadow-[color-mix(in_oklch,var(--accent)_30%,transparent)] transition duration-fast ease-out hover:bg-[var(--accent-strong)] active:scale-95 disabled:opacity-40"
                 title="发送"
               >
                 <Send className="h-4 w-4" />
@@ -632,8 +632,8 @@ export function InputBar({
             store 的 notify 分支被过滤)。运行中实时跳动, settled 后定格, 下一轮 agent_start 重置 */}
         {turnStats && (
           <div
-            className={`flex items-center gap-4 border-t border-neutral-200 px-4 py-2 text-xs tabular-nums transition-colors duration-fast ease-out ${
-              isStreaming ? "text-neutral-500" : "text-neutral-400"
+            className={`flex items-center gap-4 border-t border-[var(--border-soft)] px-4 py-2 text-label tabular-nums transition-colors duration-fast ease-out ${
+              isStreaming ? "text-[var(--muted)]" : "text-[var(--faint)]"
             }`}
           >
             <span className="flex items-center gap-1" title="本轮输入 token">

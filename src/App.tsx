@@ -6,6 +6,7 @@ import { InputBar } from "./components/InputBar";
 import { Sidebar } from "./components/Sidebar";
 import { EmptyState, ProjectCard } from "./components/EmptyState";
 import { ChaosLoader } from "./components/ChaosLoader";
+import { TitleBar } from "./components/TitleBar";
 import { SettingsWindow } from "./components/settings/SettingsWindow";
 import { GitSidebarPanel } from "./components/GitSidebarPanel";
 import { FleetSidebarPanel } from "./components/FleetSidebarPanel";
@@ -213,28 +214,33 @@ export default function App() {
       />
       <div
         id="app-root"
-        className="fixed inset-0 flex overflow-hidden bg-gradient-to-b from-white to-primary-100 text-neutral-900"
+        className="fixed inset-0 flex flex-col overflow-hidden bg-gradient-to-b from-white to-primary-100 text-neutral-900"
       >
+      {/* 自绘标题栏 (无边框窗口顶部): 拖拽区 + 品牌 + 窗口控制; 之后内容行 (侧栏/主区/右面板) 纵向下移 */}
+      <TitleBar />
+      {/* 内容行: 侧栏 + 主区 + (子任务 4 的右侧面板 flex 兄弟位)。
+          min-h-0 防止子项把内容行撑破 app-root 纵向空间 */}
+      <div className="flex min-h-0 flex-1">
       <Sidebar onOpenPanel={setPanel} collapsed={sidebarCollapsed} onToggleCollapsed={toggleSidebar} />
       {/* relative: 供底部悬浮输入框 absolute 定位
           不压缩滚动区: 消息可滑到输入卡后方 (半透明可见), 底部留白由 MessageList 内部 padding 承担 */}
-      <main className="relative flex min-w-0 flex-1 flex-col bg-[color-mix(in_oklch,var(--surface-base)_calc(var(--chat-alpha)_*_100%),transparent)] shadow-[-10px_0_24px_-12px_rgba(0,0,0,0.08)]">
+      <main className="relative flex min-w-0 flex-1 flex-col bg-[color-mix(in_oklch,var(--chat-bg)_calc(var(--chat-alpha)_*_100%),transparent)] shadow-[-10px_0_24px_-12px_rgba(0,0,0,0.08)]">
         {isSwitching ? (
           <div className="flex flex-1 items-center justify-center">
             <ChaosLoader />
           </div>
         ) : active ? (
           <>
-            <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-2">
+            <header className="flex items-center justify-between border-b border-[var(--border-soft)] px-6 py-2">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="truncate font-medium">
+                <span className="truncate text-title font-semibold text-[var(--fg)]">
                   {active.sessionName || active.cwd.split(/[\\/]/).filter(Boolean).pop()}
                 </span>
-                <span className="truncate text-xs text-neutral-500" title={active.cwd}>
+                <span className="truncate text-mini text-[var(--faint)]" title={active.cwd}>
                   {active.cwd}
                 </span>
                 {active.isStreaming && (
-                  <span className="flex shrink-0 items-center gap-1 text-xs text-neutral-500">
+                  <span className="flex shrink-0 items-center gap-1 text-mini text-[var(--muted)]">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     思考中
                   </span>
@@ -247,7 +253,7 @@ export default function App() {
                 <QueueIndicator steering={active.steeringQueue} followUp={active.followUpQueue} />
                 <button
                   onClick={() => stopSession(activeSessionId!)}
-                  className="rounded-md px-2 py-1 text-xs text-neutral-400 transition duration-fast ease-out hover:bg-neutral-100 hover:text-neutral-600"
+                  className="rounded-md px-2 py-1 text-label text-[var(--faint)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--muted)]"
                 >
                   关闭会话
                 </button>
@@ -255,7 +261,7 @@ export default function App() {
             </header>
             {/* 错误提示放 header 下方: 悬浮输入框会盖住底部区域, 放底部看不见 */}
             {active?.error && (
-              <div className="border-b border-red-200 bg-red-50 px-6 py-2 text-sm text-red-600">
+              <div className="border-b border-[color-mix(in_oklch,var(--danger)_25%,transparent)] bg-[color-mix(in_oklch,var(--danger)_10%,transparent)] px-6 py-2 text-body text-[var(--danger)]">
                 {active.error}
               </div>
             )}
@@ -325,6 +331,8 @@ export default function App() {
           </div>
         </div>
       )}
+      </div>
+      {/* 内容行 div 闭合 */}
       </div>
     </>
   );

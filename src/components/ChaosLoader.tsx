@@ -36,9 +36,10 @@ function genLorenzPath(steps: number, dt: number, x0: number, y0: number, z0: nu
 }
 
 // 两条轨迹不同初值 (吸引子形状都是蝴蝶, 细节不同) + 不同流动速度
+// 颜色走语义状态变量 (--cyan / --violet): 10 套皮肤下均可读, 不锁死固定色
 const TRACES = [
-  { color: "#06b6d4", dur: 3.0, x0: 0.1, y0: 0, z0: 0 },      // cyan
-  { color: "#8b5cf6", dur: 4.4, x0: -0.05, y0: 0.01, z0: 0 }, // violet
+  { color: "var(--cyan)", dur: 3.0, x0: 0.1, y0: 0, z0: 0 },      // cyan
+  { color: "var(--violet)", dur: 4.4, x0: -0.05, y0: 0.01, z0: 0 }, // violet
 ] as const;
 
 export function ChaosLoader({ label = "加载中" }: { label?: string }) {
@@ -80,7 +81,7 @@ export function ChaosLoader({ label = "加载中" }: { label?: string }) {
           ))}
         </svg>
       </div>
-      <span className="text-xs tracking-[0.3em] text-neutral-400">{label}</span>
+      <span className="text-mini tracking-[0.3em] text-[var(--faint)]">{label}</span>
     </div>
   );
 }
