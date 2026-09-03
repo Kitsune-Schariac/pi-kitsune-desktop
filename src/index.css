@@ -240,6 +240,23 @@ body,
   display: none !important;
 }
 
+/* 会话工具条状态药丸底座 (改版稿 .ct-pill): 圆角 pill + 语义字号/色。
+   on/off 态由组件用语义变量 class 切换 (accent 边/字/soft 底 vs border-soft + muted) */
+.ct-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border-width: 1px;
+  padding: 3px 10px;
+  font-size: var(--fs-label);
+  line-height: 1.4;
+  transition: border-color 0.12s ease, color 0.12s ease, background-color 0.12s ease;
+}
+.ct-pill svg {
+  width: 13px;
+  height: 13px;
+}
+
 /* 键盘焦点可见性 (可访问性): 仅键盘 Tab 导航时显示 accent 描边;
    鼠标点击不显示 (与 :focus 区分, 避免点按钮留框)。覆盖各组件 outline-none */
 :focus-visible {

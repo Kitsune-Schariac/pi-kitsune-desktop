@@ -11,6 +11,7 @@ import { SettingsWindow } from "./components/settings/SettingsWindow";
 import { GitSidebarPanel } from "./components/GitSidebarPanel";
 import { FleetSidebarPanel } from "./components/FleetSidebarPanel";
 import { TrellisSidebarPanel } from "./components/TrellisSidebarPanel";
+import { RightPanel } from "./components/RightPanel";
 import { SkillsPanel } from "./components/panels/SkillsPanel";
 import { PackagesPanel } from "./components/panels/PackagesPanel";
 import { NotificationToasts, UiRequestModal } from "./components/UiRequestModal";
@@ -69,9 +70,12 @@ export default function App() {
     ).length;
     return streamRunning + localArtifactActive;
   }, [activeSessionId, currentUuid, streamEntries, runs]);
-  const [gitSidebarOpen, setGitSidebarOpen] = useState(false);
-  const [fleetSidebarOpen, setFleetSidebarOpen] = useState(false);
-  const [trellisSidebarOpen, setTrellisSidebarOpen] = useState(false);
+  // 右侧面板单一 state (改版稿): 舰队/Trellis/Git 三入口共用, 同时只显一个; null = 收起。
+  // 与左侧 drawer (panel) / 设置窗互不干扰。
+  const [rightPanel, setRightPanel] = useState<"fleet" | "trellis" | "git" | null>(null);
+  const toggleRightPanel = (kind: "fleet" | "trellis" | "git") => {
+    setRightPanel((cur) => (cur === kind ? null : kind));
+  };
 
   // 侧栏折叠 (改版稿): 收起后只剩窄条图标栏; 持久化, 重启保持
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
@@ -101,14 +105,10 @@ export default function App() {
     void useFleetStore.getState().refresh();
   }, []);
 
-  // ToolCallCard 联动按钮 → fleet store panelRequest 递增 → 开舰队面板 + 关 Git/任务 (互斥让位)
+  // ToolCallCard 联动按钮 → fleet store panelRequest 递增 → 开舰队面板 (互斥让位由单一 state 保证)
   const fleetPanelRequest = useFleetStore((s) => s.panelRequest);
   useEffect(() => {
-    if (fleetPanelRequest > 0) {
-      setGitSidebarOpen(false);
-      setTrellisSidebarOpen(false);
-      setFleetSidebarOpen(true);
-    }
+    if (fleetPanelRequest > 0) setRightPanel("fleet");
   }, [fleetPanelRequest]);
 
   // Git 状态拉取 (原 Sidebar 职责迁入): cwd 变化拉一次 (药丸常驻显示需要 status)。
@@ -125,8 +125,11 @@ export default function App() {
     if (cwd) loadTrellisTasks(cwd);
   }, [cwd]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 工作台状态药丸 (design 三-3.1): 会话区 header 右上常驻, 聚合多源摘要。本次只接 git,
-  // 后续 trellis/analytics/fleet 摘要挂进同一药丸 (父任务挂载点统一决策)
+  // 工作台状态药丸 (改版稿 .ct-pill): 会话区 header 右上常驻, 聚合多源摘要。
+  // on 态 (面板开着) = accent 边框 + accent 字 + accent-soft 底; off = border-soft + muted,
+  // hover 变 fg。触发互斥由单一 rightPanel state 保证 (toggleRightPanel)。
+  const pillOn = "border-[color-mix(in_oklch,var(--accent)_45%,transparent)] text-[var(--accent)] bg-[var(--accent-soft)]";
+  const pillOff = "border-[var(--border-soft)] text-[var(--muted)] hover:text-[var(--fg)] hover:border-[var(--border)]";
   let gitPill: ReactNode = null;
   if (gitStatus === null && !gitError) {
     // 首次加载中 → 不渲染 (避免空骨架闪烁)
@@ -136,10 +139,8 @@ export default function App() {
     // 非 git 仓库 → 灰显, 仍可点击展开 (PRD: 安静降级不报错, 侧栏内有提示)
     gitPill = (
       <button
-        onClick={() => { if (gitSidebarOpen) setGitSidebarOpen(false); else { setFleetSidebarOpen(false); setTrellisSidebarOpen(false); setGitSidebarOpen(true); } }}
-        className={`rounded-full border px-2 py-1 text-xs text-neutral-400 transition duration-fast ease-out hover:text-neutral-600 ${
-          gitSidebarOpen ? "border-neutral-300" : "border-neutral-200"
-        }`}
+        onClick={() => toggleRightPanel("git")}
+        className={`ct-pill ${rightPanel === "git" ? pillOn : pillOff}`}
         title="非 Git 仓库"
       >
         非 Git 仓库
@@ -149,17 +150,13 @@ export default function App() {
     const changeCount = gitStatus?.files.length ?? 0;
     gitPill = (
       <button
-        onClick={() => { if (gitSidebarOpen) setGitSidebarOpen(false); else { setFleetSidebarOpen(false); setTrellisSidebarOpen(false); setGitSidebarOpen(true); } }}
-        className={`flex items-center gap-2 rounded-full border px-2 py-1 text-xs transition duration-fast ease-out tabular-nums ${
-          gitSidebarOpen
-            ? "border-[var(--primary-400)] text-[var(--primary-600)]"
-            : "border-neutral-200 text-neutral-500 hover:text-neutral-700"
-        }`}
+        onClick={() => toggleRightPanel("git")}
+        className={`ct-pill flex items-center gap-2 tabular-nums ${rightPanel === "git" ? pillOn : pillOff}`}
         title={`分支 ${gitStatus?.branch ?? "—"} · ${changeCount} 个变更`}
       >
         <GitBranch className="h-4 w-4" />
         <span className="max-w-[120px] truncate">{gitStatus?.branch ?? "—"}</span>
-        <span className="text-neutral-300">·</span>
+        <span className="text-[var(--faint)]">·</span>
         <span>{changeCount}</span>
       </button>
     );
@@ -171,12 +168,8 @@ export default function App() {
   if (trellisExists) {
     trellisPill = (
       <button
-        onClick={() => { if (trellisSidebarOpen) setTrellisSidebarOpen(false); else { setFleetSidebarOpen(false); setGitSidebarOpen(false); setTrellisSidebarOpen(true); } }}
-        className={`flex items-center gap-2 rounded-full border px-2 py-1 text-xs transition duration-fast ease-out ${
-          trellisSidebarOpen
-            ? "border-[var(--primary-400)] text-[var(--primary-600)]"
-            : "border-neutral-200 text-neutral-500 hover:text-neutral-700"
-        }`}
+        onClick={() => toggleRightPanel("trellis")}
+        className={`ct-pill flex items-center gap-2 ${rightPanel === "trellis" ? pillOn : pillOff}`}
         title="查看 Trellis 任务"
       >
         <ListTree className="h-4 w-4" />
@@ -190,12 +183,8 @@ export default function App() {
   if (fleetRunCount > 0 || streamEntries.length > 0) {
     fleetPill = (
       <button
-        onClick={() => { if (fleetSidebarOpen) setFleetSidebarOpen(false); else { setGitSidebarOpen(false); setTrellisSidebarOpen(false); setFleetSidebarOpen(true); } }}
-        className={`flex items-center gap-2 rounded-full border px-2 py-1 text-xs transition duration-fast ease-out tabular-nums ${
-          fleetSidebarOpen
-            ? "border-[var(--primary-400)] text-[var(--primary-600)]"
-            : "border-neutral-200 text-neutral-500 hover:text-neutral-700"
-        }`}
+        onClick={() => toggleRightPanel("fleet")}
+        className={`ct-pill flex items-center gap-2 tabular-nums ${rightPanel === "fleet" ? pillOn : pillOff}`}
         title={fleetActiveCount > 0 ? `${fleetActiveCount} 个 subagent 活动中` : "查看 subagent 运行产物"}
       >
         <Radar className="h-4 w-4" />
@@ -281,15 +270,18 @@ export default function App() {
         />
       </main>
 
-      {/* Git 侧栏: main 的 flex 兄弟 (展开时右让 340px, 收起恢复全宽, 由 flex 自然完成) */}
-      {active && gitSidebarOpen && (
-        <GitSidebarPanel cwd={active.cwd} onClose={() => setGitSidebarOpen(false)} />
-      )}
-      {active && fleetSidebarOpen && (
-        <FleetSidebarPanel onClose={() => setFleetSidebarOpen(false)} />
-      )}
-      {active && trellisSidebarOpen && (
-        <TrellisSidebarPanel cwd={active.cwd} onClose={() => setTrellisSidebarOpen(false)} />
+      {/* 右侧面板: main 的 flex 兄弟 (改版稿 .side-panel, 展开时 main 让位, 收起恢复全宽,
+          由 flex 自然完成)。单一 rightPanel state 保证同时只显一个。 */}
+      {active && rightPanel && (
+        <RightPanel>
+          {rightPanel === "git" ? (
+            <GitSidebarPanel cwd={active.cwd} onClose={() => setRightPanel(null)} />
+          ) : rightPanel === "fleet" ? (
+            <FleetSidebarPanel onClose={() => setRightPanel(null)} />
+          ) : (
+            <TrellisSidebarPanel cwd={active.cwd} onClose={() => setRightPanel(null)} />
+          )}
+        </RightPanel>
       )}
 
       {/* 扩展 UI 请求弹窗: 只渲染活跃会话的队头请求 (FIFO, 关闭后自动弹下一个) */}
