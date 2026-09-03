@@ -363,16 +363,17 @@ export function BehaviorStatsPanel() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* 标题 + 加载指示 */}
-      <div className="flex items-center gap-2">
-        <h2 className="text-base font-semibold text-neutral-900">对话行为统计</h2>
-        {loading && <Loader2 className="h-4 w-4 animate-spin text-primary-500" />}
-        {error && (
-          <span className="flex items-center gap-1 text-xs text-red-500">
-            <AlertCircle className="h-4 w-4" /> {error}
-          </span>
-        )}
-      </div>
+      {/* 加载/错误状态条 (大标题已由设置窗页头承担, 这里不再重复渲染 h2) */}
+      {(loading || error) && (
+        <div className="flex items-center gap-2">
+          {loading && <Loader2 className="h-4 w-4 animate-spin text-[var(--accent)]" />}
+          {error && (
+            <span className="flex items-center gap-1 text-mini text-[var(--danger)]">
+              <AlertCircle className="h-4 w-4" /> {error}
+            </span>
+          )}
+        </div>
+      )}
 
       <StatsFilterBar projects={data?.filters.projects ?? []} />
 

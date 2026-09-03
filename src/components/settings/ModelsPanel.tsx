@@ -107,10 +107,12 @@ function Section({
   return (
     <section className="rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-raised)_calc(var(--overlay-alpha)_*_100%),transparent)]">
       <header className="flex items-start gap-2 border-b border-[var(--border-subtle)] px-4 py-3">
-        <Icon className="mt-1 h-4 w-4 shrink-0 text-neutral-400" />
+        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--faint)]" />
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium text-neutral-800">{title}</h3>
-          {desc && <p className="mt-1 text-xs leading-relaxed text-neutral-600">{desc}</p>}
+          <h3 className="text-title font-semibold text-[var(--fg)]">{title}</h3>
+          {desc && (
+            <p className="mt-1 text-mini leading-relaxed text-[var(--muted)]">{desc}</p>
+          )}
         </div>
         {actions && <div className="shrink-0">{actions}</div>}
       </header>

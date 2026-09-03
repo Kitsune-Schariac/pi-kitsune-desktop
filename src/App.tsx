@@ -72,6 +72,17 @@ export default function App() {
   const [fleetSidebarOpen, setFleetSidebarOpen] = useState(false);
   const [trellisSidebarOpen, setTrellisSidebarOpen] = useState(false);
 
+  // 侧栏折叠 (改版稿): 收起后只剩窄条图标栏; 持久化, 重启保持
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem("kitsune.sidebarCollapsed") === "1",
+  );
+  const toggleSidebar = () => {
+    setSidebarCollapsed((c) => {
+      localStorage.setItem("kitsune.sidebarCollapsed", c ? "0" : "1");
+      return !c;
+    });
+  };
+
   const [panel, setPanel] = useState<PanelKind>(null);
   // 空状态: 项目选择器的选中值 (InputBar 发送时自动建会话用)
   const [emptyProject, setEmptyProject] = useState("");
@@ -204,7 +215,7 @@ export default function App() {
         id="app-root"
         className="fixed inset-0 flex overflow-hidden bg-gradient-to-b from-white to-primary-100 text-neutral-900"
       >
-      <Sidebar onOpenPanel={setPanel} />
+      <Sidebar onOpenPanel={setPanel} collapsed={sidebarCollapsed} onToggleCollapsed={toggleSidebar} />
       {/* relative: 供底部悬浮输入框 absolute 定位
           不压缩滚动区: 消息可滑到输入卡后方 (半透明可见), 底部留白由 MessageList 内部 padding 承担 */}
       <main className="relative flex min-w-0 flex-1 flex-col bg-[color-mix(in_oklch,var(--surface-base)_calc(var(--chat-alpha)_*_100%),transparent)] shadow-[-10px_0_24px_-12px_rgba(0,0,0,0.08)]">
