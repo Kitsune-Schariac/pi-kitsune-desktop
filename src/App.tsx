@@ -154,7 +154,7 @@ export default function App() {
         className={`ct-pill flex items-center gap-2 tabular-nums ${rightPanel === "git" ? pillOn : pillOff}`}
         title={`分支 ${gitStatus?.branch ?? "—"} · ${changeCount} 个变更`}
       >
-        <GitBranch className="h-4 w-4" />
+        <GitBranch className="h-[15px] w-[15px]" />
         <span className="max-w-[120px] truncate">{gitStatus?.branch ?? "—"}</span>
         <span className="text-[var(--faint)]">·</span>
         <span>{changeCount}</span>
@@ -162,33 +162,36 @@ export default function App() {
     );
   }
 
-  // 任务药丸入口: 项目装了 Trellis (tasks 目录存在) 才显示 (R3: 没装直接不显示, 无数字 ——
-  // 任务数无实时性价值, 仅入口)。与 Git/舰队药丸同槽互斥让位
+  // 任务药丸入口: 项目装了 Trellis (tasks 目录存在) 才显示 (R3: 没装直接不显示)。纯图标钮。
   let trellisPill: ReactNode = null;
   if (trellisExists) {
     trellisPill = (
       <button
         onClick={() => toggleRightPanel("trellis")}
-        className={`ct-pill flex items-center gap-2 ${rightPanel === "trellis" ? pillOn : pillOff}`}
-        title="查看 Trellis 任务"
+        className={`ct-pill !p-1 ${rightPanel === "trellis" ? pillOn : pillOff}`}
+        title="Trellis 任务"
+        aria-label="Trellis 任务"
       >
-        <ListTree className="h-4 w-4" />
-        <span>任务</span>
+        <ListTree className="h-[15px] w-[15px]" />
       </button>
     );
   }
 
-  // 舰队药丸入口: 有 artifact run 或本会话有 stream 条目就显示 (活动数>0 带数字, 0 仅入口看历史)
+  // 舰队药丸入口: 有 artifact run 或本会话有 stream 条目就显示。纯图标钮,
+  // 活动数用右上角 accent 圆点徽标 (替代原文字里的数字)
   let fleetPill: ReactNode = null;
   if (fleetRunCount > 0 || streamEntries.length > 0) {
     fleetPill = (
       <button
         onClick={() => toggleRightPanel("fleet")}
-        className={`ct-pill flex items-center gap-2 tabular-nums ${rightPanel === "fleet" ? pillOn : pillOff}`}
+        className={`ct-pill relative !p-1 ${rightPanel === "fleet" ? pillOn : pillOff}`}
         title={fleetActiveCount > 0 ? `${fleetActiveCount} 个 subagent 活动中` : "查看 subagent 运行产物"}
+        aria-label={fleetActiveCount > 0 ? `舰队 · ${fleetActiveCount} 活动中` : "舰队"}
       >
-        <Radar className="h-4 w-4" />
-        <span>舰队{fleetActiveCount > 0 ? ` ${fleetActiveCount}` : ""}</span>
+        <Radar className="h-[15px] w-[15px]" />
+        {fleetActiveCount > 0 && (
+          <span className="absolute right-0 top-0 flex h-[7px] w-[7px] translate-x-[2px] -translate-y-[2px] rounded-full bg-[var(--accent)] shadow-[0_0_4px_color-mix(in_oklch,var(--accent)_60%,transparent)]" />
+        )}
       </button>
     );
   }

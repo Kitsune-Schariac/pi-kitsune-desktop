@@ -17,6 +17,18 @@
 
 :root {
   color-scheme: light;
+  /* 字号 9 档 (设计稿 token, 与 tailwind.config fontSize 语义档同值):
+     CSS 变量体系供非 class 场景 (body 基准 / 行内样式) 引用;
+     React 组件一律用 text-* 语义 class, 两套必须同值 */
+  --fs-micro: 10px;
+  --fs-mini: 11px;
+  --fs-label: 12px;
+  --fs-body: 13px;
+  --fs-ui: 14px;
+  --fs-title: 15px;
+  --fs-head: 17px;
+  --fs-num: 20px;
+  --fs-hero: 24px;
   /* 主题色 (淡天蓝 sky 色阶): 皮肤切换时由 ThemeStore 运行时覆盖 */
   --primary-50: oklch(97.711% 0.0125 236.6);
   --primary-100: oklch(95.142% 0.025 236.8);
@@ -214,6 +226,9 @@
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "Symbols Nerd Font Mono", sans-serif;
+  /* 全局字号基准: 未显式套字号档的元素统一落 --fs-body (13px 主力档),
+     而不是浏览器默认 16px — 否则未覆盖元素会显得比周边 UI 大一圈 (设计稿 9 档模板的底座) */
+  font-size: var(--fs-body);
   /* 等宽数字: 统计面板数字流式更新时比例数字会横向抖动 (1 比 8 窄), tnum 让数字宽度一致 */
   font-feature-settings: "tnum" 1;
   -webkit-font-smoothing: antialiased;
@@ -247,14 +262,14 @@ body,
   align-items: center;
   border-radius: 999px;
   border-width: 1px;
-  padding: 3px 10px;
+  padding: 2px 8px;
   font-size: var(--fs-label);
   line-height: 1.4;
   transition: border-color 0.12s ease, color 0.12s ease, background-color 0.12s ease;
 }
 .ct-pill svg {
-  width: 13px;
-  height: 13px;
+  width: 15px;
+  height: 15px;
 }
 
 /* 键盘焦点可见性 (可访问性): 仅键盘 Tab 导航时显示 accent 描边;

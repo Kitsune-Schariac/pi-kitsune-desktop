@@ -95,7 +95,7 @@ export function Sidebar({
   return (
     <aside className="flex w-[288px] shrink-0 flex-col bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--sidebar-alpha)_*_100%),transparent)]">
       {/* 头部: 折叠钮 + 品牌; 折叠钮放头部左侧, 悬停/点击收起 (改版稿 rail toggle 位置语义) */}
-      <div className="flex items-center gap-1 px-3 py-3">
+      <div className="flex items-center px-2 py-2">
         <button
           onClick={onToggleCollapsed}
           className="rounded-md p-2 text-[var(--faint)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
@@ -103,7 +103,6 @@ export function Sidebar({
         >
           <PanelLeftClose className="h-4 w-4" />
         </button>
-        <span className="truncate text-title font-semibold text-[var(--fg)]">Pi Kitsune</span>
       </div>
 
       {/* 顶部搜索: "/" 全局聚焦; 输入后树切全局拍平过滤 (query 传给 ProjectList) */}

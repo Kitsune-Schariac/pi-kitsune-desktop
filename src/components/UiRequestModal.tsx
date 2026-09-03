@@ -77,7 +77,7 @@ export function UiRequestModal({
       <div className="w-[420px] max-w-[90vw] rounded-md border border-neutral-200 bg-panel shadow-lg">
         <div className="flex items-center gap-2 border-b border-neutral-200 px-5 py-4">
           {icon}
-          <span className="flex-1 truncate text-sm font-semibold text-neutral-800">
+          <span className="flex-1 truncate text-body font-semibold text-neutral-800">
             {request.title || "扩展请求"}
           </span>
           <button
@@ -91,7 +91,7 @@ export function UiRequestModal({
 
         <div className="px-5 py-4">
           {request.method === "confirm" && (
-            <p className="text-sm leading-relaxed text-neutral-600">
+            <p className="text-body leading-relaxed text-neutral-600">
               {request.message || "请确认此操作"}
             </p>
           )}
@@ -103,14 +103,14 @@ export function UiRequestModal({
                   <button
                     key={opt}
                     onClick={() => onResolve(request.id, { value: opt })}
-                    className="flex w-full items-center justify-between rounded-md border border-neutral-200 px-4 py-2 text-left text-sm text-neutral-700 transition duration-fast ease-out hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700"
+                    className="flex w-full items-center justify-between rounded-md border border-neutral-200 px-4 py-2 text-left text-body text-neutral-700 transition duration-fast ease-out hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700"
                   >
                     <span className="truncate">{opt}</span>
                     <ListChecks className="h-4 w-4 shrink-0 text-neutral-300" />
                   </button>
                 ))
               ) : (
-                <p className="text-sm text-neutral-400">没有可用选项</p>
+                <p className="text-body text-neutral-400">没有可用选项</p>
               )}
             </div>
           )}
@@ -124,7 +124,7 @@ export function UiRequestModal({
                 if (e.key === "Enter") submit();
               }}
               placeholder={request.placeholder || "输入内容…"}
-              className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm outline-none transition duration-fast ease-out focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+              className="w-full rounded-md border border-neutral-200 px-3 py-2 text-body outline-none transition duration-fast ease-out focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
             />
           )}
 
@@ -138,7 +138,7 @@ export function UiRequestModal({
                 if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit();
               }}
               rows={8}
-              className="w-full resize-y rounded-md border border-neutral-200 px-3 py-2 font-mono text-sm outline-none transition duration-fast ease-out focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+              className="w-full resize-y rounded-md border border-neutral-200 px-3 py-2 font-mono text-body outline-none transition duration-fast ease-out focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
             />
           )}
         </div>
@@ -147,13 +147,13 @@ export function UiRequestModal({
           <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-4">
             <button
               onClick={() => onCancel(request.id)}
-              className="rounded-md px-4 py-2 text-sm text-neutral-600 transition duration-fast ease-out hover:bg-neutral-100 hover:text-neutral-800"
+              className="rounded-md px-4 py-2 text-body text-neutral-600 transition duration-fast ease-out hover:bg-neutral-100 hover:text-neutral-800"
             >
               取消
             </button>
             <button
               onClick={request.method === "confirm" ? () => onResolve(request.id, { confirmed: true }) : submit}
-              className="rounded-md bg-primary-500 px-4 py-2 text-sm font-medium text-white transition duration-fast ease-out hover:bg-primary-600"
+              className="rounded-md bg-primary-500 px-4 py-2 text-body font-medium text-white transition duration-fast ease-out hover:bg-primary-600"
             >
               {request.method === "confirm" ? "确认" : "提交"}
             </button>
@@ -206,7 +206,7 @@ function NotificationToast({
   return (
     <div className={`flex items-start gap-2 rounded-md border px-4 py-2 shadow-lg ${style}`}>
       <Icon className="mt-1 h-4 w-4 shrink-0" />
-      <span className="flex-1 break-words text-sm leading-snug">{n.message}</span>
+      <span className="flex-1 break-words text-body leading-snug">{n.message}</span>
       <button
         onClick={() => onDismiss(n.id)}
         className="shrink-0 rounded-sm p-1 opacity-50 transition duration-fast ease-out hover:opacity-100"

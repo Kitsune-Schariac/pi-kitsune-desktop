@@ -9,7 +9,7 @@ export function ThinkingBlock({ text }: { text: string }) {
     <div className="mb-2">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 text-xs text-neutral-500 transition duration-fast ease-out hover:text-neutral-600"
+        className="flex items-center gap-2 text-mini text-neutral-500 transition duration-fast ease-out hover:text-neutral-600"
       >
         {expanded ? (
           <ChevronDown className="h-3 w-3" />
@@ -22,7 +22,7 @@ export function ThinkingBlock({ text }: { text: string }) {
       </button>
       {expanded && (
         // 左侧竖线 + 浅灰小字: 与正式回复区分层级
-        <div className="mt-1 whitespace-pre-wrap border-l-2 border-neutral-300 pl-3 text-xs leading-relaxed text-neutral-500">
+        <div className="mt-1 whitespace-pre-wrap border-l-2 border-neutral-300 pl-3 text-mini leading-relaxed text-neutral-500">
           {text}
         </div>
       )}

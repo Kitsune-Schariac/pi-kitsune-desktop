@@ -137,7 +137,7 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
     // 底色走 --overlay-alpha: 纯色皮肤下实色撑层次, 背景图皮肤下半透明, 不糊掉背景。
     // 用内联 style 写边框避免 tailwind border-color longhand 与 shorthand 任意值优先级不确定。
     <div
-      className="rounded-md p-2 text-sm"
+      className="rounded-md p-2 text-body"
       style={{
         background: "color-mix(in oklch, var(--surface-sunken) calc(var(--overlay-alpha) * 100%), transparent)",
         border: "1px solid var(--border-subtle)",
@@ -166,12 +166,12 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
         )}
         {/* 摘要区: subagent 运行中显示进度尾行, done 显示耗时/cost; 普通工具显示 args 首行 */}
         {showSubagent && entry.status === "running" && progressTail && (
-          <span className="min-w-0 flex-1 truncate font-mono text-xs text-neutral-400" title={progressTail}>
+          <span className="min-w-0 flex-1 truncate font-mono text-mini text-neutral-400" title={progressTail}>
             {progressTail}
           </span>
         )}
         {showSubagent && entry.status === "done" && subagentDetails && (
-          <span className="min-w-0 flex-1 truncate text-xs text-neutral-500">
+          <span className="min-w-0 flex-1 truncate text-mini text-neutral-500">
             {subagentDetails.durationMs != null && (
               <span className="tabular-nums">{Math.floor(subagentDetails.durationMs / 1000)}s</span>
             )}
@@ -184,7 +184,7 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
           </span>
         )}
         {!showSubagent && summary && (
-          <span className="min-w-0 flex-1 truncate text-xs text-neutral-400">{summary}</span>
+          <span className="min-w-0 flex-1 truncate text-mini text-neutral-400">{summary}</span>
         )}
         {expanded ? (
           <ChevronDown className="h-4 w-4 shrink-0 text-neutral-400" />
@@ -201,13 +201,13 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
           {showSubagent && entry.status === "running" && resultText && (
             <pre
               ref={progressRef}
-              className="max-h-40 overflow-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 font-mono text-xs text-[var(--term-text)]"
+              className="max-h-40 overflow-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 font-mono text-mini text-[var(--term-text)]"
             >
               {resultText}
             </pre>
           )}
           {showSubagent && entry.status === "done" && (
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-2 text-mini">
               <Radar className="h-4 w-4 shrink-0 text-[var(--primary-500)]" />
               <button
                 onClick={() => useFleetStore.getState().requestOpenPanel()}
@@ -220,7 +220,7 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
           )}
           {/* 保留普通工具的参数展示 (subagent 也不丢信息: args 可展开查看) */}
           {argsStr && (
-            <pre className="overflow-x-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 text-xs text-neutral-700">
+            <pre className="overflow-x-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 text-mini text-neutral-700">
               {argsStr}
             </pre>
           )}
@@ -230,12 +230,12 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ChatE
           {diff?.patch && <DiffView patch={diff.patch} cwd={cwd} />}
           {!diff?.patch && diff?.diff && <PlainDiffView text={diff.diff} />}
           {resultText && !diff && isBash && (
-            <pre className="max-h-48 overflow-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 font-mono text-xs text-[var(--term-text)]">
+            <pre className="max-h-48 overflow-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 font-mono text-mini text-[var(--term-text)]">
               {resultText}
             </pre>
           )}
           {resultText && !diff && !isBash && (
-            <pre className="max-h-48 overflow-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 text-xs text-neutral-700">
+            <pre className="max-h-48 overflow-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 text-mini text-neutral-700">
               {resultText}
             </pre>
           )}

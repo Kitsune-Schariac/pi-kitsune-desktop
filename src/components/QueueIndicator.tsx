@@ -15,7 +15,7 @@ export function QueueIndicator({ steering, followUp }: { steering: string[]; fol
     <div className="relative shrink-0">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition duration-fast ease-out hover:bg-neutral-100"
+        className="flex items-center gap-1 rounded-md px-2 py-1 text-mini transition duration-fast ease-out hover:bg-neutral-100"
         title={`待处理队列 ${total} 条: steer ${steering.length} / followUp ${followUp.length}`}
       >
         {steering.length > 0 && (
@@ -39,7 +39,7 @@ export function QueueIndicator({ steering, followUp }: { steering: string[]; fol
           <div className="absolute right-0 top-full z-50 mt-1 max-h-72 w-80 overflow-y-auto rounded-md border border-neutral-200 bg-panel py-1 shadow-lg">
             <QueueGroup label="steer 指导" color="orange" icon={<MessageSquarePlus className="h-3 w-3" />} items={steering} />
             <QueueGroup label="followUp 后续" color="blue" icon={<ListPlus className="h-3 w-3" />} items={followUp} />
-            {total === 0 && <div className="px-4 py-3 text-xs text-neutral-400">队列为空</div>}
+            {total === 0 && <div className="px-4 py-3 text-mini text-neutral-400">队列为空</div>}
           </div>
         </>
       )}
@@ -57,13 +57,13 @@ function QueueGroup({ label, color, icon, items }: {
   const labelCls = color === "orange" ? "text-primary-600" : "text-blue-600";
   return (
     <div className="py-1">
-      <div className={`flex items-center gap-1 px-4 py-1 text-xs font-medium uppercase tracking-wide ${labelCls}`}>
+      <div className={`flex items-center gap-1 px-4 py-1 text-mini font-medium uppercase tracking-wide ${labelCls}`}>
         {icon}
         {label}
         <span className="text-neutral-300">{items.length}</span>
       </div>
       {items.map((msg, i) => (
-        <div key={i} className="border-l-2 border-neutral-100 px-4 py-1 text-xs text-neutral-600">
+        <div key={i} className="border-l-2 border-neutral-100 px-4 py-1 text-mini text-neutral-600">
           <p className="truncate" title={msg}>{msg}</p>
         </div>
       ))}
