@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/session";
+import type { ModelInfo } from "../store/session";
 import {
-  Send, Square, Paperclip, X, ChevronDown, Cpu, Layers, Brain, Loader2,
+  Send, Square, Paperclip, X, ChevronDown, Cpu, Brain, Loader2,
   ArrowUp, ArrowDown, Clock, DollarSign, Gauge,
 } from "lucide-react";
 import { buildRefsParts, refIcon, refMetaText, type Ref } from "../lib/refs";
@@ -57,6 +58,109 @@ function MiniSelect({ label, icon: Icon, value, options, onChange, disabled, ope
           {options.length === 0 && (
             <div className="px-3 py-2 text-label text-[var(--faint)]">无选项</div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 模型选择 (provider + model 合并为一个控件, 对齐设计稿 model-select):
+// 按钮上同时显示 provider 与 model; 弹层顶部 provider chips 横排, 下方列当前 provider 的模型。
+// 切 provider = 选中该 provider 的第一个模型; 点模型 = 切模型。openRef 供 /model 命令展开。
+function ModelPicker({
+  provider,
+  model,
+  models,
+  onPick,
+  disabled,
+  openRef,
+}: {
+  provider: string;
+  model: ModelInfo | null;
+  /** 全部可选模型 (含 provider 字段), 组件内按 provider 分组 */
+  models: ModelInfo[];
+  onPick: (provider: string, modelId: string) => void;
+  disabled?: boolean;
+  openRef?: React.MutableRefObject<(() => void) | null>;
+}) {
+  const [openSel, setOpenSel] = useState(false);
+  useEffect(() => {
+    if (openRef) openRef.current = () => setOpenSel(true);
+    return () => { if (openRef) openRef.current = null; };
+  }, [openRef]);
+
+  // 按 provider 分组 (保持出现顺序)
+  const groups = useMemo(() => {
+    const map = new Map<string, ModelInfo[]>();
+    for (const m of models) {
+      if (!map.has(m.provider)) map.set(m.provider, []);
+      map.get(m.provider)!.push(m);
+    }
+    return [...map.entries()];
+  }, [models]);
+  const providerList = groups.map(([p]) => p);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpenSel(!openSel)}
+        disabled={disabled}
+        className="flex items-center gap-1 rounded-md px-2 py-2 text-label text-[var(--muted)] transition duration-fast ease-out hover:bg-[var(--surface-2)] disabled:opacity-40"
+        title="切换模型与供应商"
+      >
+        <Cpu className="h-3 w-3 text-[var(--faint)]" />
+        {model ? (
+          <span className="flex items-baseline gap-1">
+            <span className="max-w-[60px] truncate font-semibold text-[var(--fg)]">{provider}</span>
+            <span className="max-w-[120px] truncate font-mono text-mini text-[var(--muted)]">
+              {model.name}
+            </span>
+          </span>
+        ) : (
+          <span className="text-[var(--faint)]">选择模型</span>
+        )}
+        <ChevronDown className="h-2 w-2 text-[var(--faint)]" />
+      </button>
+      {openSel && (
+        <div className="absolute bottom-full right-0 z-50 mb-1 w-80 overflow-hidden rounded-md border border-[var(--border-soft)] bg-[var(--panel)] shadow-lg">
+          {/* provider chips 横排 (多时区内滚动, 不撑爆弹层) */}
+          {providerList.length > 0 && (
+            <div className="flex flex-wrap gap-1 border-b border-[var(--border-soft)] px-2 py-2">
+              {providerList.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => {
+                    const first = groups.find(([pp]) => pp === p)?.[1]?.[0];
+                    if (first) onPick(p, first.id);
+                  }}
+                  className={`rounded-full border px-2 py-[2px] text-mini transition duration-fast ease-out ${
+                    p === provider
+                      ? "border-[color-mix(in_oklch,var(--accent)_45%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                      : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--border)] hover:text-[var(--fg)]"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* 当前 provider 的模型列表 */}
+          <div className="max-h-56 overflow-auto py-1">
+            {(groups.find(([p]) => p === provider)?.[1] ?? []).map((m) => (
+              <button
+                key={m.id}
+                onClick={() => { onPick(provider, m.id); setOpenSel(false); }}
+                className={`block w-full truncate px-3 py-2 text-left text-label transition duration-fast ease-out hover:bg-[var(--surface-2)] ${
+                  model?.id === m.id ? "text-[var(--accent)]" : "text-[var(--muted)]"
+                }`}
+              >
+                {m.name}
+              </button>
+            ))}
+            {(groups.find(([p]) => p === provider)?.[1] ?? []).length === 0 && (
+              <div className="px-3 py-2 text-label text-[var(--faint)]">无可用模型</div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -158,7 +262,6 @@ export function InputBar({
     [availableModels]
   );
   const selProvider = currentModel?.provider ?? providers[0] ?? "";
-  const providerModels = availableModels.filter((m) => m.provider === selProvider);
 
   // 引用文件: 图片 → base64 (走 pi images 字段); 文本 → 只留路径+元信息 (路径模式, 内容不进上下文)
   // chips 点击预览: 文件类异步读内容 (仅预览用, 不随消息发送); 内联/图像类直接用内存数据
@@ -416,13 +519,14 @@ export function InputBar({
       : null;
 
   return (
-    // 悬浮输入卡: 底部居中, 宽度与消息列表一致 (max-w-[min(60%,52rem)]), 与消息区分离成浮动层
-    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 mx-auto w-full max-w-[min(60%,52rem)] px-4">
+    // 悬浮输入卡: 底部居中, 宽度与消息列表一致 (max-w-[min(75%,52rem)]), 与消息区分离成浮动层
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 mx-auto w-full max-w-[min(75%,52rem)]">
       {bottomLayer}
       <div
         ref={cardRef}
-        // 半透明悬浮卡: 消息从卡片后方滑过时可见 (不挡内容), 轻模糊防文字混叠
-        className="pointer-events-auto rounded-md border border-[var(--border-soft)] bg-[color-mix(in_oklch,var(--surface-raised)_calc(var(--raised-alpha)_*_100%),transparent)] shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition duration-fast ease-out focus-within:border-[var(--border)] focus-within:shadow-[0_0_0_1px_color-mix(in_oklch,var(--accent)_22%,transparent),0_0_20px_color-mix(in_oklch,var(--accent)_12%,transparent),0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)]"
+        // 半透明悬浮卡: 消息从卡片后方滑过时可见 (不挡内容), 轻模糊防文字混叠;
+        // 圆角 16px (设计稿 .input-card) — 圆润不与系统直角冲突
+        className="pointer-events-auto rounded-[16px] border border-[var(--border-soft)] bg-[color-mix(in_oklch,var(--surface-raised)_calc(var(--raised-alpha)_*_100%),transparent)] shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition duration-fast ease-out focus-within:border-[var(--border)] focus-within:shadow-[0_0_0_1px_color-mix(in_oklch,var(--accent)_22%,transparent),0_0_20px_color-mix(in_oklch,var(--accent)_12%,transparent),0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)]"
       >
         <div className="px-4 pt-3">
           {/* @引用 / /命令 浮层: 悬浮在输入卡上方 (与 RefsPopup 同模式), 不占卡片布局 */}
@@ -574,27 +678,15 @@ export function InputBar({
               </span>
             </div>
 
-            <MiniSelect
-              label="Provider"
-              icon={Layers}
-              value={selProvider || "Provider"}
-              options={providers}
-              onChange={(p) => {
-                const m = availableModels.find((mm) => mm.provider === p);
-                if (activeSessionId && m) setModel(activeSessionId, p, m.id);
+            {/* 模型选择 (provider + model 合并): 切 provider 自动选中该组第一个模型 */}
+            <ModelPicker
+              provider={selProvider}
+              model={currentModel}
+              models={availableModels}
+              onPick={(p, mId) => {
+                if (activeSessionId) setModel(activeSessionId, p, mId);
               }}
-              disabled={!activeSessionId || providers.length === 0}
-            />
-            <MiniSelect
-              label="Model"
-              icon={Cpu}
-              value={currentModel?.name ?? "Model"}
-              options={providerModels.map((m) => m.name)}
-              onChange={(name) => {
-                const m = providerModels.find((mm) => mm.name === name);
-                if (activeSessionId && m) setModel(activeSessionId, selProvider, m.id);
-              }}
-              disabled={!activeSessionId || providerModels.length === 0}
+              disabled={!activeSessionId || availableModels.length === 0}
               openRef={modelSelectOpen}
             />
             <MiniSelect

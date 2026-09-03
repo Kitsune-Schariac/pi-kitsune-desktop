@@ -105,7 +105,7 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
   return (
     <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-md border border-neutral-200 bg-panel p-2 shadow-lg">
       <div className="flex items-center justify-between px-2 pb-1">
-        <span className="text-xs text-neutral-400">命令 · ↑↓ 选择, Enter 执行</span>
+        <span className="text-mini text-neutral-400">命令 · ↑↓ 选择, Enter 执行</span>
         <button
           onClick={onClose}
           className="rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-100"
@@ -116,20 +116,20 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
       </div>
 
       {remoteError && (
-        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-red-50 px-2 py-2 text-xs text-red-500">
+        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-red-50 px-2 py-2 text-mini text-red-500">
           <AlertCircle className="h-3 w-3 shrink-0" />
           pi 命令加载失败, 仅显示本地命令
         </p>
       )}
       {!sessionId && !remoteError && (
-        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-neutral-50 px-2 py-2 text-xs text-neutral-400">
+        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-neutral-50 px-2 py-2 text-mini text-neutral-400">
           打开会话后可用 pi 扩展/技能/模板命令
         </p>
       )}
 
       <div className="max-h-72 overflow-auto">
         {filtered.length === 0 ? (
-          <div className="flex h-24 items-center justify-center gap-2 text-xs text-neutral-300">
+          <div className="flex h-24 items-center justify-center gap-2 text-mini text-neutral-300">
             {remote === null && sessionId ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" /> 加载 pi 命令…
@@ -148,7 +148,7 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
                 onClick={() => confirmPick(it)}
                 onMouseEnter={() => setActive(i)}
                 disabled={it.disabled}
-                className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs transition duration-fast ease-out ${
+                className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-mini transition duration-fast ease-out ${
                   it.disabled
                     ? "opacity-40"
                     : sel
@@ -162,10 +162,10 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
                   <span className={`block truncate font-medium ${sel ? "text-primary-700" : "text-neutral-700"}`}>
                     /{it.name}
                   </span>
-                  <span className="block truncate text-xs text-neutral-400">{it.description}</span>
+                  <span className="block truncate text-mini text-neutral-400">{it.description}</span>
                 </span>
                 <span
-                  className={`shrink-0 rounded-sm px-2 py-1 text-xs ${
+                  className={`shrink-0 rounded-sm px-2 py-1 text-mini ${
                     it.source === "local"
                       ? "bg-neutral-100 text-neutral-500"
                       : "bg-blue-50 text-blue-500"

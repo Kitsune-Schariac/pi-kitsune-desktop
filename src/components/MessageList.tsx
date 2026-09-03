@@ -45,8 +45,9 @@ export function MessageList({ inputBarH = 0 }: { inputBarH?: number }) {
       // 滚动过程中消息可平滑滑入卡片后方 (卡片半透明可见), 不会被提前截断
       style={{ paddingBottom: inputBarH + 40 }}
     >
-      {/* px-6 放内层: 保证 65% 宽度与悬浮输入卡一致 (外层 padding 会使百分比相对内容区, 差 48px) */}
-      <div className="mx-auto max-w-[min(60%,52rem)] space-y-4 px-6">
+      {/* max-w 容器纯宽 (与悬浮输入卡等宽); px-6 文字内缩放内层, 否则 padding 占掉宽度 */}
+      <div className="mx-auto max-w-[min(75%,52rem)]">
+        <div className="space-y-4 px-6">
         {entries.length === 0 && (
           <div className="py-20 text-center text-label text-[var(--faint)]">
             输入消息开始对话
@@ -61,6 +62,7 @@ export function MessageList({ inputBarH = 0 }: { inputBarH?: number }) {
             <ToolCallCard key={e.id} entry={e} />
           )
         )}
+        </div>
       </div>
       {/* 滚动锚点放 space-y 容器外: 避免被 space-y-4 加 margin, 否则最后消息与输入卡之间总有 16px 空隙 */}
       <div ref={endRef} />

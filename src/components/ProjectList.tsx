@@ -147,7 +147,7 @@ function SessionRow({
         ) : right === null ? (
           <span className="text-mini text-[var(--faint)]">新会话</span>
         ) : (
-          <span className="font-mono text-micro text-[var(--faint)]">{right}</span>
+          <span className="text-label tabular-nums text-[var(--muted)]">{right}</span>
         )}
       </span>
       {/* hover 浮现删除钮: 绝对定位在右侧状态位上方, 不进流式布局 */}

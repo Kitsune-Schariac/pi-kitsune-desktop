@@ -13,7 +13,7 @@ export const NotificationItem = memo(function NotificationItem({ entry }: { entr
   return (
     <div className="flex justify-center">
       <div
-        className={`flex max-w-[85%] items-start gap-2 rounded-md border-l-4 ${border} bg-neutral-100/60 px-4 py-2 text-sm leading-snug text-neutral-700`}
+        className={`flex max-w-[85%] items-start gap-2 rounded-md border-l-4 ${border} bg-neutral-100/60 px-4 py-2 text-body leading-snug text-neutral-700`}
       >
         <Icon className={`mt-1 h-4 w-4 shrink-0 ${iconColor}`} />
         <span className="break-words">{entry.text}</span>
