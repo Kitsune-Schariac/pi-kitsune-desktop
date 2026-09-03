@@ -26,7 +26,7 @@ export function Sidebar({ onOpenPanel }: { onOpenPanel: (p: PanelKind) => void }
   };
 
   return (
-    <aside className="sidebar-shell flex w-[18%] flex-col bg-[rgb(var(--surface-sunken)/var(--sidebar-alpha))]">
+    <aside className="sidebar-shell flex w-[18%] flex-col bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--sidebar-alpha)_*_100%),transparent)]">
       {/* 品牌区 */}
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-2">

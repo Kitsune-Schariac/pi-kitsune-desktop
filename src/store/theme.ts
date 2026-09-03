@@ -41,7 +41,7 @@ const BUBBLE_PREFS_KEY = "kitsune.bubblePrefs";
 // StrictMode 双跑 effect 防重入: init 只执行一次
 let initialized = false;
 
-export const DEFAULT_SKIN_ID = "light-sky";
+export const DEFAULT_SKIN_ID = "flame";
 const DEFAULT_CHAT_OPACITY = 0.75;
 const DEFAULT_SIDEBAR_OPACITY = 0.6;
 const DEFAULT_BUBBLE_OPACITY = 0.55;
@@ -228,7 +228,7 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
     // 底色回落到 index.css 的 base 方向默认值后, 与 updateBubbleTextColor 按皮肤原值
     // 判出的文字色方向相反 (深底深字), 可读性直接崩掉
     if (color) {
-      el.style.setProperty("--bubble-bg", hexToRgbChannels(color));
+      el.style.setProperty("--bubble-bg", color);
     } else {
       const skinBg = skin.colors?.["bubble-bg"];
       if (skinBg) el.style.setProperty("--bubble-bg", skinBg);
@@ -277,8 +277,9 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
     const el = document.documentElement;
     const { skins, activeSkinId } = get();
     const skin = skins.find((s) => s.id === activeSkinId);
+    // color-mix 原生支持 hex 输入, 无需转通道格式
     if (hex) {
-      el.style.setProperty("--bubble-bg", hexToRgbChannels(hex));
+      el.style.setProperty("--bubble-bg", hex);
     } else {
       const bg = skin?.colors?.["bubble-bg"];
       if (bg) el.style.setProperty("--bubble-bg", bg);
@@ -386,31 +387,31 @@ function migrateLegacyBubbleKeys() {
   }
 }
 
-/** hex (#rrggbb) → CSS 变量用的 RGB 通道字符串 "r g b" (与皮肤 colors 值格式对齐) */
-function hexToRgbChannels(hex: string): string {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `${r} ${g} ${b}`;
-}
-
-/** 取当前实际生效的气泡底色 RGB 通道: 用户自定义色 > 皮肤 colors > index.css 按 base 方向的默认值。
+/** 取当前实际生效的气泡底色 CSS 颜色值: 用户自定义色 > 皮肤 colors > index.css 按 base 方向的默认值。
    最后一档必须跟着 base 走 — 皮肤不定义 bubble-bg 时, CSS 里真正生效的是 [data-base="dark"] 的
-   10 5 20 (暗) 或 :root 的 255 255 255 (亮); 一律当白色会让暗色皮肤判成浅底配深字, 深底深字读不了。
-   这两个值与 index.css 的 --bubble-bg 默认值绑定, 改那边要同步 */
+   深紫黑 (暗) 或 :root 的白 (亮); 一律当白色会让暗色皮肤判成浅底配深字, 深底深字读不了。
+   回落值与 index.css 的 --bubble-bg 默认值绑定 (oklch 字面量, 改那边要同步);
+   皮肤 colors 现在可能是任意 CSS 颜色格式 (oklch/hex/rgb), 直接透传给 CSS 解析 */
 function resolveBubbleBg(bubbleColor: string | null, skin: SkinMeta | undefined): string {
-  if (bubbleColor) return hexToRgbChannels(bubbleColor);
-  return skin?.colors?.["bubble-bg"] ?? (skin?.base === "dark" ? "10 5 20" : "255 255 255");
+  if (bubbleColor) return bubbleColor;
+  return skin?.colors?.["bubble-bg"] ?? (skin?.base === "dark" ? "oklch(13.423% 0.0349 299)" : "oklch(100% 0 0)");
 }
 
-/** 气泡内文字色随底色亮度联动: 浅底(亮度≥145)配深字, 深底配浅字
-   亮度用 Rec.601 加权 (人眼对绿最敏感); 阈值偏深, 中等偏暗色也判深底保可读 */
+/** 气泡内文字色随底色亮度联动: 深底配浅字, 浅底配深字。
+   底色统一喂给 CSS color-mix 换算出 L 通道 (感知亮度, 比 Rec.601 更准):
+   L 阈值取 0.62 — Rec.601 旧阈值 145/255 ≈ 0.62, 以全部内置皮肤 + 典型自定义色实测校准 */
 function updateBubbleTextColor(bubbleColor: string | null, skin: SkinMeta | undefined) {
-  const [r, g, b] = resolveBubbleBg(bubbleColor, skin).split(" ").map(Number);
-  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  const bg = resolveBubbleBg(bubbleColor, skin);
+  const probe = document.createElement("div");
+  probe.style.color = `oklch(from ${bg} l c h)`;
+  document.body.appendChild(probe);
+  const computed = getComputedStyle(probe).color;
+  probe.remove();
+  // 相对色彩语法解析失败 (异常值兜底): 保持深字 — 内置皮肤底色以浅底为主
+  const m = computed.match(/oklch\(([\d.]+)/);
+  const l = m ? parseFloat(m[1]) : 1;
   document.documentElement.style.setProperty(
     "--text-on-bubble",
-    lum >= 145 ? "38 38 38" : "245 245 245",
+    l >= 0.62 ? "oklch(26.862% 0 0)" : "oklch(95.869% 0 0)",
   );
 }

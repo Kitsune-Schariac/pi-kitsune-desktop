@@ -52,7 +52,7 @@ export function ContextMenu({ x, y, items, onClose }: {
           className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition duration-fast ease-out disabled:opacity-40 ${
             item.danger
               ? "text-red-600 hover:bg-red-50"
-              : "text-neutral-700 hover:bg-neutral-100"
+              : "text-[var(--fg)] hover:bg-[var(--sel-bg)]"
           }`}
         >
           {item.icon && <item.icon className="h-4 w-4" />}
@@ -317,7 +317,7 @@ export function ProjectList() {
                     key={s.session_path}
                     className={`group flex cursor-pointer items-center gap-2 rounded-md py-1 pl-2 pr-1 text-sm transition duration-fast ease-out ${
                       isActive
-                        ? "bg-primary-100 text-primary-700"
+                        ? "bg-[var(--sel-bg)] font-medium text-[var(--fg)]"
                         : "text-neutral-600 hover:bg-neutral-200/60"
                     }`}
                     onClick={() => handleOpenSession(p.path, s)}
@@ -376,7 +376,7 @@ export function ProjectList() {
                     key={`open:${sid}`}
                     className={`group flex cursor-pointer items-center gap-2 rounded-md py-1 pl-2 pr-1 text-sm transition duration-fast ease-out ${
                       isActive
-                        ? "bg-primary-100 text-primary-700"
+                        ? "bg-[var(--sel-bg)] font-medium text-[var(--fg)]"
                         : "text-neutral-600 hover:bg-neutral-200/60"
                     }`}
                     onClick={() => setActiveSession(sid)}

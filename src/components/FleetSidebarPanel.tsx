@@ -69,7 +69,7 @@ function fmtTime(ms: number): string {
 function StatusDot({ state, active }: { state: string; active: boolean }) {
   if (active) {
     return (
-      <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[rgb(var(--primary-500))] animate-pulse" />
+      <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--primary-500)] animate-pulse" />
     );
   }
   const t = (state || "").toLowerCase();
@@ -233,11 +233,11 @@ export function FleetSidebarPanel({ onClose }: Props) {
         >
           <div
             className={`h-10 w-[3px] rounded-full transition duration-fast ease-out ${
-              dragging ? "bg-[rgb(var(--primary-500))]" : "bg-transparent group-hover:bg-[rgb(var(--border-strong))]"
+              dragging ? "bg-[var(--primary-500)]" : "bg-transparent group-hover:bg-[var(--border-strong)]"
             }`}
           />
         </div>
-        <aside className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-base)/var(--chat-alpha))] shadow-sm">
+        <aside className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-base)_calc(var(--chat-alpha)_*_100%),transparent)] shadow-sm">
           {/* header: 三态各异。fleet = 标题+刷新+收起; run = ‹返回+runId+state; subsession = ‹返回+只读横幅 */}
           {view.kind === "fleet" ? (
             <>
@@ -271,12 +271,12 @@ export function FleetSidebarPanel({ onClose }: Props) {
             {/* 高亮用生效态: scope=current 但 sessionPath 未就绪时实际渲染全部,
                 UI 必须反映生效态而非选择态 (review SF2); 点击仍写 scope, 就绪后自动回到用户选择 */}
             <div className="flex items-center gap-1 border-b border-neutral-200 px-3 py-2">
-              <div className="flex rounded-md border border-[rgb(var(--border-subtle))] p-1">
+              <div className="flex rounded-md border border-[var(--border-subtle)] p-1">
                 <button
                   onClick={() => setScope("current")}
                   className={`rounded-md px-3 py-1 text-xs transition duration-fast ease-out ${
                     scope === "current" && currentUuid !== ""
-                      ? "bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] text-neutral-800"
+                      ? "bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] text-neutral-800"
                       : "text-neutral-500 hover:text-neutral-700"
                   }`
                 }
@@ -287,7 +287,7 @@ export function FleetSidebarPanel({ onClose }: Props) {
                   onClick={() => setScope("all")}
                   className={`rounded-md px-3 py-1 text-xs transition duration-fast ease-out ${
                     scope === "all"
-                      ? "bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] text-neutral-800"
+                      ? "bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] text-neutral-800"
                       : "text-neutral-500 hover:text-neutral-700"
                   }`
                 }
@@ -335,7 +335,7 @@ export function FleetSidebarPanel({ onClose }: Props) {
                   <span className="truncate" title={view.title}>{view.title}</span>
                 </span>
               </div>
-              <div className="flex items-center gap-2 bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] px-3 py-2 text-xs text-neutral-500">
+              <div className="flex items-center gap-2 bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] px-3 py-2 text-xs text-neutral-500">
                 <AlertCircle className="h-3 w-3 shrink-0" />
                 子 agent 会话 · 只读视图
               </div>
@@ -470,17 +470,17 @@ function StreamDrawer({ entry, expanded }: { entry: FleetEntry; expanded: boolea
   if (!call) return null;
   return (
     <div className={`overflow-hidden transition-[max-height] duration-200 ${expanded ? "max-h-[600px]" : "max-h-0"}`}>
-      <div className="mt-1 space-y-2 border-t border-[rgb(var(--border-subtle))] pt-2">
+      <div className="mt-1 space-y-2 border-t border-[var(--border-subtle)] pt-2">
         <div>
           <div className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-400">Prompt</div>
-          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 font-mono text-xs leading-relaxed text-neutral-600">
+          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 font-mono text-xs leading-relaxed text-neutral-600">
             {call.fullPrompt || "—"}
           </pre>
         </div>
         {call.fullResult && (
           <div>
             <div className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-400">结果</div>
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 font-mono text-xs leading-relaxed text-neutral-600">
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 font-mono text-xs leading-relaxed text-neutral-600">
               {call.fullResult}
             </pre>
           </div>
@@ -495,7 +495,7 @@ function StreamCard({ entry }: { entry: FleetEntry }) {
   const [expanded, setExpanded] = useState(false);
   const call = entry.call!;
   return (
-    <div className="mx-2 mb-1 flex w-[calc(100%-1rem)] flex-col gap-1 rounded-md border border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] px-3 py-2 transition duration-fast ease-out hover:border-[rgb(var(--border-strong))]">
+    <div className="mx-2 mb-1 flex w-[calc(100%-1rem)] flex-col gap-1 rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] px-3 py-2 transition duration-fast ease-out hover:border-[var(--border-strong)]">
       <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-2 text-left">
         <StatusDot state={entry.state} active={entry.state === "running"} />
         <span title="对话派发" className="shrink-0"><MessageSquareText className="h-4 w-4 text-neutral-400" /></span>
@@ -597,7 +597,7 @@ function RunCard({
   return (
     <button
       onClick={() => onOpen(run.dir)}
-      className="group mx-2 mb-1 flex w-[calc(100%-1rem)] flex-col gap-2 rounded-md border border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] px-3 py-2 text-left transition duration-base ease-swift hover:-translate-y-px hover:border-[rgb(var(--border-strong))]"
+      className="group mx-2 mb-1 flex w-[calc(100%-1rem)] flex-col gap-2 rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] px-3 py-2 text-left transition duration-base ease-swift hover:-translate-y-px hover:border-[var(--border-strong)]"
     >
       <div className="flex items-center gap-2">
         <StatusDot state={run.state} active={run.active} />
@@ -642,8 +642,8 @@ function RunCard({
               key={i}
               className={`flex max-w-full items-center gap-1 rounded-sm px-2 py-1 text-xs ${
                 t.done
-                  ? "bg-[rgb(var(--border-subtle)/0.5)] text-neutral-400"
-                  : "bg-[rgb(var(--primary-500)/0.12)] text-[rgb(var(--primary-600))]"
+                  ? "bg-[color-mix(in_oklch,var(--border-subtle)_50%,transparent)] text-neutral-400"
+                  : "bg-[color-mix(in_oklch,var(--primary-500)_12%,transparent)] text-[var(--primary-600)]"
               }`}
               title={`${t.name} ${t.summary}`}
             >
@@ -654,7 +654,7 @@ function RunCard({
               )}
               <span className="truncate">{t.name}</span>
               {t.summary && (
-                <span className={`truncate font-mono ${t.done ? "text-neutral-400/80" : "text-[rgb(var(--primary-700))]"}`}>
+                <span className={`truncate font-mono ${t.done ? "text-neutral-400/80" : "text-[var(--primary-700)]"}`}>
                   {t.summary}
                 </span>
               )}
@@ -750,7 +750,7 @@ function RunDetail({
         <span className="truncate text-neutral-400" title={summary.cwd}>{summary.cwd}</span>
       </div>
       {summary.error && (
-        <div className="flex items-start gap-2 border-b border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] px-4 py-2 text-xs text-red-500">
+        <div className="flex items-start gap-2 border-b border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] px-4 py-2 text-xs text-red-500">
           <AlertCircle className="mt-1 h-4 w-4 shrink-0" />
           <span className="whitespace-pre-line">{summary.error}</span>
         </div>
@@ -852,7 +852,7 @@ function StepCard({
       {step.recent_output.length > 0 && (
         <div
           ref={outRef}
-          className="mt-2 max-h-32 overflow-y-auto rounded-sm bg-[rgb(var(--code-bg)/var(--code-alpha))] p-2 font-mono text-xs leading-relaxed text-neutral-600"
+          className="mt-2 max-h-32 overflow-y-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 font-mono text-xs leading-relaxed text-neutral-600"
         >
           {step.recent_output.map((line, i) => (
             <div key={i} className="whitespace-pre-wrap break-all">{line}</div>
@@ -862,7 +862,7 @@ function StepCard({
       {canDrill && (
         <button
           onClick={() => onOpenSubsession(sessionFile!, `${step.agent || "subagent"} 子会话`)}
-          className="mt-2 flex items-center gap-1 text-xs text-[rgb(var(--primary-600))] transition duration-fast ease-out hover:text-[rgb(var(--primary-700))]"
+          className="mt-2 flex items-center gap-1 text-xs text-[var(--primary-600)] transition duration-fast ease-out hover:text-[var(--primary-700)]"
           title="查看完整子会话 (只读)"
         >
           <FileText className="h-3 w-3" />
@@ -873,7 +873,7 @@ function StepCard({
       {/* R2 嵌套不塌陷: step 再 fanout 时递归渲染 children, 左缘竖线引导层级缩进。
           children step 无 currentStep 指针, active 一律 false (活动态由 state 灯显示) */}
       {step.children.length > 0 && (
-        <div className="mt-2 ml-3 space-y-1 border-l-2 border-[rgb(var(--border-subtle))] pl-3">
+        <div className="mt-2 ml-3 space-y-1 border-l-2 border-[var(--border-subtle)] pl-3">
           {step.children.map((c, ci) => (
             <StepCard
               key={ci}

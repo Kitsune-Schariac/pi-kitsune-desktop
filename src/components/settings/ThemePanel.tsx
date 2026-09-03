@@ -243,7 +243,7 @@ export function ThemePanel() {
                 <label className="relative inline-flex h-6 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-neutral-200">
                   <span
                     className="absolute inset-0"
-                    style={{ background: bubbleColor ?? "rgb(var(--bubble-bg))" }}
+                    style={{ background: bubbleColor ?? "var(--bubble-bg)" }}
                   />
                   <input
                     type="color"

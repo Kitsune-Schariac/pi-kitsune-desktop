@@ -34,14 +34,14 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
   const current = NAV_ITEMS.find((it) => it.key === tab)!;
 
   return (
-    <div className="absolute inset-0 z-50 flex view-in bg-[rgb(var(--surface-sunken))]">
+    <div className="absolute inset-0 z-50 flex view-in bg-[var(--surface-sunken)]">
       {/* 侧栏: 基座色承接整窗底色, 只靠右侧分隔线切出导航区 */}
-      <aside className="flex w-60 shrink-0 flex-col border-r border-[rgb(var(--border-subtle))]">
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[rgb(var(--border-subtle))] px-5">
+      <aside className="flex w-60 shrink-0 flex-col border-r border-[var(--border-subtle)]">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-5">
           <span className="text-sm font-semibold text-neutral-800">设置</span>
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-neutral-400 transition duration-fast ease-out hover:bg-[rgb(var(--surface-base))] hover:text-neutral-700"
+            className="rounded-md p-1 text-neutral-400 transition duration-fast ease-out hover:bg-[var(--surface-base)] hover:text-neutral-700"
             title="关闭 (Esc)"
           >
             <X className="h-4 w-4" />
@@ -56,24 +56,24 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
                 onClick={() => setTab(key)}
                 className={`relative flex w-full items-start gap-2 rounded-md px-3 py-2 text-left transition duration-fast ease-out ${
                   active
-                    ? "bg-[rgb(var(--surface-base))]"
-                    : "hover:bg-[rgb(var(--surface-base)/0.55)]"
+                    ? "bg-[var(--sel-bg)]"
+                    : "hover:bg-[color-mix(in_oklch,var(--surface-base)_55%,transparent)]"
                 }`}
                 title={desc}
               >
                 {/* 选中指示条: 绝对定位在条目左缘, 不参与文字排版 */}
                 {active && (
-                  <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-[rgb(var(--primary-500))]" />
+                  <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-[var(--primary-500)]" />
                 )}
                 <Icon
                   className={`mt-1 h-4 w-4 shrink-0 ${
-                    active ? "text-[rgb(var(--primary-500))]" : "text-neutral-400"
+                    active ? "text-[var(--primary-500)]" : "text-neutral-400"
                   }`}
                 />
                 <span className="min-w-0">
                   <span
                     className={`block truncate text-sm ${
-                      active ? "font-medium text-[rgb(var(--primary-600))]" : "text-neutral-700"
+                      active ? "font-medium text-[var(--primary-600)]" : "text-neutral-700"
                     }`}
                   >
                     {title}
@@ -87,14 +87,14 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
           })}
         </nav>
         {/* 底部次要信息: 手改配置的落点提示, 不加就留白 */}
-        <div className="shrink-0 border-t border-[rgb(var(--border-subtle))] px-5 py-3 text-xs leading-snug text-neutral-500">
+        <div className="shrink-0 border-t border-[var(--border-subtle)] px-5 py-3 text-xs leading-snug text-neutral-500">
           配置与皮肤存放于 ~/.pi/agent
         </div>
       </aside>
 
       {/* 内容区: 内容底色比侧栏高一档, 两栏靠这一档色差分层 */}
-      <div className="flex min-w-0 flex-1 flex-col bg-[rgb(var(--surface-base))]">
-        <header className="flex h-14 shrink-0 flex-col justify-center gap-1 border-b border-[rgb(var(--border-subtle))] px-6">
+      <div className="flex min-w-0 flex-1 flex-col bg-[var(--surface-base)]">
+        <header className="flex h-14 shrink-0 flex-col justify-center gap-1 border-b border-[var(--border-subtle)] px-6">
           <h2 className="text-base font-semibold text-neutral-900">{current.title}</h2>
           <p className="text-xs text-neutral-500">{current.desc}</p>
         </header>

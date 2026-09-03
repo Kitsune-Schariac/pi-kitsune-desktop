@@ -84,7 +84,7 @@ function TaskStatusDot({ status }: { status: string }) {
   const t = (status || "").toLowerCase();
   if (t === "in_progress" || t === "in-progress") {
     return (
-      <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[rgb(var(--primary-500))] animate-pulse" />
+      <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--primary-500)] animate-pulse" />
     );
   }
   if (t === "planning") {
@@ -179,11 +179,11 @@ export function TrellisSidebarPanel({ cwd, onClose }: Props) {
       >
         <div
           className={`h-10 w-[3px] rounded-full transition duration-fast ease-out ${
-            dragging ? "bg-[rgb(var(--primary-500))]" : "bg-transparent group-hover:bg-[rgb(var(--border-strong))]"
+            dragging ? "bg-[var(--primary-500)]" : "bg-transparent group-hover:bg-[var(--border-strong)]"
           }`}
         />
       </div>
-      <aside className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-[rgb(var(--border-subtle))] bg-[rgb(var(--surface-base)/var(--chat-alpha))] shadow-sm">
+      <aside className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-base)_calc(var(--chat-alpha)_*_100%),transparent)] shadow-sm">
         {view.kind === "list" ? (
           // list header: 标题 + 计数 + 归档切换 + 刷新 + 收起
           <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
@@ -200,7 +200,7 @@ export function TrellisSidebarPanel({ cwd, onClose }: Props) {
                   onClick={() => setShowArchived(!showArchived)}
                   className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs transition duration-fast ease-out ${
                     showArchived
-                      ? "bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] text-neutral-700"
+                      ? "bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] text-neutral-700"
                       : "text-neutral-400 hover:bg-neutral-200/70 hover:text-neutral-700"
                   }`}
                   title={showArchived ? "隐藏归档任务" : `显示归档任务 (${archiveCount})`}
@@ -318,7 +318,7 @@ function TaskNode({
         onOpen={onOpen}
       />
       {node.children.length > 0 && (
-        <div className="ml-3 border-l-2 border-[rgb(var(--border-subtle))] pl-1">
+        <div className="ml-3 border-l-2 border-[var(--border-subtle)] pl-1">
           {node.children.map((c) => (
             <TaskNode
               key={c.task.dir}
@@ -352,7 +352,7 @@ function TaskRow({
       style={{ paddingLeft: `${depth * 4}px` }}
       className={`flex w-full items-center gap-2 py-2 pr-3 text-left transition duration-fast ease-out hover:bg-neutral-200/60 ${
         isCurrent
-          ? "border-l-2 border-[rgb(var(--primary-400))] bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))]"
+          ? "border-l-2 border-[var(--primary-400)] bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)]"
           : "border-l-2 border-transparent"
       } ${task.is_archived ? "opacity-60" : ""}`}
       title={`${task.title}${task.description ? `\n${task.description}` : ""}`}
@@ -366,14 +366,14 @@ function TaskRow({
         {task.title}
       </span>
       {isCurrent && (
-        <span className="shrink-0 rounded-full border border-[rgb(var(--primary-400))] px-2 py-px text-xs font-medium text-[rgb(var(--primary-600))]">
+        <span className="shrink-0 rounded-full border border-[var(--primary-400)] px-2 py-px text-xs font-medium text-[var(--primary-600)]">
           活动
         </span>
       )}
       {task.priority && (
         <span
           className={`shrink-0 text-xs tabular-nums ${
-            task.priority === "P1" ? "font-medium text-[rgb(var(--primary-600))]" : "text-neutral-400"
+            task.priority === "P1" ? "font-medium text-[var(--primary-600)]" : "text-neutral-400"
           }`}
         >
           {task.priority}
@@ -463,7 +463,7 @@ function TaskDetail({ cwd, task }: { cwd: string; task: TrellisTaskSummary }) {
               disabled={!available}
               className={`rounded-md px-2 py-1 text-xs transition duration-fast ease-out ${
                 active
-                  ? "bg-[rgb(var(--surface-sunken)/var(--overlay-alpha))] font-medium text-neutral-800"
+                  ? "bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] font-medium text-neutral-800"
                   : available
                     ? "text-neutral-500 hover:bg-neutral-200/60 hover:text-neutral-700"
                     : "cursor-not-allowed text-neutral-300"
