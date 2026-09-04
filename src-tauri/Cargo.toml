@@ -1,6 +1,6 @@
 [package]
 name = "pi-kitsune-desktop"
-version = "0.1.0"
+version = "0.1.9"
 description = "Desktop GUI for pi coding agent"
 edition = "2021"
 
