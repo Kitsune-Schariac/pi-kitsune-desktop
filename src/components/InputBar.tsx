@@ -110,11 +110,8 @@ function ModelPicker({
       >
         <Cpu className="h-3 w-3 text-[var(--faint)]" />
         {model ? (
-          <span className="flex items-baseline gap-1">
-            <span className="max-w-[60px] truncate font-semibold text-[var(--fg)]">{provider}</span>
-            <span className="max-w-[120px] truncate font-mono text-mini text-[var(--muted)]">
-              {model.name}
-            </span>
+          <span className="max-w-[150px] truncate font-mono text-mini text-[var(--fg)]">
+            {model.name}
           </span>
         ) : (
           <span className="text-[var(--faint)]">选择模型</span>
