@@ -21,6 +21,13 @@ import {
   X,
 } from "lucide-react";
 import {
+  Button,
+  Input,
+  Select,
+} from "../ui";
+import {
+  COMPAT_FLAGS,
+  COST_MAIN_KEYS,
   isObj,
   modelOf,
   overridesOf,
@@ -28,6 +35,7 @@ import {
   providerOf,
   providersOf,
   rawModelsOf,
+  THINKING_LEVELS,
   useModelsConfigStore,
 } from "../../store/modelsConfig";
 
@@ -51,13 +59,23 @@ const INPUT_KINDS = ["text", "image"] as const;
 const isKnownInput = (x: unknown): boolean =>
   typeof x === "string" && (INPUT_KINDS as readonly string[]).includes(x);
 
-const COST_KEYS = ["input", "output", "cacheRead", "cacheWrite"] as const;
-
+// cost 四个主键 + 显示名; tiers 是费率阶梯数组, 不做逐项控件 (留在 JSON 区保真)
 const COST_LABELS: Record<string, string> = {
   input: "输入",
   output: "输出",
   cacheRead: "缓存读",
   cacheWrite: "缓存写",
+};
+
+// 思考档位显示名 (与档位名相同, 保留常量以便日后改中文/缩写)
+const LEVEL_LABELS: Record<string, string> = {
+  off: "off",
+  minimal: "minimal",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  xhigh: "xhigh",
+  max: "max",
 };
 
 // 主题变量驱动的控件底色: 卡片上的输入框凹陷一档 (raised 卡片 → sunken 输入),
@@ -283,7 +301,9 @@ export function ModelsPanel() {
   const renameModel = useModelsConfigStore((s) => s.renameModel);
   const setModelField = useModelsConfigStore((s) => s.setModelField);
   const setModelNumber = useModelsConfigStore((s) => s.setModelNumber);
-  const setModelCost = useModelsConfigStore((s) => s.setModelCost);
+  const setModelCostText = useModelsConfigStore((s) => s.setModelCostText);
+  const setModelLevelEntry = useModelsConfigStore((s) => s.setModelLevelEntry);
+  const setModelCompatFlag = useModelsConfigStore((s) => s.setModelCompatFlag);
   const setModelJson = useModelsConfigStore((s) => s.setModelJson);
   const addModelOverride = useModelsConfigStore((s) => s.addModelOverride);
   const deleteModelOverride = useModelsConfigStore((s) => s.deleteModelOverride);
@@ -326,6 +346,90 @@ export function ModelsPanel() {
   // 造成「保存报缺少 id, 但列表里看不见那条」的无从下手局面
   const rawModels = rawModelsOf(doc, pid);
   const model = modelOf(doc, pid, selectedModelId);
+
+  // cost / level 输入框本地草稿 (避免“每键即时解析”吞小数 / 半截值落盘): 失焦才提交。
+  // 切换 provider/模型时整体清空; 草稿为空时回退到文档已保存值。
+  const modelKey = selectedProvider && selectedModelId ? `${selectedProvider}|${selectedModelId}` : "";
+  const [costDraft, setCostDraft] = useState<Record<string, string>>({});
+  const [levelDraft, setLevelDraft] = useState<Record<string, string>>({});
+  // cost 非法输入的红框标记 (keyed by 主键)
+  const [costErrors, setCostErrors] = useState<Record<string, boolean>>({});
+  const modelCost = isObj(model?.cost) ? model.cost : {};
+  useEffect(() => {
+    setCostDraft({});
+    setLevelDraft({});
+    setCostErrors({});
+  }, [modelKey]);
+  const costTextOf = (k: string) => {
+    const draft = costDraft[k];
+    if (draft !== undefined) return draft;
+    return numTextOf(modelCost[k]);
+  };
+  const setCostDraftVal = (k: string, v: string) => {
+    // 重新输入即清错: 错误只在失焦校验失败时出现
+    if (costErrors[k]) setCostErrors((p) => ({ ...p, [k]: false }));
+    setCostDraft((p) => ({ ...p, [k]: v }));
+  };
+  const commitCost = (k: string) => {
+    if (!pid || !selectedModelId) return;
+    const val = (costDraft[k] ?? "").trim();
+    // 原本无 cost 且这次也没输入 → 不创建全 0 的 cost (避免点一下失焦就写脏配置)
+    const hadCost = isObj(model?.cost) && Object.keys(model.cost).length > 0;
+    if (!hadCost && val === "") return;
+    const ok = setModelCostText(pid, selectedModelId, k, val);
+    if (ok) {
+      setCostErrors((p) => ({ ...p, [k]: false }));
+      // 空串在 store 里落为 0: 草稿同步成 "0" 让显示与文档一致 (所见即所得),
+      // 否则框里留空、文档是 0, 用户会以为没存上
+      setCostDraft((p) => ({ ...p, [k]: val === "" ? "0" : val }));
+    } else {
+      // 非法输入 (非数字/负数) 不落盘: 红框提示 + 回退草稿到文档已保存值
+      setCostErrors((p) => ({ ...p, [k]: true }));
+      setCostDraft((p) => ({ ...p, [k]: numTextOf(modelCost[k]) }));
+    }
+  };
+  // level 自定义值: 输入进草稿, 失焦才 setModelLevelEntry
+  const levelTextOf = (level: string) => {
+    const d = levelDraft[level];
+    if (d !== undefined) return d;
+    const v = isObj(model?.thinkingLevelMap) ? model.thinkingLevelMap[level] : undefined;
+    return typeof v === "string" ? v : "";
+  };
+  const setLevelDraftVal = (level: string, v: string) => setLevelDraft((p) => ({ ...p, [level]: v }));
+
+  // compat JSON 编辑区与可视开关同屏编辑同一个 compat 对象: JsonField 草稿只在挂载时
+  // 初始化一次, 可视开关改 compat 后旧 JSON 草稿就过期了 (再失焦会用旧内容覆盖新开关)。
+  // 用 compatRev / levelRev 驱动对应 JsonField 重挂载 (仅该键), 其它字段不受影响。
+  const [compatRev, setCompatRev] = useState(0);
+  const bumpCompatRev = () => setCompatRev((r) => r + 1);
+  const [levelRev, setLevelRev] = useState(0);
+  const bumpLevelRev = () => setLevelRev((r) => r + 1);
+  // 可视档位编辑统一入口: 写文档 + bump JSON 区 rev + 清该档草稿
+  const onLevelChange = (level: string, value: string | null | undefined) => {
+    if (!pid || !selectedModelId) return;
+    setLevelDraft((p) => {
+      if (!(level in p)) return p;
+      const n = { ...p };
+      delete n[level];
+      return n;
+    });
+    setModelLevelEntry(pid, selectedModelId, level, value);
+    bumpLevelRev();
+  };
+  // 可视开关 onchange 里同步 bump (见下方 COMPAT_FLAGS 行)
+  const onCompatFlag = (flag: string, val: string) => {
+    if (pid && selectedModelId) {
+      setModelCompatFlag(pid, selectedModelId, flag, val === "default" ? undefined : val === "true");
+      bumpCompatRev();
+    }
+  };
+  const commitLevel = (level: string) => {
+    if (!pid || !selectedModelId) return;
+    const val = (levelDraft[level] ?? "").trim();
+    // 输入框空 = 回默认映射: 删掉该档显式条目 (省略)。与 × 同语义。
+    onLevelChange(level, val || undefined);
+  };
+
   // input[] 原文, 用于保留未知取值 (见下方复选框)
   const modelInputRaw: unknown[] = model && Array.isArray(model.input) ? model.input : [];
   const modelInputKnown = modelInputRaw.filter(isKnownInput) as string[];
@@ -420,23 +524,23 @@ export function ModelsPanel() {
           {statusBadge}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <button
+          <Button
             onClick={onReload}
             disabled={loading}
-            className={BTN_GHOST}
+            variant="ghost"
             title="重新加载并放弃本地未保存的修改"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             重新加载
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => void save()}
             disabled={!dirty || saving || hasJsonError || !!parseError}
-            className={BTN_PRIMARY}
+            variant="primary"
           >
             <Save className="h-4 w-4" />
             {saving ? "保存中…" : "保存"}
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -763,10 +867,10 @@ export function ModelsPanel() {
                   title="自定义模型 models[]"
                   desc="与内置模型按 id 合并, 同 id 覆盖内置; 新 id 追加。删除这里的条目不会移除内置模型。"
                   actions={
-                    <button onClick={() => addModel(pid)} className={BTN_GHOST}>
+                    <Button onClick={() => addModel(pid)} variant="ghost">
                       <Plus className="h-4 w-4" />
                       新增模型
-                    </button>
+                    </Button>
                   }
                 >
                   {rawModels.length === 0 ? (
@@ -984,51 +1088,253 @@ export function ModelsPanel() {
                                   </div>
                                 </div>
 
-                                {/* cost 四项; tiers 是费率阶梯数组, 不做逐项控件, 留在下方 JSON 区保真 */}
+                                {/* cost 四项: 本地草稿 + 失焦提交, 输小数不吞点; 清空 = 0 不删键 */}
                                 <div>
-                                  <FieldLabel hint="每百万 token">cost</FieldLabel>
+                                  <div className="mb-1 flex items-center justify-between gap-2">
+                                    <FieldLabel hint="每百万 token; 留空视为 0, 非法输入不生效">
+                                      cost
+                                    </FieldLabel>
+                                    {(() => {
+                                      const mc = model?.cost;
+                                      return !!mc && isObj(mc) && Object.keys(mc).length > 0;
+                                    })() && (
+                                      <button
+                                          onClick={() =>
+                                            confirmAnd(
+                                              `删除该模型的 cost (含 tiers)?\n\n` +
+                                                `价格信息清空后 pi 按默认全零计费。`,
+                                              () => {
+                                                setModelField(pid, selectedModelId, "cost", null);
+                                                // 清掉本地草稿, 避免残留值在下次编辑时被重新提交
+                                                setCostDraft({});
+                                              },
+                                            )
+                                          }
+                                          className="shrink-0 text-xs text-neutral-400 transition duration-fast ease-out hover:text-red-500"
+                                        >
+                                          清除价格
+                                        </button>
+                                      )}
+                                  </div>
                                   <div className="grid grid-cols-4 gap-2">
-                                    {COST_KEYS.map((k) => {
-                                      const cost = (
-                                        model.cost && typeof model.cost === "object"
-                                          ? model.cost
-                                          : {}
-                                      ) as Record<string, unknown>;
+                                    {COST_MAIN_KEYS.map((k) => {
+                                      const label = COST_LABELS[k];
+                                      const err = costErrors[k];
                                       return (
                                         <label key={k} className="block">
                                           <span className="mb-1 block text-xs text-neutral-400">
-                                            {COST_LABELS[k]}
+                                            {label}
                                           </span>
                                           <input
-                                            value={numTextOf(cost[k])}
-                                            onChange={(e) =>
-                                              setModelCost(pid, selectedModelId, k, e.target.value)
-                                            }
-                                            placeholder={k}
-                                            className={FIELD_ON_CARD}
+                                            value={costTextOf(k)}
+                                            onChange={(e) => setCostDraftVal(k, e.target.value)}
+                                            onBlur={() => commitCost(k)}
+                                            placeholder="0"
+                                            inputMode="decimal"
+                                            title={err ? "请输入非负数字 (如 2.5 / 0.05 / 0)" : undefined}
+                                            className={`${FIELD_ON_CARD} ${
+                                              err ? "border-red-500 focus:border-red-500" : ""
+                                            }`}
                                           />
+                                          {err && (
+                                            <span className="mt-0.5 block text-xs text-red-500">
+                                              非负数字才有效
+                                            </span>
+                                          )}
                                         </label>
+                                      );
+                                    })}
+                                  </div>
+                                  <p className="mt-1 text-xs text-neutral-400">
+                                    空值按 0 保存, 四项齐全才能通过 pi 启动校验
+                                  </p>
+                                </div>
+
+                                {/* 思考档位映射 (B 方案): 每档 = 档名 + 映射值输入框 (空 = 默认映射) + × 叉 (删该条回默认)。
+                                    null = 显式不支持, 不在可视区编辑 (见 JSON), 显示禁用态不误导 */}
+                                <div>
+                                  <div className="mb-1 flex items-center justify-between gap-2">
+                                    <FieldLabel hint="空 = 用 pi 默认映射; 填 = 发给 provider 的值; null (不支持) 见下方 JSON">
+                                      thinkingLevelMap
+                                    </FieldLabel>
+                                    {isObj(model.thinkingLevelMap) &&
+                                      Object.keys(model.thinkingLevelMap).length > 0 && (
+                                        <button
+                                          onClick={() =>
+                                            confirmAnd(
+                                              `清除该模型的 thinkingLevelMap?\n\n` +
+                                                `所有档位恢复为 pi 默认映射 (不再写该键)。`,
+                                              () => {
+                                                setLevelDraft({});
+                                                setModelField(
+                                                  pid,
+                                                  selectedModelId,
+                                                  "thinkingLevelMap",
+                                                  null,
+                                                );
+                                                bumpLevelRev();
+                                              },
+                                            )
+                                          }
+                                          className="shrink-0 text-xs text-neutral-400 transition duration-fast ease-out hover:text-red-500"
+                                        >
+                                          清除映射
+                                        </button>
+                                      )}
+                                  </div>
+                                  <div className="space-y-1">
+                                    {THINKING_LEVELS.map((level) => {
+                                      const v = isObj(model.thinkingLevelMap)
+                                        ? model.thinkingLevelMap[level]
+                                        : undefined;
+                                      // 该档是否已有显式自定义值 (字符串)
+                                      const custom = typeof v === "string";
+                                      // 该档显式置 null = 不支持: 输入框禁用, 提示去 JSON
+                                      const unsupported = v === null;
+                                      // 怪值 (数字/对象) 不进输入框编辑, 原样禁用提示 JSON
+                                      const abnormal = v !== undefined && !custom && !unsupported;
+                                      return (
+                                        <div
+                                          key={level}
+                                          className="flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-2 py-1"
+                                        >
+                                          <span className="w-20 shrink-0 font-mono text-xs text-neutral-500">
+                                            {LEVEL_LABELS[level]}
+                                          </span>
+                                          {unsupported || abnormal ? (
+                                            <>
+                                              <span className="min-w-0 flex-1 truncate text-xs italic text-neutral-400">
+                                                {unsupported ? "不支持 (null)" : `值异常 (${String(v)})`}
+                                                —— 见下方 JSON 编辑
+                                              </span>
+                                              <Button
+                                                size="sm"
+                                                variant="danger"
+                                                onClick={() => onLevelChange(level, undefined)}
+                                                title={`清除「${level}」的异常值`}
+                                              >
+                                                清除
+                                              </Button>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Input
+                                                value={levelTextOf(level)}
+                                                onChange={(e) => setLevelDraftVal(level, e.target.value)}
+                                                onBlur={() => commitLevel(level)}
+                                                placeholder={
+                                                  // off~high 默认映射是档名同名; xhigh/max 是 opt-in,
+                                                  // 默认不映射 (不写 = 不可用)
+                                                  level === "xhigh" || level === "max"
+                                                    ? "不写 = 不可用"
+                                                    : `默认 ${level}`
+                                                }
+                                                density="sm"
+                                                className="min-w-0 flex-1"
+                                              />
+                                              {/* 已有自定义值才给叉: 叉 = 删该条显式映射, 回默认 (省略) */}
+                                              {custom && (
+                                                <button
+                                                  onClick={() => onLevelChange(level, undefined)}
+                                                  className="shrink-0 rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] hover:text-red-500"
+                                                  title={`移除「${level}」的自定义映射, 恢复默认`}
+                                                >
+                                                  <X className="h-4 w-4" />
+                                                </button>
+                                              )}
+                                            </>
+                                          )}
+                                        </div>
                                       );
                                     })}
                                   </div>
                                 </div>
 
-                                {/* 模型级长尾字段 (thinkingLevelMap / samplingParams 属模型级, 不属 provider 级) */}
+                                {/* compat 两个高频开关 (模型级); 其余 compat 键仍在下方 JSON 区保真 */}
+                                <div>
+                                  <FieldLabel hint="不显式设置 = 由 pi 按 provider 自动探测">
+                                    compat
+                                  </FieldLabel>
+                                  <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+                                    {COMPAT_FLAGS.map((flag) => {
+                                      const v = isObj(model.compat) ? model.compat[flag] : undefined;
+                                      // 只认 boolean; 手写怪值 (字符串 "true"/数字) 不该被显示成“关闭”误导,
+                                      // 给一个占位档提示去 JSON 区处理
+                                      const abnormal = v !== undefined && typeof v !== "boolean";
+                                      const cur = abnormal
+                                        ? "abnormal"
+                                        : v === undefined
+                                          ? "default"
+                                          : v === true
+                                            ? "true"
+                                            : "false";
+                                      const label =
+                                        flag === "supportsDeveloperRole"
+                                          ? "developer 角色"
+                                          : flag === "supportsReasoningEffort"
+                                            ? "发送 reasoning_effort"
+                                            : flag;
+                                      // 下拉收起时显示选中项: 文案要短, 过长会截断。
+                                      // 选项值保持英文枚举 (default/true/false), 显示文案精简。
+                                      const optionText = {
+                                        default: "跟随默认",
+                                        true:
+                                          flag === "supportsDeveloperRole"
+                                            ? "支持 developer"
+                                            : "开启 effort",
+                                        false:
+                                          flag === "supportsDeveloperRole"
+                                            ? "不支持 developer"
+                                            : "关闭 effort",
+                                      } as const;
+                                      return (
+                                        <div key={flag} className="flex items-center gap-2">
+                                          <span className="shrink-0 text-xs text-neutral-600">{label}</span>
+                                          <Select
+                                            value={cur}
+                                            onChange={(e) => onCompatFlag(flag, e.target.value)}
+                                            // 不锁死宽度: 原生 select 收起宽度 = 选中项文字宽,
+                                            // 固定 w-* 会把长文案截断; min-w 保证最短可点
+                                            density="sm"
+                                            className="min-w-[7rem]"
+                                          >
+                                            {abnormal && (
+                                              <option value="abnormal" disabled>
+                                                值异常 (见下方 JSON)
+                                              </option>
+                                            )}
+                                            <option value="default">{optionText.default}</option>
+                                            <option value="true">{optionText.true}</option>
+                                            <option value="false">{optionText.false}</option>
+                                          </Select>
+                                          <span className="font-mono text-micro text-neutral-400">
+                                            {flag}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                {/* 模型级长尾字段 (samplingParams / thinkingLevelMap / compat / headers 仍可走 JSON,
+                                    thinkingLevelMap 与 compat 的可视区改动会通过 rev 重挂载同步 JSON 草稿) */}
                                 <div className="border-t border-[var(--border-subtle)] pt-3">
                                   <p className="mb-2 text-xs text-neutral-600">
-                                    模型级高级字段 (JSON, 留空表示删除该键)
+                                    模型级高级字段 (JSON, 留空表示删除该键; thinkingLevelMap / compat 已可视, 高级编辑在此)
                                   </p>
                                   <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                                     {(
                                       [
-                                        ["thinkingLevelMap", "thinkingLevelMap", "7 档思考等级映射"],
                                         ["samplingParams", "samplingParams", "temperature 等采样参数"],
-                                        ["compat", "compat", "模型级兼容开关, 覆盖 provider 级 compat"],
+                                        ["thinkingLevelMap", "thinkingLevelMap", "原始 JSON (7 档已可视)"],
+                                        ["compat", "compat", "其余兼容开关 (已可视的两个见上)"],
                                         ["headers", "headers", "模型级自定义请求头, 覆盖 provider 级 headers"],
                                       ] as const
                                     ).map(([key, label, hint]) => (
                                       <JsonField
-                                        key={`${pid}|${selectedModelId}|${key}`}
+                                        key={`${pid}|${selectedModelId}|${key}${
+                                          key === "compat" ? `|${compatRev}` : key === "thinkingLevelMap" ? `|${levelRev}` : ""
+                                        }`}
                                         fieldKey={`model:${pid}:${selectedModelId}:${key}`}
                                         label={label}
                                         hint={hint}

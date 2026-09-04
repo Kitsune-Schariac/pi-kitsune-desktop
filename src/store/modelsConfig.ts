@@ -37,6 +37,23 @@ interface WriteResult {
 export const isObj = (v: unknown): v is JsonObject =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
+/** cost 四主键: pi 启动校验要求存在 cost 时四键齐全 (实测默认值全零) */
+export const COST_MAIN_KEYS = ["input", "output", "cacheRead", "cacheWrite"] as const;
+
+/** 思考等级档位: pi 固定 7 档 (docs/models.md Thinking Level Map) */
+export const THINKING_LEVELS = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
+
+/** compat 专用开关 (本期模型级只做这两个, 其余 compat 键仍走 JSON) */
+export const COMPAT_FLAGS = ["supportsDeveloperRole", "supportsReasoningEffort"] as const;
+
 /** 顶层 providers 映射; 缺失或非对象一律当作空映射, 面板照常渲染 */
 export function providersOf(doc: JsonObject | null): JsonObject {
   const p = doc?.providers;
@@ -170,8 +187,31 @@ export interface ModelsConfigStore {
   setModelField: (pid: string, mid: string, key: string, value: string | boolean | unknown[] | null) => void;
   /** 正整数字段 (contextWindow / maxTokens): 非法输入忽略, 空输入删除键 */
   setModelNumber: (pid: string, mid: string, key: string, text: string) => void;
-  /** cost 子字段; cost 空了就删掉整个 cost 键, tiers 等未知键原样保留 */
-  setModelCost: (pid: string, mid: string, key: string, text: string) => void;
+  /**
+   * cost 子字段按“文本提交”写入 (失焦才落盘)。
+   * 四个主键任一位被填过 → 缺失键自动补 0, 保证保存产物四键齐全 (pi 启动校验要求);
+   * 四位全空 → 删除整个 cost 键; tiers 等未知键原样保留。
+   * 非法数值输入不落盘, 返回 false 供面板提示。
+   */
+  setModelCostText: (pid: string, mid: string, key: string, text: string) => boolean;
+  /**
+   * thinkingLevelMap 的「档位行」写入: level = pi 思考档位键 (off…max)。
+   * value undefined → 删除该档 (省略 = 用默认映射); null → 该档显式不支持;
+   * 字符串 → 发给 provider 的映射值。删空后整个 map 键删除。
+   */
+  setModelLevelEntry: (
+    pid: string,
+    mid: string,
+    level: string,
+    value: string | null | undefined,
+  ) => void;
+  /** compat 开关 (模型级): value true/false 写入 compat, undefined 删除该 compat 键 (跟随 pi 自动探测) */
+  setModelCompatFlag: (pid: string, mid: string, key: string, value: boolean | undefined) => void;
+  /**
+   * 保存前收尾: cost 若存在但缺四主键 → 缺失补 0 (不碰 tiers / 未知键)。
+   * 返回新 doc; 无修改时返回原对象。
+   */
+  normalizeCostForSave: (doc: JsonObject) => JsonObject;
   setModelJson: (pid: string, mid: string, key: string, text: string) => string | null;
 
   addModelOverride: (pid: string, mid: string) => boolean;
@@ -252,13 +292,17 @@ export const useModelsConfigStore = create<ModelsConfigStore>((set, get) => {
     },
 
     save: async () => {
-      const { doc, mtimeMs, parseError, saving } = get();
+      const { doc: rawDoc, mtimeMs, parseError, saving } = get();
       if (saving) return;
       if (parseError) {
         set({ saveError: "配置文件无法解析, 已禁用保存。请在外部修复 JSON 后重新加载。" });
         return;
       }
-      if (!doc) return;
+      if (!rawDoc) return;
+      // 保存前收尾: 任何存在但缺主键的 cost 补 0 —— GUI 绝不存出会让 pi 起不来的残缺 cost。
+      // 补全后的版本同时写盘与回写 store: 保存成功后面板 JSON 区立刻显示补全后的完整四键,
+      // 避免“盘上已补全、界面还显残缺”的不一致。
+      const doc = get().normalizeCostForSave(rawDoc);
       set({ saving: true, saveError: null, savedNotice: null });
       try {
         const res = await invoke<WriteResult>("write_models_config", {
@@ -266,6 +310,7 @@ export const useModelsConfigStore = create<ModelsConfigStore>((set, get) => {
           expectedMtimeMs: mtimeMs,
         });
         set({
+          doc,
           mtimeMs: res.mtime_ms,
           dirty: false,
           exists: true,
@@ -401,20 +446,88 @@ export const useModelsConfigStore = create<ModelsConfigStore>((set, get) => {
       mutate((doc) => withModel(doc, pid, mid, (m) => ({ ...m, [key]: n })));
     },
 
-    setModelCost: (pid, mid, key, text) => {
+    // 空串 → 把该键置 0 (不是删键): 四键齐全是 pi 启动校验的硬要求。
+    // 只有四个主键全是 0 且没有 tiers 等其它键时才可能想删整个 cost —— 但那也
+    // 由用户显式操作 (下方面板层) 决定; 这里单键操作一律保齐全。
+    setModelCostText: (pid, mid, key, text) => {
       const t = text.trim();
+      if (t) {
+        const n = Number(t);
+        if (!Number.isFinite(n) || n < 0) return false;
+        mutate((doc) =>
+          withModel(doc, pid, mid, (m) => {
+            const prev = isObj(m.cost) ? m.cost : {};
+            // 只补「键不存在」的主键为 0, 已有键 (含非数字怪值) 不动:
+            // 用户这次只改这一格, 不该顺带覆盖其它格的既有值
+            const next = { ...prev, [key]: n };
+            for (const k of COST_MAIN_KEYS) if (!(k in next)) next[k] = 0;
+            return { ...m, cost: next };
+          }),
+        );
+        return true;
+      }
+      // 空串 → 0 (若原本就没有 cost 键则整单保持无 cost, 不为空点一下失焦造出全零 cost)
       mutate((doc) =>
         withModel(doc, pid, mid, (m) => {
-          const cost = isObj(m.cost) ? { ...m.cost } : {};
-          if (!t) delete cost[key];
-          else {
-            const n = Number(t);
-            if (!Number.isFinite(n) || n < 0) return m;
-            cost[key] = n;
-          }
-          return Object.keys(cost).length ? { ...m, cost } : putKey(m, "cost", null);
+          const prev = isObj(m.cost) ? m.cost : {};
+          if (Object.keys(prev).length === 0) return m;
+          const next = { ...prev, [key]: 0 };
+          for (const k of COST_MAIN_KEYS) if (!(k in next)) next[k] = 0;
+          return { ...m, cost: next };
         }),
       );
+      return true;
+    },
+
+    setModelLevelEntry: (pid, mid, level, value) =>
+      mutate((doc) =>
+        withModel(doc, pid, mid, (m) => {
+          const prev = isObj(m.thinkingLevelMap) ? { ...m.thinkingLevelMap } : {};
+          if (value === undefined) delete prev[level];
+          else prev[level] = value;
+          return Object.keys(prev).length
+            ? { ...m, thinkingLevelMap: prev }
+            : putKey(m, "thinkingLevelMap", null);
+        }),
+      ),
+
+    setModelCompatFlag: (pid, mid, key, value) =>
+      mutate((doc) =>
+        withModel(doc, pid, mid, (m) => {
+          const prev = isObj(m.compat) ? { ...m.compat } : {};
+          if (value === undefined) delete prev[key];
+          else prev[key] = value;
+          return Object.keys(prev).length ? { ...m, compat: prev } : putKey(m, "compat", null);
+        }),
+      ),
+
+    // 保存前收尾: 只补缺失的四主键为 0, 绝不碰 tiers / 未知键 / 其余文档。
+    // 注意只补「键不存在」的主键 —— 若主键存在但值非数字 (第三方工具写的 stringly-number),
+    // 原样保留并交给后端校验如实报错定位, 绝不静默把 "2.5" 覆盖成 0 (丢价格)。
+    // 返回新 doc (无改动时原对象)
+    normalizeCostForSave: (doc) => {
+      let changed = false;
+      const providers: JsonObject = {};
+      for (const [pid, pv] of Object.entries(providersOf(doc))) {
+        const p = isObj(pv) ? pv : {};
+        if (!Array.isArray(p.models)) {
+          providers[pid] = p;
+          continue;
+        }
+        providers[pid] = {
+          ...p,
+          models: p.models.map((m) => {
+            if (!isObj(m)) return m;
+            const cost = m.cost;
+            if (!isObj(cost)) return m;
+            const miss = COST_MAIN_KEYS.filter((k) => !(k in cost));
+            if (!miss.length) return m;
+            changed = true;
+            return { ...m, cost: { ...cost, ...Object.fromEntries(miss.map((k) => [k, 0])) } };
+          }),
+        };
+      }
+      return changed ? { ...doc, providers } : doc;
     },
 
     setModelJson: (pid, mid, key, text) =>

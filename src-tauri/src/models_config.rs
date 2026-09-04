@@ -300,6 +300,19 @@ fn validate_model_numbers(
                 ));
             }
         }
+        // 四个主键齐全才算合法 cost: pi 侧对 cost 存在时的默认值是全零四键, 后端
+        // 手写坏文件 / 第三方工具写残缺 cost 会让 pi 启动校验失败, GUI 保存前已自行
+        // 补全, 这里只做最后一道闸。tiers 不是主键不要求, 未知键不动。
+        for k in ["input", "output", "cacheRead", "cacheWrite"] {
+            match cobj.get(k) {
+                Some(v) if v.is_number() => {}
+                _ => {
+                    return Err(format!(
+                        "provider {pid:?} 下模型 {mid:?} 的 cost 缺少数字主键 {k} —— cost 存在时 input/output/cacheRead/cacheWrite 四项必须齐全 (缺失可补 0)"
+                    ));
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -415,6 +428,12 @@ mod tests {
             (json!({ "providers": { "p": { "models": [{ "id": "a", "contextWindow": -5 }] } } }), "contextWindow"),
             (json!({ "providers": { "p": { "models": [{ "id": "a", "maxTokens": 0 }] } } }), "maxTokens"),
             (json!({ "providers": { "p": { "models": [{ "id": "a", "cost": { "input": "x" } }] } } }), "cost"),
+            (json!({ "providers": { "p": { "models": [{ "id": "a", "cost": {
+                "input": 1, "output": 2, "cacheRead": 0
+            } }] } } }), "缺少数字主键 cacheWrite"),
+            (json!({ "providers": { "p": { "models": [{ "id": "a", "cost": {
+                "output": 2, "cacheRead": 0, "cacheWrite": 0
+            } }] } } }), "缺少数字主键 input"),
         ];
         for (doc, frag) in cases {
             let err = validate_models_doc(&doc).unwrap_err();
@@ -427,7 +446,7 @@ mod tests {
                     "api": "anthropic-messages",
                     "models": [
                         { "id": "m1", "contextWindow": 200000, "maxTokens": 8192,
-                          "cost": { "input": 3, "output": 15, "cacheRead": 0.5 } }
+                          "cost": { "input": 3, "output": 15, "cacheRead": 0.5, "cacheWrite": 0 } }
                     ],
                     "modelOverrides": { "m2": { "name": "x" } }
                 }
