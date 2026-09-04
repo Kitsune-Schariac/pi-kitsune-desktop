@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import { Minus, Square, X, Flame } from "lucide-react";
 
 // 自绘标题栏 (无边框窗口): 整窗顶部拖拽区 + 品牌 + 窗口控制三键。
@@ -6,7 +8,17 @@ import { Minus, Square, X, Flame } from "lucide-react";
 // - 拖拽: 容器整体 data-tauri-drag-region (Tauri 原生拖动), 按钮天然排除
 // - 窗口控制: capability 已放行 core:window:allow-{minimize,toggle-maximize,close,start-dragging}
 // - 关闭走系统窗口销毁路径 → lib.rs on_window_event(Destroyed) → stop_all, 与原生一致
+// - 版本号: 自绘壳没有系统边框, 应用版本无处可见; 从 Rust 端 app_version 命令取
+//   (编译期 CARGO_PKG_VERSION, 与 tauri.conf.json 版本由 bump-version.mjs 同步)
 export function TitleBar() {
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    invoke<string>("app_version")
+      .then(setVersion)
+      .catch(() => setVersion(null));
+  }, []);
+
   return (
     <header
       data-tauri-drag-region
@@ -16,6 +28,9 @@ export function TitleBar() {
       <span className="flex items-center gap-2 text-label font-semibold tracking-wide text-[var(--fg)]">
         <Flame className="h-[15px] w-[15px] text-[var(--accent)]" aria-hidden />
         <span>Pi Kitsune</span>
+        {version && (
+          <span className="text-micro font-normal text-[var(--faint)]">v{version}</span>
+        )}
       </span>
 
       {/* 窗口控制三键 */}

@@ -141,6 +141,14 @@ impl RuntimePool {
 
 type SharedRuntime = Arc<Mutex<RuntimePool>>;
 
+/// 应用版本号 (编译期来自 Cargo.toml): 标题栏展示用。
+/// 不用 @tauri-apps/api getVersion (需额外 capability core:app:allow-version),
+/// 自定义 command 已由 default capability 放行。
+#[tauri::command]
+fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 // --- 模型配置保存后的预热槽废弃 ---
 
 /// 废弃 warm 预热槽: pi 只在启动时读 models.json, 已就绪的预热槽里是旧配置的进程,
@@ -455,7 +463,7 @@ pub fn run() {
             subagent_fleet::list_fleet_runs, subagent_fleet::read_fleet_run_detail,
             trellis_tasks::list_trellis_tasks, trellis_tasks::read_trellis_task_doc,
             models_config::read_models_config, models_config::write_models_config,
-            discard_warm_runtime,
+            discard_warm_runtime, app_version,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
