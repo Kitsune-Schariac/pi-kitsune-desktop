@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "pet",
+  "description": "桌宠窗口权限: 自身拖动/缩放/定位/关闭 + 右键菜单 + 监听状态事件 + invoke 宠物资源命令",
+  "windows": ["pet"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-outer-position",
+    "core:window:allow-outer-size",
+    "core:window:allow-current-monitor",
+    "core:window:allow-scale-factor",
+    "core:window:allow-close",
+    "core:event:allow-listen",
+    "core:event:allow-emit-to",
+    "core:menu:allow-new",
+    "core:menu:allow-popup"
+  ]
+}

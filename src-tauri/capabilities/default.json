@@ -9,6 +9,7 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
     "core:window:allow-start-dragging",
+    "core:event:allow-emit-to",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-read-image",
     "dialog:allow-open"

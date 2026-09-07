@@ -4,6 +4,7 @@ mod pi_runtime;
 mod search;
 mod git;
 mod models_config;
+mod pets;
 mod session_fs;
 mod skins;
 mod subagent_fleet;
@@ -147,6 +148,54 @@ type SharedRuntime = Arc<Mutex<RuntimePool>>;
 #[tauri::command]
 fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+// --- 桌宠窗口 ---
+
+/// 开桌宠窗: 透明无边框置顶小窗, 加载同一份前端 bundle 但带 ?window=pet 走桌宠分支。
+/// 已存在则只 show (重复开不再建第二个窗)。
+/// 尺寸由前端按 帧尺寸 × zoom 算好传进来; x/y 缺省时交给 builder 默认落位, 前端首帧再自行安置。
+#[tauri::command]
+async fn open_pet_window(
+    app: tauri::AppHandle,
+    w: f64,
+    h: f64,
+    x: Option<f64>,
+    y: Option<f64>,
+) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("pet") {
+        win.show().map_err(|e| format!("显示桌宠窗口失败: {e}"))?;
+        return Ok(());
+    }
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        &app,
+        "pet",
+        tauri::WebviewUrl::App("index.html?window=pet".into()),
+    )
+    .title("Pi Kitsune Pet")
+    .inner_size(w, h)
+    .transparent(true)
+    .decorations(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .shadow(false)
+    .resizable(false);
+    if let (Some(x), Some(y)) = (x, y) {
+        builder = builder.position(x, y);
+    }
+    builder
+        .build()
+        .map_err(|e| format!("创建桌宠窗口失败: {e}"))?;
+    Ok(())
+}
+
+/// 关桌宠窗 (窗口不存在时静默成功 — 关一个已经没了的窗不算错)
+#[tauri::command]
+async fn close_pet_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("pet") {
+        win.close().map_err(|e| format!("关闭桌宠窗口失败: {e}"))?;
+    }
+    Ok(())
 }
 
 // --- 模型配置保存后的预热槽废弃 ---
@@ -460,6 +509,8 @@ pub fn run() {
             token_stats::get_token_stats,
             behavior_stats::get_behavior_stats, behavior_stats::get_session_behavior,
             skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
+            pets::list_pets, pets::get_pet_asset, pets::open_pets_dir,
+            open_pet_window, close_pet_window,
             subagent_fleet::list_fleet_runs, subagent_fleet::read_fleet_run_detail,
             trellis_tasks::list_trellis_tasks, trellis_tasks::read_trellis_task_doc,
             models_config::read_models_config, models_config::write_models_config,
@@ -467,6 +518,15 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
+                // 收摊只认主窗口: 桌宠窗口关闭绝不能牵连 pi 会话 —— 这个 handler 对任何
+                // 窗口的 Destroyed 都会触发, 多窗口后不判 label 就会关个桌宠把会话全停了
+                if window.label() != "main" {
+                    return;
+                }
+                // 主窗口走了, 桌宠窗留着就是孤儿 (它 skip_taskbar 且置顶, 用户很难关掉)
+                if let Some(pet) = window.app_handle().get_webview_window("pet") {
+                    pet.close().ok();
+                }
                 if let Some(state) = window.app_handle().try_state::<SharedRuntime>() {
                     let state = state.inner().clone();
                     tauri::async_runtime::spawn(async move {
