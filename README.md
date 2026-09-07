@@ -20,6 +20,7 @@
 - **扩展 UI 协议** —— `extension_ui_request` 弹窗（confirm / select / input / editor / notify）按 FIFO 队列弹一个，关一个弹下一个；`notify` 通知条 fire-and-forget，按源会话归属，无会话走右下角兜底。
 - **中途 steer / 停止后 followUp** —— agent 运行中排队指导消息，agent 停止后排队的后续消息；队列内容由 pi `queue_update` 事件权威回推，不做乐观插入。
 - **Detached 秒切缓存** —— pi 进程被 LRU 淘汰后会话条目（entries）仍常驻内存（上限 20 条），切回时走 reattach 秒切，不重读历史。
+- **桌面宠物** —— 独立的透明无边框置顶小窗，按会话状态播帧动画（待机 / 打招呼 / 思考 / 执行工具 / 报错 / 离线）。状态由主窗口聚合后经 Tauri 事件直推，不走文件轮询；多会话按「任一在忙即忙」全局聚合。左键拖动、滚轮缩放（0.5x–3.0x）、右键切角色，位置与缩放持久化。
 
 ## 技术栈
 
@@ -64,14 +65,16 @@ pi-kitsune-desktop/
 ├── src/                        # 前端 React
 │   ├── App.tsx                  # 主界面：背景层 + 侧边栏 + 会话主区 + 面板抽屉
 │   ├── main.tsx                 # 入口：全局注册 pi_event / session_evicted 监听
+│   ├── pet/                     # 桌宠窗口 (?window=pet 分流后的独立渲染入口)
 │   ├── components/              # UI 组件
-│   │   ├── settings/            #   设置窗口、主题面板、token 统计面板
+│   │   ├── settings/            #   设置窗口、主题面板、token 统计面板、桌宠面板
 │   │   ├── panels/              #   skills / packages 面板
 │   │   └── refs/                #   @ 引用、提及、会话选择、技能选择
 │   ├── store/                   # Zustand stores
 │   │   ├── session.ts           #   会话状态机（多 session、流式、队列、UI 请求）
 │   │   ├── projects.ts          #   项目 / 会话历史侧边栏
-│   │   └── theme.ts             #   主题皮肤系统
+│   │   ├── theme.ts             #   主题皮肤系统
+│   │   └── pet.ts               #   桌宠配置 + 多会话状态聚合 + 桌宠窗口事件桥
 │   └── lib/                     # pi 事件类型、命令模型、引用工具
 ├── src-tauri/                   # Rust 后端
 │   ├── src/
@@ -79,10 +82,12 @@ pi-kitsune-desktop/
 │   │   ├── pi_runtime.rs        # pi 子进程封装：spawn / RPC 收发 / response 关联
 │   │   ├── session_fs.rs        # ~/.pi/agent/sessions/ 扫描与会话条目读写
 │   │   ├── skins.rs             # 皮肤包扫描与资源读取
+│   │   ├── pets.rs              # 宠物包扫描与精灵图读取
 │   │   ├── token_stats.rs       # token / 成本统计
 │   │   ├── search.rs            # @ 引用 Everything 加速层
 │   │   └── capture.rs           # 屏幕截图
 │   ├── resources/skins/         # 内置皮肤包（打包进 bundle）
+│   ├── resources/pets/          # 内置宠物包（打包进 bundle）
 │   └── tauri.conf.json
 └── skin-files/                  # 皮肤素材源（gitignored，正式资源在 resources/skins/）
 ```
@@ -122,6 +127,42 @@ pi-kitsune-desktop/
 ```
 
 切换皮肤时，前端会清掉上一套写过的 CSS 变量再写入新的一组，注入 / 移除 `override.css`，并做约 220ms 的淡入淡出过渡。`bubble` 字段是皮肤推荐的气泡框开关，仅当用户从未手动改过时生效。
+
+## 桌宠系统
+
+宠物包放在 `src-tauri/resources/pets/<pet-id>/`（内置，随包分发）或 `~/.pi-kitsune/pets/<pet-id>/`（用户自备）。
+id 冲突时内置优先，与皮肤系统一致。
+
+```
+<pet-id>/
+├── pet.json          # 必需：元信息 + 帧尺寸 + 动画表
+└── spritesheet.webp  # 必需：精灵图，行 = 状态，列 = 帧
+```
+
+`pet.json` 示例：
+
+```json
+{
+  "id": "tohsaka-rin",
+  "displayName": "Tohsaka Rin",
+  "description": "红衣黑双马尾的自信魔术师",
+  "spritesheetPath": "spritesheet.webp",
+  "frameWidth": 192,
+  "frameHeight": 208,
+  "animations": {
+    "idle":     { "row": 0, "frames": 6, "duration": 1800, "loop": true },
+    "greet":    { "row": 3, "frames": 4, "duration": 1000, "loop": true },
+    "thinking": { "row": 4, "frames": 5, "duration": 1500, "loop": true },
+    "working":  { "row": 7, "frames": 6, "duration": 900,  "loop": true },
+    "error":    { "row": 5, "frames": 8, "duration": 1400, "loop": true },
+    "offline":  { "row": 5, "frames": 8, "duration": 2000, "loop": false }
+  }
+}
+```
+
+- `row` 是 0-indexed 的行号，`duration` 是**一轮播完的总毫秒数**（不是单帧时长），`loop: false` 播完停在末帧。
+- `animations` 必须含 `idle`——它是其余状态缺失时的回落目标，缺了整包会被跳过不进列表。
+- 状态由主窗口按全部会话聚合后经 Tauri 事件推给桌宠窗口：任一会话在跑工具 → `working`，任一在流式输出 → `thinking`，有会话但全空闲 → `idle`，无会话 → `offline`；工具报错闪 `error` 约 2s 后按聚合值归位。
 
 ## 架构要点
 

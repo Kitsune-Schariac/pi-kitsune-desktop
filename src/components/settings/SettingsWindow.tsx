@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
-import { X, BarChart3, Palette, Activity, Boxes, type LucideIcon } from "lucide-react";
+import { X, BarChart3, Palette, Activity, Boxes, Cat, type LucideIcon } from "lucide-react";
 import { TokenStatsPanel } from "./TokenStatsPanel";
 import { ThemePanel } from "./ThemePanel";
 import { BehaviorStatsPanel } from "./BehaviorStatsPanel";
 import { ModelsPanel } from "./ModelsPanel";
+import { PetPanel } from "./PetPanel";
 
-type TabKey = "theme" | "stats" | "behavior" | "models";
+type TabKey = "theme" | "pet" | "stats" | "behavior" | "models";
 
 // 导航项结构一致, 用数组 map 渲染; 描述文案同时用于侧栏第二行与内容区 header
 // 图标与文案对齐改版稿设置导航 (setwin-nav-item); 页签大标题走 --fs-head 17px 档
 const NAV_ITEMS: { key: TabKey; icon: LucideIcon; title: string; desc: string }[] = [
   { key: "theme", icon: Palette, title: "主题", desc: "皮肤 / 背景 / 不透明率" },
+  { key: "pet", icon: Cat, title: "桌宠", desc: "桌面宠物开关 / 角色 / 大小" },
   { key: "stats", icon: BarChart3, title: "Token 统计", desc: "用量与成本分布" },
   { key: "behavior", icon: Activity, title: "行为统计", desc: "轮次 / 工具 / 思考占比" },
   { key: "models", icon: Boxes, title: "模型与供应商", desc: "models.json 的 provider 与模型" },
@@ -118,6 +120,11 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
             {tab === "theme" && (
               <div className="h-full overflow-y-auto">
                 <ThemePanel />
+              </div>
+            )}
+            {tab === "pet" && (
+              <div className="h-full overflow-y-auto">
+                <PetPanel />
               </div>
             )}
             {tab === "stats" && (
