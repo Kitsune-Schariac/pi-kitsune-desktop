@@ -17,6 +17,7 @@ import { PackagesPanel } from "./components/panels/PackagesPanel";
 import { NotificationToasts, UiRequestModal } from "./components/UiRequestModal";
 import { QueueIndicator } from "./components/QueueIndicator";
 import { useThemeStore } from "./store/theme";
+import { usePetStore } from "./store/pet";
 import { useGitStore } from "./store/git";
 import { useFleetStore, parseSessionUuid } from "./store/fleet";
 import { useFleetStreamEntries } from "./hooks/useFleetStreamEntries";
@@ -98,6 +99,8 @@ export default function App() {
     loadProjects();
     // 主题皮肤系统: 拉皮肤列表 + 恢复持久化 + 应用当前主题 (模块级防重入)
     useThemeStore.getState().init();
+    // 桌宠: 订阅会话状态做聚合 + 挂桌宠窗口事件桥 + 上次开着就自动开回来 (模块级防重入)
+    usePetStore.getState().init();
   }, [loadProjects]);
 
   // 舰队药丸初始快照: App 挂载拉一次 runs 给药丸数据 (PRD R4: 后台 run 在 GUI 重启后仍可被发现)

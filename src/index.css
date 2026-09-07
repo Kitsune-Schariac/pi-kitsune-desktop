@@ -249,6 +249,17 @@ body,
   overscroll-behavior: none;
 }
 
+/* 桌宠窗口 (index.html?window=pet): html/body/#root 三层背景必须全透明 —— 少透一层就会
+   露出不透明底色, 把 transparent 窗口糊成一个白方块。用 :has 定位而非全局改, 免得污染主窗口 */
+html:has([data-pet]),
+html:has([data-pet]) body,
+html:has([data-pet]) #root {
+  background: transparent !important;
+  overflow: hidden;
+  /* 桌宠是拖着玩的, 别让鼠标划出文字选区 */
+  user-select: none;
+}
+
 /* 显隐保底 (踩坑 §4.9): 面板/页签显隐若用 hidden 属性, 必须全局盖过 display:flex 等
    布局 class, 否则 flex 容器里 hidden 元素仍占位/同显 */
 [hidden] {
