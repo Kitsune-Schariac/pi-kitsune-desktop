@@ -1,0 +1,2 @@
+# 内置宠物包放这里, 目录结构: <pet-id>/{pet.json, spritesheet.webp}
+# 用户自己的宠物包放 ~/.pi-kitsune/pets/ (id 冲突时内置优先)
