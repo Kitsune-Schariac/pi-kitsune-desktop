@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { PanelKind } from "../App";
 import { ProjectList } from "./ProjectList";
+import { useResizableWidth } from "../hooks/useResizableWidth";
 import { useSessionStore } from "../store/session";
 import {
   Sparkles, Package, Settings, FolderKanban, Plus, FolderOpen, Loader2,
@@ -20,6 +21,13 @@ export function Sidebar({
   onToggleCollapsed: () => void;
 }) {
   const startSession = useSessionStore((s) => s.startSession);
+  // 展开态宽度自持 (右缘手柄拖拽调宽, localStorage 持久化); 折叠态分支不走这里仍须先调 hook
+  const { width, dragging, onDragStart } = useResizableWidth({
+    storageKey: "kitsune.sidebarWidth",
+    defaultValue: 288,
+    min: 200,
+    max: 480,
+  });
   const [adding, setAdding] = useState(false);
   // 搜索关键词: 非空时项目树切为全局拍平过滤视图 (Sidebar 持有, 传入 ProjectList 过滤)
   const [query, setQuery] = useState("");
@@ -93,7 +101,10 @@ export function Sidebar({
   }
 
   return (
-    <aside className="flex w-[288px] shrink-0 flex-col bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--sidebar-alpha)_*_100%),transparent)]">
+    <aside
+      style={{ width }}
+      className="relative flex shrink-0 flex-col bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--sidebar-alpha)_*_100%),transparent)]"
+    >
       {/* 顶部行: 搜索框 (左侧, flex-1) + 折叠钮 (搜索框右边同一行, 不再独占一行) */}
       <div className="flex items-center gap-1 px-3 pb-1 pt-2">
         <div className="group relative flex min-w-0 flex-1 items-center">
@@ -186,6 +197,19 @@ export function Sidebar({
           <FolderOpen className="h-3 w-3 shrink-0" />
           <span className="truncate" title="会话文件存放位置">会话数据来自 ~/.pi/agent/sessions</span>
         </div>
+      </div>
+
+      {/* 右缘宽度拖拽手柄: 热区骑在边界上, 日常隐藏, hover/拖拽浮现竖线提示可调 */}
+      <div
+        onMouseDown={onDragStart}
+        className="group absolute inset-y-0 right-0 z-10 w-[7px] cursor-col-resize"
+        title="拖动调整宽度"
+      >
+        <div
+          className={`absolute inset-y-0 left-1/2 w-[3px] -translate-x-1/2 rounded-full transition-colors duration-fast ${
+            dragging ? "bg-[var(--accent)]" : "bg-transparent group-hover:bg-[var(--border-strong)]"
+          }`}
+        />
       </div>
     </aside>
   );
