@@ -8,12 +8,38 @@ import {
   PhysicalPosition,
 } from "@tauri-apps/api/window";
 import { Menu } from "@tauri-apps/api/menu";
-import type { PetMeta, PetState } from "../store/pet";
+import type { PetAnimation, PetMeta, PetState } from "../store/pet";
 
 // 缩放边界: 太小看不清帧, 太大精灵图糊 (2 倍图放到 3 倍已是上限)
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3.0;
 const ZOOM_STEP = 0.1;
+
+// 空闲时不循环播动画, 停在首帧发呆, 隔这个区间随机时长才动一次
+const IDLE_REST_MIN_MS = 5000;
+const IDLE_REST_MAX_MS = 14000;
+
+// 忙碌动画池的内置定义: 按 hatch-pet 的 atlas 契约, row7=running(执行中) row8=review(专注),
+// 这两行正好是"在干活"的两种表现。写成内置而不是依赖 pet.json —— 旧宠物包 (如薇尔莉特)
+// 的映射里根本没定义 row8, 但精灵图那一行是画了的, 靠配置就享受不到随机
+const BUILTIN_BUSY: PetAnimation[] = [
+  { row: 7, frames: 6, duration: 900, loop: true },
+  { row: 8, frames: 6, duration: 1500, loop: true },
+];
+
+/**
+ * 忙碌动画池: pet.json 显式配了 stateSequences.busy 就以它为准, 否则用内置的 row7/row8。
+ * totalRows 是精灵图的实际行数, 用来挡掉越界行 (不按 8x9 契约做的包不至于播出一片空白)
+ */
+function busyPool(pet: PetMeta, totalRows: number): PetAnimation[] {
+  const names = pet.state_sequences?.busy;
+  if (names?.length) {
+    const picked = names.map((n) => pet.animations[n]).filter(Boolean);
+    if (picked.length) return picked;
+  }
+  const usable = BUILTIN_BUSY.filter((a) => a.row < totalRows);
+  return usable.length ? usable : [pet.animations.idle];
+}
 
 /**
  * 桌宠窗口 (label: pet, 由 ?window=pet 分流进来)
@@ -30,7 +56,17 @@ export function PetWindow() {
   const [zoom, setZoom] = useState(1);
 
   // 帧循环每帧都要读这些值, 但它们变化不该重启循环, 也不该触发重渲染 → 放 ref
-  const animRef = useRef({ state: "idle" as PetState, frame: 0, lastTs: 0 });
+  // busyAnim: 忙碌时当前随机到的动画名; idlePlaying/idleNextAt: 空闲发呆与下次开播时刻
+  const animRef = useRef({
+    state: "idle" as PetState,
+    frame: 0,
+    lastTs: 0,
+    busyIdx: 0,
+    idlePlaying: false,
+    idleNextAt: 0,
+  });
+  // 精灵图行数, 给忙碌池挡越界行用 (sprite 加载后才知道)
+  const rowsRef = useRef(0);
   const petRef = useRef<PetMeta | null>(null);
   const zoomRef = useRef(1);
   petRef.current = pet;
@@ -45,7 +81,9 @@ export function PetWindow() {
       .then((url) => {
         const img = new Image();
         img.onload = () => {
-          if (alive) setSprite({ url, w: img.naturalWidth, h: img.naturalHeight });
+          if (!alive) return;
+          rowsRef.current = Math.floor(img.naturalHeight / pet.frame_height);
+          setSprite({ url, w: img.naturalWidth, h: img.naturalHeight });
         };
         img.src = url;
       })
@@ -74,18 +112,46 @@ export function PetWindow() {
       const el = boxRef.current;
       if (!p || !el) return;
 
-      // 缺失状态回落 idle (list_pets 已保证 idle 必然存在)
-      const anim = p.animations[animRef.current.state] ?? p.animations.idle;
+      const st = animRef.current;
+
+      // 空闲发呆: 停在首帧不动, 到点了才播一轮完整待机动画, 播完继续发呆。
+      // 一直循环播 idle 会让桌宠显得很聒噪, 真人不在电脑前时它也在不停晃
+      if (st.state === "idle" && !st.idlePlaying) {
+        if (ts < st.idleNextAt) return;
+        st.idlePlaying = true;
+        st.frame = 0;
+        st.lastTs = 0;
+      }
+
+      // 忙碌时在动画池里随机取一个播, 播完一轮再随机 —— 不区分思考/执行工具
+      const pool = st.state === "busy" ? busyPool(p, rowsRef.current) : null;
+      const anim = pool
+        ? pool[st.busyIdx % pool.length]
+        : p.animations[st.state] ?? p.animations.idle;
       if (!anim || anim.frames <= 0) return;
 
       const perFrame = anim.duration / anim.frames;
-      if (ts - animRef.current.lastTs < perFrame) return;
-      animRef.current.lastTs = ts;
+      if (ts - st.lastTs < perFrame) return;
+      st.lastTs = ts;
 
-      if (!anim.loop && animRef.current.frame >= anim.frames - 1) {
-        animRef.current.frame = anim.frames - 1; // 非循环: 停在末帧
+      if (st.frame >= anim.frames - 1) {
+        if (pool) {
+          // 一轮播完重新随机 (允许抽到同一个, 连播两轮反而自然)
+          st.busyIdx = Math.floor(Math.random() * pool.length);
+          st.frame = 0;
+        } else if (st.state === "idle") {
+          // 待机播完一轮 → 回到发呆, 安排下次开播的时刻
+          st.idlePlaying = false;
+          st.idleNextAt =
+            ts + IDLE_REST_MIN_MS + Math.random() * (IDLE_REST_MAX_MS - IDLE_REST_MIN_MS);
+          st.frame = 0;
+        } else if (!anim.loop) {
+          st.frame = anim.frames - 1; // 非循环: 停在末帧
+        } else {
+          st.frame = 0;
+        }
       } else {
-        animRef.current.frame = (animRef.current.frame + 1) % anim.frames;
+        st.frame += 1;
       }
 
       const z = zoomRef.current;
@@ -107,9 +173,18 @@ export function PetWindow() {
     void (async () => {
       const offState = await listen<{ state: PetState }>("pet_state", (e) => {
         if (e.payload.state === animRef.current.state) return;
-        animRef.current.state = e.payload.state;
-        animRef.current.frame = 0;
-        animRef.current.lastTs = 0;
+        const st = animRef.current;
+        st.state = e.payload.state;
+        st.frame = 0;
+        st.lastTs = 0;
+        if (st.state === "busy") {
+          // 进忙碌态立刻随机一个动作开播, 不然要等一轮才随机
+          st.busyIdx = Math.floor(Math.random() * 100);
+        } else if (st.state === "idle") {
+          // 刚闲下来先播一轮待机再发呆 —— 直接静止会像卡住了
+          st.idlePlaying = true;
+          st.idleNextAt = 0;
+        }
       });
       const offConfig = await listen<{ petId: string | null; zoom: number }>(
         "pet_config",

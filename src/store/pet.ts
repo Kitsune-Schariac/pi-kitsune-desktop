@@ -8,7 +8,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, emitTo } from "@tauri-apps/api/event";
 import { useSessionStore, type SessionState } from "./session";
 
-export type PetState = "idle" | "greet" | "thinking" | "working" | "error" | "offline";
+/** busy 不区分思考/执行工具 —— agent 只要在跑就是忙, 由渲染侧在忙碌动画池里随机取 */
+export type PetState = "idle" | "greet" | "busy" | "error" | "offline";
 
 /** Rust 侧 PetAnimation。字段名沿用 pet.json 原样 —— Rust 那边 loop_flag 带 rename = "loop",
  *  serde 的 rename 序列化方向同样生效, 传到前端就是 loop */
@@ -28,6 +29,8 @@ export interface PetMeta {
   frame_width: number;
   frame_height: number;
   animations: Record<string, PetAnimation>;
+  /** 可选编排: 状态 → 依次轮播的动画名 (每播完一轮换下一个); 没有则该状态走同名单动画 */
+  state_sequences: Record<string, string[]>;
 }
 
 // localStorage 键: 与现有 kitsune.* 同前缀
@@ -69,23 +72,11 @@ function readPos(): { x: number; y: number } | null {
   }
 }
 
-/**
- * 多会话聚合成单一状态 (全局聚合: 任一会话在忙, 桌宠就忙)
- *
- * 只扫流式会话 —— 空闲会话不可能挂着运行中的工具; 且运行中的工具卡片必在 entries 尾部,
- * 从后往前扫有限窗口即可, 免得每次 store 变更都全量遍历上千条的长会话。
- */
+/** 多会话聚合成单一状态 (全局聚合: 任一会话在忙, 桌宠就忙) */
 function aggregate(sessions: Record<string, SessionState>): PetState {
   const list = Object.values(sessions);
   if (list.length === 0) return "offline";
-  for (const s of list) {
-    if (!s.isStreaming) continue;
-    for (let i = s.entries.length - 1, n = 0; i >= 0 && n < 50; i--, n++) {
-      const e = s.entries[i];
-      if (e.kind === "tool" && e.status === "running") return "working";
-    }
-  }
-  return list.some((s) => s.isStreaming) ? "thinking" : "idle";
+  return list.some((s) => s.isStreaming) ? "busy" : "idle";
 }
 
 // 时限性覆盖态: greet/error 不由 aggregate 推导, 到点自动撤销后重算
