@@ -31,6 +31,10 @@ pub struct PetMeta {
     pub frame_height: u32,
     /// 状态名 → 帧动画; 前端对缺失状态回落到 idle
     pub animations: HashMap<String, PetAnimation>,
+    /// 可选编排: 状态名 → 依次轮播的动画名列表 (每播完一轮换下一个)。
+    /// 让一个状态能有多个动作 (如 working = 书写 + 施法 交替), animations 结构本身不变;
+    /// 没有这个字段的旧宠物包照常单动画播, 向后兼容
+    pub state_sequences: HashMap<String, Vec<String>>,
 }
 
 /// pet.json 解析结构 (字段名沿用旧桌宠格式, 靠 rename 对齐 camelCase)
@@ -49,6 +53,8 @@ struct PetConfig {
     frame_height: u32,
     #[serde(default)]
     animations: HashMap<String, PetAnimation>,
+    #[serde(default, rename = "stateSequences")]
+    state_sequences: HashMap<String, Vec<String>>,
 }
 
 fn default_spritesheet() -> String {
@@ -102,13 +108,30 @@ fn parse_pet(dir: &Path) -> Option<PetMeta> {
     } else {
         cfg.display_name
     };
+    // 序列里引用了不存在的动画名会让前端播不出东西, 这里就地过滤掉坏引用;
+    // 过滤后为空的序列整条丢弃, 让该状态回落到同名单动画
+    let animations = cfg.animations;
+    let state_sequences: HashMap<String, Vec<String>> = cfg
+        .state_sequences
+        .into_iter()
+        .map(|(state, names)| {
+            let valid: Vec<String> = names
+                .into_iter()
+                .filter(|n| animations.contains_key(n))
+                .collect();
+            (state, valid)
+        })
+        .filter(|(_, names)| !names.is_empty())
+        .collect();
+
     Some(PetMeta {
         id: cfg.id,
         display_name,
         description: cfg.description,
         frame_width: cfg.frame_width,
         frame_height: cfg.frame_height,
-        animations: cfg.animations,
+        animations,
+        state_sequences,
     })
 }
 
@@ -171,15 +194,20 @@ pub fn get_pet_asset(app: tauri::AppHandle, pet_id: String) -> Result<String, St
     Ok(value)
 }
 
-/// 定位宠物目录: 内置优先, 用户次之 (与 list_pets 的内置优先一致)
+/// 定位宠物目录: 按 pet.json 里的 id 字段匹配, 不能假设目录名就是 id ——
+/// codex 导出的包目录名常带后缀 (violet-evergarden-codex-pet 目录里 id 是 violet-evergarden),
+/// 按目录名找会让 list_pets 列得出来、get_pet_asset 却取不到图。
+/// 内置优先, 与 list_pets 的合并顺序保持一致
 fn find_pet_dir(app: &tauri::AppHandle, pet_id: &str) -> Result<PathBuf, String> {
-    let bundled = bundled_pets_dir(app)?.join(pet_id);
-    if bundled.join("pet.json").exists() {
-        return Ok(bundled);
-    }
-    let user = user_pets_dir()?.join(pet_id);
-    if user.join("pet.json").exists() {
-        return Ok(user);
+    for base in [bundled_pets_dir(app)?, user_pets_dir()?] {
+        if let Ok(entries) = std::fs::read_dir(&base) {
+            for entry in entries.flatten() {
+                let dir = entry.path();
+                if dir.is_dir() && parse_pet(&dir).is_some_and(|m| m.id == pet_id) {
+                    return Ok(dir);
+                }
+            }
+        }
     }
     Err(format!("宠物不存在: {pet_id}"))
 }
