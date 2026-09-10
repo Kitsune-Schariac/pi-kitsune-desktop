@@ -242,6 +242,7 @@ export function InputBar({
   const isStreaming = active?.isStreaming ?? false;
   const contextUsage = active?.contextUsage ?? null;
   const turnStats = active?.turnStats ?? null;
+  const sampleSpeed = useSessionStore((s) => s.sampleSpeed);
   const currentModel = active?.currentModel ?? null;
   const availableModels = active?.availableModels ?? [];
   const thinkingLevel = active?.thinkingLevel ?? "medium";
@@ -490,6 +491,9 @@ export function InputBar({
   // 统计条的耗时要按秒走字, 但 store 只存事实数据不存渲染节拍, 所以计时器放组件里。
   // 只在运行中跑, 停下就清掉 (空闲时定格显示上一轮结果, 没有重渲染的必要);
   // 计数值本身没人读, 自增只为触发重渲染让下面的 Date.now() 重新求值
+  //
+  // 速度也走这个 tick 采样: 实时累加器在模块级 Map (不在 store), 每个 token 写它一次不会
+  // 触发任何 React 渲染, 这里每秒拉一次即可 —— 渲染频率与改动前完全一致
   const [, setTick] = useState(0);
   useEffect(() => {
     if (!isStreaming) return;
@@ -506,14 +510,13 @@ export function InputBar({
     const total = Math.floor(ms / 1000);
     return total < 60 ? `${total}s` : `${Math.floor(total / 60)}m ${total % 60}s`;
   };
-  // 输出速度 = 本轮累计输出 ÷ 已耗时 (平均速度, 与其余四项同为累计口径;
-  // elapsedMs 含 TTFT, 思考久时前期偏低属预期, 旁边就是耗时可自行判断)
-  // 耗时 <1s 或尚无输出时显示 —, 避免除零噪声 (PRD B3)
-  const outputTotal = turnStats ? turnStats.output + turnStats.liveOutput : 0;
-  const speedTokPerSec =
-    turnStats && elapsedMs >= 1000 && outputTotal > 0
-      ? (outputTotal / (elapsedMs / 1000)).toFixed(1)
-      : null;
+  // 输出速度: 模型真实生成速度 (output token ÷ 生成窗口), 已排除工具执行时间与 TTFT。
+  // 旧口径用「本轮 output ÷ 整轮挂钟」, 会把工具执行时间摊进分母 —— 实测同一模型
+  // 因工具占比不同显示值漂移 1.1x~2.9x, 不反映模型快慢。详见 lib/speed.ts 的口径说明。
+  // 流式中每秒采样实时累加器; 结束后用 store 里定格的本轮加权平均
+  const speedTokPerSec = isStreaming
+    ? (activeSessionId ? sampleSpeed(activeSessionId) : null)
+    : turnStats?.speed ?? null;
 
   return (
     // 悬浮输入卡: 底部居中, 宽度与消息列表一致 (max-w-[min(75%,52rem)]), 与消息区分离成浮动层
@@ -737,9 +740,9 @@ export function InputBar({
               <DollarSign className="h-3 w-3" />
               {turnStats.cost.toFixed(4)}
             </span>
-            <span className="flex items-center gap-1" title="本轮输出速度">
+            <span className="flex items-center gap-1" title="本轮输出速度 (已排除工具执行时间与首字延迟)">
               <Gauge className="h-3 w-3" />
-              {speedTokPerSec === null ? "—" : `${speedTokPerSec} tok/s`}
+              {speedTokPerSec === null ? "—" : `${speedTokPerSec.toFixed(1)} tok/s`}
             </span>
             <span className="flex items-center gap-1" title="本轮耗时">
               <Clock className="h-3 w-3" />

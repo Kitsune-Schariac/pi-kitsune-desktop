@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useProjectsStore, pathEq } from "./projects";
 import { useGitStore } from "./git";
 import { hasTerminalMarkup, stripTerminalMarkup } from "../lib/sanitize";
+import { startRound, dropSession, resetLive, noteDelta, settle, liveSpeedFor, finishRound } from "../lib/speedLive";
 import type { UiNotification, UiRequest } from "../lib/pi";
 
 export interface ChatEntry {
@@ -33,6 +34,12 @@ export interface ModelInfo {
 /// 本轮 agent 运行的 usage 累计 (输入卡底部实时统计条用, 与跨会话的 TokenStatsPanel 无关)
 /// 拆 committed / live 两组是被 pi 契约逼的: message_update 只给顶层 usage (当前这条消息的累计),
 /// message_end 的 message.usage 才是该条消息的权威值 —— 直接累加 message_update 会把同一条消息重复计入
+///
+/// 速度统计 (genStartedAt / deltaCounts / speed / calls) 的依据见本任务 design.md:
+/// 实测 provider 流式期间上报的 usage 恒为 0 (371 个 message_update 中仅 1 个非零),
+/// 故实时值只能靠 delta 事件计数估算 —— text/thinking 的 delta 计数与 output token
+/// 精确 1:1, toolcall 约 2.9:1 (JSON 参数), 估算误差实测 < 0.3%。
+/// 字符数不能用来估算: 字符/token 比率随内容剧变 (文本 1.68 / 工具参数 0.75 / 中文 1.54 / 英文 4)。
 export interface TurnStats {
   input: number;      // 已 message_end 的消息累加值
   output: number;
@@ -41,6 +48,25 @@ export interface TurnStats {
   liveOutput: number;
   startedAt: number | null;
   elapsedMs: number | null; // null = 仍在跑; 有值 = 本轮已定格
+
+  // ── 输出速度 (tok/s) ──
+  genStartedAt: number | null;  // 当前调用首个 delta 到达时间 (null = 尚未开始生成)
+  deltaCounts: DeltaCounts;     // 当前调用的 delta 计数 (实时估算用)
+  speed: number | null;         // 当前速度: 流式中为估算值, settled 后为加权平均
+  calls: CallRecord[];          // 本轮各次调用的结算记录 (算加权平均)
+}
+
+/** delta 事件计数: text/thinking 与 output token 1:1, toolcall 约 2.9:1 */
+export interface DeltaCounts {
+  thinking: number;
+  text: number;
+  toolcall: number;
+}
+
+/** 一次 LLM 调用的结算记录 (权威值) */
+export interface CallRecord {
+  output: number;   // 该次调用的 output token
+  window: number;   // 该次调用的生成窗口 (秒)
 }
 
 // 单个 session 的完整状态 (M3: 多 session, 每个 session 独立)
@@ -103,6 +129,9 @@ interface SessionStore {
   removeSessionState: (sessionId: string) => void;
   markDetached: (sessionId: string) => void;
   handleEvent: (payload: { sessionId: string; event: Record<string, unknown> }) => void;
+  // 速度采样 (InputBar 的 1s tick 调): 实时值在模块级累加器里, 不经过 store 状态,
+  // 所以用 action 读取而非 selector。返回 null = 无有效数据, 界面显示 —
+  sampleSpeed: (sessionId: string) => number | null;
   // extension_ui_request 响应: 乐观移出队列后写回 pi; 失败时 pi 侧超时自动解决, 不阻塞
   resolveUiRequest: (sessionId: string, id: string, payload: Record<string, unknown>) => Promise<void>;
   // notify 通知条 (全局, 跨会话展示)
@@ -193,6 +222,8 @@ export const useSessionStore = create<SessionStore>((set, get) => {
 
     stopSession: async (sessionId) => {
       try { await invoke("stop_session", { sessionId }); } catch { /* ignore */ }
+      // 进程停了, 未结算的实时量丢弃 (半截数据留着只会让速度显示失真)
+      resetLive(sessionId);
       // detach: 停 pi 进程但保留 entries (秒切缓存); sessionOrder 保留让侧边栏 openId 仍命中快路径
       // uiRequests 同步清空: 进程没了 pi 侧 pending 自动 reject, 前端不能留悬挂弹窗
       patch(sessionId, { detached: true, isStreaming: false, currentAssistantId: null, uiRequests: [] });
@@ -209,6 +240,8 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         const toRemove = detachedIds.slice(0, detachedIds.length - ENTRY_CACHE_LIMIT);
         const sessions = { ...state.sessions };
         toRemove.forEach((sid) => delete sessions[sid]);
+        // 同步清速度累加器: live Map 在 zustand 之外, 不跟着 prune 清就会随会话淘汰持续涨
+        toRemove.forEach((sid) => dropSession(sid));
         const sessionOrder = state.sessionOrder.filter((sid) => !toRemove.includes(sid));
         const activeSessionId = toRemove.includes(state.activeSessionId ?? "")
           ? (sessionOrder[sessionOrder.length - 1] ?? null)
@@ -219,6 +252,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
 
     // 真删前端 state (不调 invoke): 删会话文件 / 移除项目 / 关新会话节点用, 进程已由 stopSession 停
     removeSessionState: (sessionId) => {
+      dropSession(sessionId);   // 同步清速度累加器, 防 Map 泄漏
       set((state) => {
         const sessions = { ...state.sessions };
         delete sessions[sessionId];
@@ -266,6 +300,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
 
     // LRU 淘汰 / 进程异常退出通知: 标记 detached, entries 保留 (秒切缓存), 切回走 reattach
     markDetached: (sessionId: string) => {
+      resetLive(sessionId);
       patch(sessionId, { detached: true, isStreaming: false, currentAssistantId: null, uiRequests: [] });
     },
 
@@ -439,10 +474,12 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           // 无条件重置会把重试前已累计的 token 抹掉
           const prev = s.turnStats;
           const fresh = !prev || prev.elapsedMs !== null;
+          if (fresh) startRound(sessionId);
           patch(sessionId, {
             isStreaming: true,
             turnStats: fresh
-              ? { input: 0, output: 0, cost: 0, liveInput: 0, liveOutput: 0, startedAt: Date.now(), elapsedMs: null }
+              ? { input: 0, output: 0, cost: 0, liveInput: 0, liveOutput: 0, startedAt: Date.now(), elapsedMs: null,
+                  genStartedAt: null, deltaCounts: { thinking: 0, text: 0, toolcall: 0 }, speed: null, calls: [] }
               : prev,
           });
           break;
@@ -464,14 +501,18 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           const cur = get().sessions[sessionId];
           if (!cur) break;
           // 顶层 usage 是当前这条消息的最新累计 (rpc.md: message_update 已移除 message 字段和
-          // assistantMessageEvent.partial, 这是唯一可用的实时量)。provider 不在流式中报 usage 时
-          // 会一直是 0, 等 message_end 一次性跳上去, 属预期行为
+          // assistantMessageEvent.partial, 这是唯一可用的实时量)。
+          // 实测: provider 在流式期间上报的 usage 恒为 0 (169 个事件里仅 text_end 那一个非零),
+          // 所以这里不能靠 usage 判断有无进展 —— 实时速度走 delta 计数估算 (见 lib/speed.ts)。
           const u = event.usage as { input?: number; output?: number } | undefined;
           if (cur.turnStats && u && ((u.input ?? 0) > 0 || (u.output ?? 0) > 0)) {
             patch(sessionId, {
               turnStats: { ...cur.turnStats, liveInput: u.input ?? 0, liveOutput: u.output ?? 0 },
             });
           }
+          // delta 计数落在模块级累加器里 (零分配零通知): 若每个 token 都 patch turnStats,
+          // 高速模型下每秒会触发数百次 React 重渲染 —— 这是本次修复的既有性能问题
+          noteDelta(sessionId, ev?.type, !!ev?.delta, Date.now());
           if (!cur.currentAssistantId || !ev?.delta) break;
           if (ev.type === "text_delta") {
             patch(sessionId, { entries: cur.entries.map((e) =>
@@ -494,6 +535,10 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           const cur = get().sessions[sessionId];
           if (!cur) break;
           const fields: Partial<SessionState> = { currentAssistantId: null };
+          // 整条 message_end 都要结算速度: settle(0) 只清单次调用状态不记入统计。
+          // 若只在有 usage 时调, usage 缺失那条的 genStartedAt 会残留, 下一条的生成窗口
+          // 会把两条消息的时间连起来算 (窗口虚长 → 速度虚低)
+          const settledSpeed = msg?.role === "assistant" ? settle(sessionId, msg.usage?.output ?? 0, Date.now()) : null;
           // message_end 的 usage 是该条消息的权威值 (rpc.md), 并入 committed 后 live 归零
           if (cur.turnStats && msg?.role === "assistant" && msg.usage) {
             fields.turnStats = {
@@ -503,6 +548,17 @@ export const useSessionStore = create<SessionStore>((set, get) => {
               cost: cur.turnStats.cost + (msg.usage.cost?.total ?? 0),
               liveInput: 0,
               liveOutput: 0,
+              genStartedAt: null,
+              deltaCounts: settledSpeed?.counts ?? cur.turnStats.deltaCounts,
+              calls: settledSpeed?.calls ?? cur.turnStats.calls,
+              speed: settledSpeed?.speed ?? cur.turnStats.speed,
+            };
+          } else if (cur.turnStats && settledSpeed) {
+            // 无 usage: 只清单次调用状态, 不动 committed 与 calls
+            fields.turnStats = {
+              ...cur.turnStats,
+              genStartedAt: null,
+              deltaCounts: settledSpeed.counts,
             };
           }
           // pi 契约: 失败编码为最终 AssistantMessage 的 stopReason=error + errorMessage
@@ -616,10 +672,14 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           const cur = get().sessions[sessionId];
           const settled: Partial<SessionState> = { isStreaming: false, currentAssistantId: null };
           if (cur?.turnStats?.startedAt) {
+            // 定格: 用只含已结算调用的加权平均, 不把最后一个未校正的估算值留在界面上
+            const fin = finishRound(sessionId);
             settled.turnStats = {
               ...cur.turnStats,
               liveInput: 0, liveOutput: 0,
+              genStartedAt: null,
               elapsedMs: Date.now() - cur.turnStats.startedAt,
+              ...(fin ? { calls: fin.calls, speed: fin.speed } : {}),
             };
           }
           // 兜底: 异常路径下 auto_retry_end 可能没到, 重试条目会一直挂着显示「重试中」
@@ -715,6 +775,10 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     dismissNotification: (id) => {
       set((state) => ({ notifications: state.notifications.filter((n) => n.id !== id) }));
     },
+
+    // 速度采样: 实时累加器不在 store 里 (高频写入刻意不走 zustand, 避免每 token 一次重渲染),
+    // 由 InputBar 的 tick 主动拉取。轮次已结束时累加器已空, 返回 null 让界面读 store 的定格值
+    sampleSpeed: (sessionId) => liveSpeedFor(sessionId, Date.now()),
   };
 });
 
