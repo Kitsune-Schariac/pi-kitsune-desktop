@@ -54,6 +54,26 @@ export interface TurnStats {
   deltaCounts: DeltaCounts;     // 当前调用的 delta 计数 (实时估算用)
   speed: number | null;         // 当前速度: 流式中为估算值, settled 后为加权平均
   calls: CallRecord[];          // 本轮各次调用的结算记录 (算加权平均)
+
+  // ── 缓存命中率 ──
+  // 本轮最近一次调用的请求侧用量; null = 本轮尚无带 usage 的调用 (界面隐藏 CH)
+  lastCache: LastCacheUsage | null;
+  // 本轮是否出现过缓存活动。会话级累计 (get_session_stats) 是 CH 显示条件的主依据,
+  // 但它只在 agent_settled 才刷新 —— 没有这个字段的话首轮流式全程看不到 CH。
+  // provider 不支持缓存时它保持 false, CH 仍然隐藏。
+  cacheSeen: boolean;
+}
+
+/**
+ * 最近一次 LLM 调用的请求侧用量。
+ *
+ * 为什么不用会话级 tokenStats 算: 底部统计条整体是「本轮」语义, CH 必须随 agent_start 重置,
+ * 否则新一轮开始时会显示上一轮的命中率; 而 tokenStats (get_session_stats) 是整会话累计。
+ */
+export interface LastCacheUsage {
+  input: number;
+  cacheRead: number;
+  cacheWrite: number;
 }
 
 /** delta 事件计数: text/thinking 与 output token 1:1, toolcall 约 2.9:1 */
@@ -479,7 +499,8 @@ export const useSessionStore = create<SessionStore>((set, get) => {
             isStreaming: true,
             turnStats: fresh
               ? { input: 0, output: 0, cost: 0, liveInput: 0, liveOutput: 0, startedAt: Date.now(), elapsedMs: null,
-                  genStartedAt: null, deltaCounts: { thinking: 0, text: 0, toolcall: 0 }, speed: null, calls: [] }
+                  genStartedAt: null, deltaCounts: { thinking: 0, text: 0, toolcall: 0 }, speed: null, calls: [],
+                  lastCache: null, cacheSeen: false }
               : prev,
           });
           break;
@@ -530,7 +551,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
             role?: string;
             stopReason?: string;
             errorMessage?: string;
-            usage?: { input?: number; output?: number; cost?: { total?: number } };
+            usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; cost?: { total?: number } };
           } | undefined;
           const cur = get().sessions[sessionId];
           if (!cur) break;
@@ -546,6 +567,17 @@ export const useSessionStore = create<SessionStore>((set, get) => {
               input: cur.turnStats.input + (msg.usage.input ?? 0),
               output: cur.turnStats.output + (msg.usage.output ?? 0),
               cost: cur.turnStats.cost + (msg.usage.cost?.total ?? 0),
+              // 覆盖而非累加: 命中率只对「最近一次请求」有意义 (口径见 InputBar 的 CH 展示)。
+              // 无 usage 的 message_end 走 else 分支不会碰这个字段 —— 保留上一次的真实值,
+              // 与 pi 官方 footer 取「最后一条带 usage 的 assistant」一致, 也避免 CH 闪断
+              lastCache: {
+                input: msg.usage.input ?? 0,
+                cacheRead: msg.usage.cacheRead ?? 0,
+                cacheWrite: msg.usage.cacheWrite ?? 0,
+              },
+              cacheSeen: cur.turnStats.cacheSeen
+                || (msg.usage.cacheRead ?? 0) > 0
+                || (msg.usage.cacheWrite ?? 0) > 0,
               liveInput: 0,
               liveOutput: 0,
               genStartedAt: null,
