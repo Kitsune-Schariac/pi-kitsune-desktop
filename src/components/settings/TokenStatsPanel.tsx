@@ -2,8 +2,8 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   ArrowDownToLine, ArrowUpFromLine, Bot, ChevronDown, ChevronRight, Coins,
-  Database, DatabaseZap, DollarSign, EyeOff, FolderKanban, Loader2,
-  MessageSquare, AlertCircle,
+  Database, DollarSign, EyeOff, FolderKanban, Loader2,
+  MessageSquare, AlertCircle, Percent,
 } from "lucide-react";
 import { StatsFilterBar, projectLabel } from "./StatsFilterBar";
 import {
@@ -44,6 +44,18 @@ interface TokenStatsResult {
 // 数值展示: token 用千分位, 花费保留 4 位小数
 const fmt = (n: number) => n.toLocaleString();
 const fmtCost = (n: number) => `$${n.toFixed(4)}`;
+
+/**
+ * 区间累计口径的缓存命中率 —— ΣcacheRead ÷ Σ(input + cacheRead + cacheWrite)。
+ *
+ * 注意与输入框实时栏的 CH 不是同一个口径: 这里回答「这段时间缓存省了多少」, 那边回答
+ * 「缓存此刻生效吗」(最近一次调用)。两者数值本来就不应相等, UI 上用 title 标清楚。
+ * 分母为 0 (该范围无数据 / provider 不上报缓存) 时返回占位符, 不出 NaN。
+ */
+const hitRate = (cacheRead: number, cacheWrite: number, input: number) => {
+  const denom = input + cacheRead + cacheWrite;
+  return denom > 0 ? `${((cacheRead / denom) * 100).toFixed(1)}%` : "—";
+};
 
 // 来源筛选哨兵 (与 Rust 侧 aggregate 的 agt 判定一一对应)
 const SRC_MAIN = "__main__";
@@ -168,25 +180,36 @@ export function TokenStatsPanel() {
         </select>
       </StatsFilterBar>
 
-      {/* 汇总卡片 */}
+      {/* 汇总卡片: 固定 8 张 (4×2 网格)。缓存读/写合并为一张, 腾出的格子给命中率 ——
+          命中的相对值比读写的绝对值更能回答「缓存到底好不好」 */}
       {summary && (
         <div className="grid grid-cols-4 gap-2">
           {[
             { label: "输入", value: fmt(summary.input), icon: ArrowDownToLine },
             { label: "输出", value: fmt(summary.output), icon: ArrowUpFromLine },
-            { label: "缓存读", value: fmt(summary.cacheRead), icon: Database },
-            { label: "缓存写", value: fmt(summary.cacheWrite), icon: DatabaseZap },
+            {
+              label: "缓存", value: fmt(summary.cacheRead + summary.cacheWrite), icon: Database,
+              sub: `读 ${fmt(summary.cacheRead)} · 写 ${fmt(summary.cacheWrite)}`,
+              title: "缓存读 + 缓存写合计",
+            },
+            {
+              label: "缓存命中率", icon: Percent,
+              value: hitRate(summary.cacheRead, summary.cacheWrite, summary.input),
+              sub: "区间累计",
+              title: "区间累计口径: ΣcacheRead ÷ Σ(input + cacheRead + cacheWrite), 缓存写入按未命中计。\n与输入框底部的 CH (最近一次调用口径) 不同, 两者数值不应相等",
+            },
             { label: "总计", value: fmt(summary.total), icon: Coins },
             { label: "花费", value: fmtCost(summary.cost), icon: DollarSign },
             { label: "消息数", value: fmt(summary.messageCount), icon: MessageSquare },
             { label: "会话数", value: fmt(summary.sessionCount), icon: FolderKanban },
-          ].map(({ label, value, icon: Icon }) => (
-            <div key={label} className="rounded-md border border-neutral-200 bg-panel p-3">
+          ].map(({ label, value, icon: Icon, sub, title }) => (
+            <div key={label} className="rounded-md border border-neutral-200 bg-panel p-3" title={title}>
               <div className="mb-1 flex items-center gap-1 text-xs text-neutral-400">
                 <Icon className="h-4 w-4 text-primary-500" />
                 {label}
               </div>
               <div className="text-num font-semibold tabular-nums text-neutral-900">{value}</div>
+              {sub && <div className="mt-1 text-mini tabular-nums text-neutral-400">{sub}</div>}
             </div>
           ))}
         </div>
@@ -223,7 +246,7 @@ export function TokenStatsPanel() {
                     key={d.date}
                     className="group relative flex-1 rounded-t-sm bg-primary-400/70 transition duration-fast ease-out hover:bg-primary-500"
                     style={{ height: `${Math.max((d.total / max) * 100, 1.5)}%` }}
-                    title={`${d.date} · ${fmt(d.total)} tokens · ${fmt(d.messageCount)} 条消息`}
+                    title={`${d.date} · ${fmt(d.total)} tokens · ${fmt(d.messageCount)} 条消息 · 命中率 ${hitRate(d.cacheRead, d.cacheWrite, d.input)}`}
                   />
                 ))}
               </div>
@@ -243,7 +266,7 @@ export function TokenStatsPanel() {
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-neutral-50 text-left text-neutral-400">
                 <tr>
-                  {["时间", "项目 / 来源", "模型", "输入", "输出", "缓存", "总计", "花费"].map((h) => (
+                  {["时间", "项目 / 来源", "模型", "输入", "输出", "缓存", "命中", "总计", "花费"].map((h) => (
                     <th key={h} className="whitespace-nowrap px-3 py-2 font-medium">{h}</th>
                   ))}
                 </tr>
@@ -252,16 +275,17 @@ export function TokenStatsPanel() {
                 {topRows.map((s) => {
                   const kids = childrenOf.get(s.path) ?? [];
                   const open = expanded.has(s.path);
-                  // 顶层行数值 = 自身 + 子代理合计, 一眼能看到这轮对话的真实总花费
+                  // 顶层行数值 = 自身 + 子代理合计, 一眼能看到这轮对话的真实总花费。
+                  // cacheRead/cacheWrite 分开累计: 命中率要的是 read 单独的值, 不能像「缓存」列那样合并
                   const sum = kids.reduce(
                     (a, k) => ({
                       input: a.input + k.input, output: a.output + k.output,
-                      cache: a.cache + k.cacheRead + k.cacheWrite,
+                      cacheRead: a.cacheRead + k.cacheRead, cacheWrite: a.cacheWrite + k.cacheWrite,
                       total: a.total + k.total, cost: a.cost + k.cost,
                     }),
                     {
                       input: s.input, output: s.output,
-                      cache: s.cacheRead + s.cacheWrite, total: s.total, cost: s.cost,
+                      cacheRead: s.cacheRead, cacheWrite: s.cacheWrite, total: s.total, cost: s.cost,
                     },
                   );
                   const kidTotal = sum.total - s.total;
@@ -312,7 +336,8 @@ export function TokenStatsPanel() {
                         </td>
                         <td className="px-3 py-2 tabular-nums">{fmt(sum.input)}</td>
                         <td className="px-3 py-2 tabular-nums">{fmt(sum.output)}</td>
-                        <td className="px-3 py-2 tabular-nums">{fmt(sum.cache)}</td>
+                        <td className="px-3 py-2 tabular-nums">{fmt(sum.cacheRead + sum.cacheWrite)}</td>
+                        <td className="px-3 py-2 tabular-nums">{hitRate(sum.cacheRead, sum.cacheWrite, sum.input)}</td>
                         <td className="px-3 py-2 font-medium tabular-nums text-neutral-900">
                           {fmt(sum.total)}
                           {kidTotal > 0 && (
@@ -343,6 +368,7 @@ export function TokenStatsPanel() {
                             <td className="px-3 py-2 tabular-nums">{fmt(k.input)}</td>
                             <td className="px-3 py-2 tabular-nums">{fmt(k.output)}</td>
                             <td className="px-3 py-2 tabular-nums">{fmt(k.cacheRead + k.cacheWrite)}</td>
+                            <td className="px-3 py-2 tabular-nums">{hitRate(k.cacheRead, k.cacheWrite, k.input)}</td>
                             <td className="px-3 py-2 tabular-nums">{fmt(k.total)}</td>
                             <td className="px-3 py-2 tabular-nums">{fmtCost(k.cost)}</td>
                           </tr>
