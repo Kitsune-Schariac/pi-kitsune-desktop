@@ -12,6 +12,7 @@
     "core:event:allow-emit-to",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-read-image",
+    "clipboard-manager:allow-write-text",
     "dialog:allow-open"
   ]
 }

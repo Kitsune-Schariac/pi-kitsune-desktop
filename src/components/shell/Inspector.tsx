@@ -11,6 +11,7 @@ import { useResizableWidth } from "../../hooks/useResizableWidth";
 import { GitSidebarPanel } from "../GitSidebarPanel";
 import { FleetSidebarPanel } from "../FleetSidebarPanel";
 import { TrellisSidebarPanel } from "../TrellisSidebarPanel";
+import { StepDetail } from "../inspector/StepDetail";
 
 /**
  * 检查器 (框架 C 第四列): 详情 / Git / 舰队 / 任务四个页签。
@@ -29,6 +30,19 @@ export function Inspector() {
     const id = s.activeSessionId;
     return id ? s.sessions[id]?.cwd : undefined;
   });
+
+  // 详情页签的选中步骤: 选中 id 在当前会话 entries 里找不到 (切会话 / 历史刷新丢条目) 时回落概览占位
+  const selectedStepId = useUiStore((s) => s.selectedStepId);
+  const entries = useSessionStore((s) =>
+    s.activeSessionId ? s.sessions[s.activeSessionId]?.entries : undefined,
+  );
+  const selectedEntry = useMemo(
+    () =>
+      selectedStepId && entries
+        ? entries.find((e) => e.id === selectedStepId && e.kind === "tool") ?? null
+        : null,
+    [selectedStepId, entries],
+  );
   const gitStatus = useGitStore((s) => (cwd ? s.statusByCwd[cwd] ?? null : null));
   const gitReady = gitStatus !== null;
   const gitIsRepo = gitStatus?.is_repo ?? false;
@@ -137,11 +151,15 @@ export function Inspector() {
 
       <div className="flex min-h-0 flex-1 flex-col">
         {inspectorTab === "detail" ? (
-          // 概览 / 步骤详情是阶段 4 的实现范围
-          <div className="min-h-0 flex-1 overflow-y-auto p-5">
-            <h2 className="text-title font-medium text-[var(--fg)]">会话概览</h2>
-            <p className="mt-2 text-label text-[var(--fg-4)]">阶段 4 实现</p>
-          </div>
+          selectedEntry ? (
+            <StepDetail key={selectedEntry.id} entry={selectedEntry} cwd={cwd} />
+          ) : (
+            // 概览是阶段 4 的实现范围; 未选中步骤时占位
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <h2 className="text-title font-medium text-[var(--fg)]">会话概览</h2>
+              <p className="mt-2 text-label text-[var(--fg-4)]">阶段 4 实现</p>
+            </div>
+          )
         ) : inspectorTab === "git" ? (
           <GitSidebarPanel cwd={cwd} />
         ) : inspectorTab === "fleet" ? (
