@@ -2108,6 +2108,72 @@ input[type="range"]:disabled::-webkit-slider-thumb {
   .lorenz-wrap, .lorenz-flow { animation: none; }
 }
 
+/* ============================================================
+   设置窗 (全屏覆盖层, design §8): 工坊 = 贴边两栏 (侧栏 pane / 内容 bg);
+   舞台 = 浮在壁纸上的两张卡。舞台上 --bg 是 transparent, 设置窗里全是表单与
+   长文本, 内容区必须换 --raise 实底托住可读性 (不用 backdrop-filter, 同 §2.4)
+   ============================================================ */
+.setwin {
+  background: var(--pane);
+}
+.setwin-nav {
+  background: var(--pane);
+  border-right: 1px solid var(--line);
+}
+.setwin-main {
+  background: var(--bg);
+}
+[data-style="stage"] .setwin {
+  gap: 10px;
+  padding: 10px 12px 12px;
+  /* 幕底叠暗幕浓度: 设置窗下仍透一点壁纸, 两张卡浮在其上 */
+  background: color-mix(in oklch, var(--scrim-color) calc(var(--scrim) * 100%), transparent);
+}
+[data-style="stage"] .setwin-nav {
+  border-right: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+[data-style="stage"] .setwin-main {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  background: var(--raise);
+}
+
+/* 设置窗导航项: 工坊 = raise 底 + 左缘 2px accent 竖条; 舞台 = accent-soft 胶囊 */
+.setwin-navitem {
+  position: relative;
+}
+.setwin-navitem:hover {
+  background: var(--hover);
+}
+.setwin-navitem.on,
+.setwin-navitem.on:hover {
+  background: var(--raise);
+}
+.setwin-navitem.on::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+}
+[data-style="stage"] .setwin-navitem {
+  border-radius: 12px;
+}
+[data-style="stage"] .setwin-navitem.on {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 40%, transparent);
+}
+[data-style="stage"] .setwin-navitem.on::before {
+  display: none;
+}
+
 /* 设置视图进场 / 分区切换淡入: 整窗进场位移大一点表明"切了界面", 分区切换只用轻量版
    —— 设置界面要稳, 动效只作方向提示, 不做夸张转场 */
 @keyframes viewIn {

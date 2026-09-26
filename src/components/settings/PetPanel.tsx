@@ -6,7 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 // 设置分区标题: 与 ThemePanel 同款 (mini 档 + mono + 大写 + faint)
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="mb-3 font-mono text-mini font-semibold uppercase tracking-[0.09em] text-[var(--faint)]">
+    <h3 className="mb-3 font-mono text-mini font-semibold uppercase tracking-[0.09em] text-[var(--fg-4)]">
       {children}
     </h3>
   );
@@ -37,10 +37,10 @@ export function PetPanel() {
     <div className="space-y-6 p-6">
       <section>
         <SectionTitle>桌面宠物</SectionTitle>
-        <p className="-mt-1 mb-3 text-body text-[var(--muted)]">
+        <p className="-mt-1 mb-3 text-body text-[var(--fg-2)]">
           一个置顶的小窗角色，跟着会话状态换动作：思考、执行工具、报错、待机。
         </p>
-        <label className="flex cursor-pointer items-center gap-2.5 text-body text-[var(--fg)]">
+        <label className="flex cursor-pointer items-center gap-[10px] text-body text-[var(--fg)]">
           <input
             type="checkbox"
             checked={enabled}
@@ -50,7 +50,7 @@ export function PetPanel() {
           />
           启用桌宠
           {pets.length === 0 && (
-            <span className="text-label text-[var(--faint)]">（没有可用的宠物包）</span>
+            <span className="text-label text-[var(--fg-4)]">（没有可用的宠物包）</span>
           )}
         </label>
       </section>
@@ -61,18 +61,18 @@ export function PetPanel() {
           <button
             onClick={onRefresh}
             disabled={refreshing}
-            className="flex items-center gap-1.5 rounded-md border border-[var(--border-soft)] px-2 py-1 text-label text-[var(--muted)] transition duration-fast hover:border-[var(--border)] hover:text-[var(--fg)]"
+            className="flex items-center gap-[6px] rounded-md border border-[var(--line)] px-2 py-1 text-label text-[var(--fg-2)] transition duration-fast ease-out hover:border-[var(--line-2)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-[14px] w-[14px] ${refreshing ? "animate-spin" : ""}`} />
             刷新列表
           </button>
         </div>
 
         {pets.length === 0 ? (
-          <div className="rounded-md border border-dashed border-[var(--border-soft)] px-4 py-6 text-center">
-            <Cat className="mx-auto mb-2 h-6 w-6 text-[var(--faint)]" />
-            <p className="text-body text-[var(--muted)]">还没有宠物包</p>
-            <p className="mt-1 text-label text-[var(--faint)]">
+          <div className="rounded-md border border-dashed border-[var(--line)] px-4 py-6 text-center">
+            <Cat className="mx-auto mb-2 h-6 w-6 text-[var(--fg-4)]" />
+            <p className="text-body text-[var(--fg-2)]">还没有宠物包</p>
+            <p className="mt-1 text-label text-[var(--fg-4)]">
               把宠物包放进 <code className="font-mono">~/.pi-kitsune/pets/&lt;id&gt;/</code>
               ，每个目录含 pet.json 与精灵图
             </p>
@@ -86,18 +86,18 @@ export function PetPanel() {
                   key={p.id}
                   onClick={() => setPetId(p.id)}
                   aria-pressed={isActive}
-                  className={`rounded-md border px-3 py-2.5 text-left transition duration-fast ease-out ${
+                  className={`rounded-lg border px-3 py-[10px] text-left transition duration-fast ease-out ${
                     isActive
-                      ? "border-[var(--accent)] ring-2 ring-[color-mix(in_oklch,var(--accent)_25%,transparent)]"
-                      : "border-[var(--border-soft)] hover:border-[var(--border)]"
+                      ? "border-[var(--accent)] ring-2 ring-[var(--accent-soft)]"
+                      : "border-[var(--line)] hover:border-[var(--line-2)]"
                   }`}
                   title={p.description || p.display_name}
                 >
                   <div className="flex items-center gap-2">
-                    <Cat className="h-4 w-4 shrink-0 text-[var(--muted)]" />
+                    <Cat className="h-4 w-4 shrink-0 text-[var(--fg-3)]" />
                     <span className="truncate text-body text-[var(--fg)]">{p.display_name}</span>
                   </div>
-                  <p className="mt-1 line-clamp-2 text-label text-[var(--faint)]">
+                  <p className="mt-1 line-clamp-2 text-label text-[var(--fg-4)]">
                     {p.description || `${p.frame_width}×${p.frame_height}`}
                   </p>
                 </button>
@@ -110,7 +110,7 @@ export function PetPanel() {
       <section>
         <SectionTitle>大小</SectionTitle>
         <label className="block">
-          <div className="mb-1 flex items-center justify-between text-label text-[var(--muted)]">
+          <div className="mb-1 flex items-center justify-between text-label text-[var(--fg-2)]">
             <span>缩放</span>
             <span className="tabular-nums text-[var(--fg)]">{zoom.toFixed(1)}x</span>
           </div>
@@ -124,7 +124,7 @@ export function PetPanel() {
             className="w-full cursor-pointer accent-[var(--accent)]"
           />
         </label>
-        <p className="mt-1.5 text-label text-[var(--faint)]">
+        <p className="mt-[6px] text-label text-[var(--fg-4)]">
           在桌宠上滚滚轮也能缩放；左键拖动移动位置，右键出菜单。
         </p>
       </section>
@@ -132,7 +132,7 @@ export function PetPanel() {
       <section>
         <button
           onClick={() => void invoke("open_pets_dir")}
-          className="flex items-center gap-2 rounded-md border border-[var(--border-soft)] px-3 py-2 text-body text-[var(--muted)] transition duration-fast hover:border-[var(--border)] hover:text-[var(--fg)]"
+          className="flex items-center gap-2 rounded-md border border-[var(--line)] px-3 py-2 text-body text-[var(--fg-2)] transition duration-fast ease-out hover:border-[var(--line-2)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
         >
           <FolderOpen className="h-4 w-4" />
           打开宠物目录

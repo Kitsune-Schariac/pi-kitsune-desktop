@@ -47,14 +47,14 @@ export function SettingsWindow({
   const current = NAV_ITEMS.find((it) => it.key === tab)!;
 
   return (
-    <div data-overlay className="absolute inset-0 z-50 flex view-in bg-[var(--surface-sunken)]">
-      {/* 侧栏: 基座色承接整窗底色, 只靠右侧分隔线切出导航区 */}
-      <aside className="flex w-60 shrink-0 flex-col border-r border-[var(--border)]">
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border-soft)] px-5">
+    <div data-overlay className="setwin absolute inset-0 z-50 flex view-in">
+      {/* 侧栏: 工坊 = 贴边列 (pane 底); 舞台 = 左上浮卡 (index.css 按 data-style 分支) */}
+      <aside className="setwin-nav flex w-60 shrink-0 flex-col">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--line)] px-5">
           <span className="text-title font-semibold text-[var(--fg)]">设置</span>
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-[var(--faint)] transition duration-fast ease-out hover:bg-[var(--surface-base)] hover:text-[var(--fg)]"
+            className="grid h-7 w-7 place-items-center rounded-md text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
             title="关闭 (Esc)"
           >
             <X className="h-4 w-4" />
@@ -68,35 +68,27 @@ export function SettingsWindow({
                 key={key}
                 onClick={() => setTab(key)}
                 aria-current={active ? "page" : undefined}
-                className={`relative flex w-full items-start gap-2 rounded-md px-3 py-2 text-left transition duration-fast ease-out ${
-                  active
-                    ? "bg-[var(--sel-bg)]"
-                    : "hover:bg-[color-mix(in_oklch,var(--surface-base)_55%,transparent)]"
+                className={`setwin-navitem flex w-full items-start gap-2 rounded-md px-3 py-2 text-left transition duration-fast ease-out ${
+                  active ? "on" : ""
                 }`}
                 title={desc}
               >
-                {/* 选中指示条: 绝对定位在条目左缘, 不参与文字排版 */}
-                {active && (
-                  <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-[var(--accent)]" />
-                )}
                 <Icon
                   className={`mt-1 h-4 w-4 shrink-0 ${
-                    active ? "text-[var(--accent)]" : "text-[var(--faint)]"
+                    active ? "text-[var(--accent)]" : "text-[var(--fg-4)]"
                   }`}
                 />
                 <span className="min-w-0">
                   <span
                     className={`block truncate text-title ${
-                      active ? "font-semibold text-[var(--fg)]" : "text-[var(--muted)]"
+                      active ? "font-semibold text-[var(--fg)]" : "text-[var(--fg-2)]"
                     }`}
                   >
                     {title}
                   </span>
                   <span
                     className={`mt-1 block text-mini leading-snug ${
-                      active
-                        ? "text-[color-mix(in_oklch,var(--muted)_82%,var(--fg))]"
-                        : "text-[var(--faint)]"
+                      active ? "text-[var(--fg-3)]" : "text-[var(--fg-4)]"
                     }`}
                   >
                     {desc}
@@ -107,18 +99,19 @@ export function SettingsWindow({
           })}
         </nav>
         {/* 底部版本行 (改版稿 setwin-ver) */}
-        <div className="shrink-0 border-t border-[var(--border-soft)] px-5 py-3 font-mono text-micro text-[var(--faint)]">
+        <div className="shrink-0 border-t border-[var(--line)] px-5 py-3 font-mono text-micro text-[var(--fg-4)]">
           Pi Kitsune · 设置
         </div>
       </aside>
 
-      {/* 内容区: 内容底色比侧栏高一档, 两栏靠这一档色差分层 */}
-      <div className="flex min-w-0 flex-1 flex-col bg-[var(--surface-base)]">
+      {/* 内容区: 工坊 = --bg; 舞台 = --raise 实底卡 —— 舞台 --bg 透明, 表单与长文本
+          必须靠实底托住可读性 (index.css .setwin-main 按 data-style 分支) */}
+      <div className="setwin-main flex min-w-0 flex-1 flex-col">
         {/* 页头: 大标题 head 档 + desc; 唯一大标题 (面板内不再自带 h2) */}
-        <header className="flex h-16 shrink-0 flex-col justify-center gap-1 border-b border-[var(--border-soft)] px-6">
+        <header className="flex h-16 shrink-0 flex-col justify-center gap-1 border-b border-[var(--line)] px-6">
           <h2 className="text-head font-semibold text-[var(--fg)]">
             {current.title}
-            <span className="ml-3 align-baseline text-label font-normal text-[var(--faint)]">
+            <span className="ml-3 align-baseline text-label font-normal text-[var(--fg-4)]">
               {current.desc}
             </span>
           </h2>
