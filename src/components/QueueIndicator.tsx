@@ -36,7 +36,7 @@ export function QueueIndicator({ steering, followUp }: { steering: string[]; fol
         <>
           {/* 透明遮罩: 点击任意处关闭 (与其它弹层同模式) */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-full left-0 z-50 mb-2 max-h-72 w-80 max-w-[90vw] overflow-y-auto rounded-lg border border-line bg-raise py-1 shadow-[var(--shadow)]">
+          <div className="absolute bottom-full left-0 z-50 mb-2 max-h-72 w-80 max-w-[90vw] overflow-y-auto rounded-lg border border-line bg-popover py-1 shadow-[var(--shadow)]">
             <QueueGroup
               label="steer 指导"
               tone="accent"

@@ -17,10 +17,10 @@ export function PackagesPanel() {
       .catch((e) => setError(String(e)));
   }, []);
 
-  if (error) return <p className="p-5 text-sm text-red-500">{error}</p>;
+  if (error) return <p className="p-5 text-sm text-[var(--err)]">{error}</p>;
   if (!packages) {
     return (
-      <div className="flex items-center justify-center gap-2 p-10 text-sm text-neutral-400">
+      <div className="flex items-center justify-center gap-2 p-10 text-sm text-[var(--fg-4)]">
         <Loader2 className="h-4 w-4 animate-spin" /> 加载中…
       </div>
     );
@@ -29,12 +29,12 @@ export function PackagesPanel() {
   return (
     <div className="space-y-6 p-5">
       <section>
-        <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-neutral-700">
-          <Package className="h-4 w-4 text-neutral-500" />
+        <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--fg-2)]">
+          <Package className="h-4 w-4 text-[var(--fg-3)]" />
           已安装 Package
         </h3>
         {packages.length === 0 ? (
-          <p className="rounded-md bg-neutral-50 px-3 py-4 text-center text-sm text-neutral-400">
+          <p className="rounded-md bg-[var(--well)] px-3 py-4 text-center text-sm text-[var(--fg-4)]">
             未配置 package
           </p>
         ) : (
@@ -42,9 +42,9 @@ export function PackagesPanel() {
             {packages.map((p) => (
               <li
                 key={p}
-                className="flex items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-700"
+                className="flex items-center gap-2 rounded-md border border-[var(--line)] px-3 py-2 text-sm text-[var(--fg-2)]"
               >
-                <Package className="h-4 w-4 shrink-0 text-neutral-500" />
+                <Package className="h-4 w-4 shrink-0 text-[var(--fg-3)]" />
                 <span className="truncate font-mono text-xs" title={p}>{p}</span>
               </li>
             ))}
@@ -53,20 +53,20 @@ export function PackagesPanel() {
       </section>
 
       <section>
-        <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-neutral-700">
-          <Layers className="h-4 w-4 text-neutral-500" />
+        <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--fg-2)]">
+          <Layers className="h-4 w-4 text-[var(--fg-3)]" />
           Provider (models.json)
         </h3>
         {providers && providers.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {providers.map((p) => (
-              <span key={p} className="rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-600">
+              <span key={p} className="rounded-full bg-[var(--well)] px-2 py-1 text-xs text-[var(--fg-2)]">
                 {p}
               </span>
             ))}
           </div>
         ) : (
-          <p className="rounded-md bg-neutral-50 px-3 py-4 text-center text-sm text-neutral-400">
+          <p className="rounded-md bg-[var(--well)] px-3 py-4 text-center text-sm text-[var(--fg-4)]">
             未读取到 provider 配置
           </p>
         )}

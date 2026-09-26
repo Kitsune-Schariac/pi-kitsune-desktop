@@ -86,7 +86,7 @@ export function StageHead() {
             <>
               {/* 透明遮罩: 点击任意处关闭 */}
               <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-full z-50 mt-1 w-36 rounded-md border border-[var(--line)] bg-[var(--raise)] py-1 shadow-md">
+              <div className="absolute right-0 top-full z-50 mt-1 w-36 rounded-md border border-[var(--line)] bg-popover py-1 shadow-md">
                 <button
                   onClick={() => {
                     setMenuOpen(false);

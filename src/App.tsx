@@ -146,6 +146,11 @@ export default function App() {
               onHeightChange={setInputBarH}
               onOpenPanel={setPanel}
             />
+            {/* 扩展 notify 通知条: 挂进主区 (StageHead 下方右上), 不遮输入卡 —
+                详情与合并规则见 NotificationToasts */}
+            {notifications.length > 0 && (
+              <NotificationToasts notifications={notifications} onDismiss={dismissNotification} />
+            )}
           </main>
           {/* 检查器: 有活动会话才渲染 (无会话时详情/面板都无主体可挂) */}
           {active && <Inspector />}
@@ -160,11 +165,6 @@ export default function App() {
           />
         )}
 
-        {/* 扩展 notify 通知条 (fire-and-forget, 右下角自动消失) */}
-        {notifications.length > 0 && (
-          <NotificationToasts notifications={notifications} onDismiss={dismissNotification} />
-        )}
-
         {/* 设置: 独立模态窗口 (与抽屉并存, 不冲突); initialSection 供 Rail 快捷入口定位 */}
         {panel === "settings" && (
           <SettingsWindow onClose={() => setPanel(null)} initialSection={settingsSection} />
@@ -173,7 +173,7 @@ export default function App() {
         {/* Skill / Package 抽屉: settings 走独立模态窗, 不进抽屉, 否则多出空白抽屉 */}
         {(panel === "skills" || panel === "packages") && (
           <div className="absolute inset-0 z-40 flex justify-end bg-black/10">
-            <div className="flex h-full w-[380px] flex-col border-l border-[var(--line)] bg-[var(--raise)] shadow-lg">
+            <div className="flex h-full w-[380px] flex-col border-l border-[var(--line)] bg-popover shadow-[var(--shadow)]">
               <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-3">
                 <span className="font-medium text-fg">
                   {panel === "skills" ? "Skill 管理" : "pi Package"}

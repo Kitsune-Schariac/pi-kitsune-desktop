@@ -103,7 +103,7 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
   }), [filtered, active, onExecute]);
 
   return (
-    <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-lg border border-line bg-raise p-2 shadow-[var(--shadow)]">
+    <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-lg border border-line bg-popover p-2 shadow-[var(--shadow)]">
       <div className="flex items-center justify-between px-2 pb-1">
         <span className="text-mini text-fg-4">命令 · ↑↓ 选择, Enter 执行</span>
         <button

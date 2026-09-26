@@ -155,7 +155,7 @@ export function FileTreePicker({ root, onPick, onDone }: {
 
   return (
     <div className="flex h-60 flex-col">
-      <div className="flex-1 overflow-auto rounded-md border border-line bg-raise p-2">
+      <div className="flex-1 overflow-auto rounded-md border border-line bg-popover p-2">
         <TreeRow
           entry={{ name: root.split(/[\\/]/).pop() || root, path: root, is_dir: true, size: null, mtime: null }}
           depth={0}
