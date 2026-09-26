@@ -8,6 +8,9 @@ import { PetPanel } from "./PetPanel";
 
 type TabKey = "theme" | "pet" | "stats" | "behavior" | "models";
 
+/** 设置分区键: Rail 的「统计」「桌宠」入口直接定位到对应分区 */
+export type SettingsSection = TabKey;
+
 // 导航项结构一致, 用数组 map 渲染; 描述文案同时用于侧栏第二行与内容区 header
 // 图标与文案对齐改版稿设置导航 (setwin-nav-item); 页签大标题走 --fs-head 17px 档
 const NAV_ITEMS: { key: TabKey; icon: LucideIcon; title: string; desc: string }[] = [
@@ -21,9 +24,16 @@ const NAV_ITEMS: { key: TabKey; icon: LucideIcon; title: string; desc: string }[
 // 设置视图: 覆盖整个窗口的全屏界面 (不是浮在会话上的弹窗)
 // 根容器用 absolute inset-0: App.tsx 里它渲染在 #app-root (fixed inset-0) 内部,
 // 由 app-root 提供定位上下文, 铺满即等于切界面, 且天然盖住侧栏与会话区。
-export function SettingsWindow({ onClose }: { onClose: () => void }) {
-  // 当前分区
-  const [tab, setTab] = useState<TabKey>("theme");
+export function SettingsWindow({
+  onClose,
+  initialSection,
+}: {
+  onClose: () => void;
+  /** 打开时定位的分区 (缺省 theme); 由 Rail 的快捷入口传入 */
+  initialSection?: SettingsSection;
+}) {
+  // 当前分区 (初始值只在挂载时取一次: 设置窗是卸载重挂载的覆盖层)
+  const [tab, setTab] = useState<TabKey>(initialSection ?? "theme");
 
   // Esc 关闭 (卸载时移除监听)
   useEffect(() => {

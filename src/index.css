@@ -42,7 +42,7 @@
   --primary-900: oklch(39.123% 0.0845 240.9);
 
   /* 中性色阶: tailwind neutral-* 映射到这些变量, 皮肤 base=dark 时整组反转
-     浅色值 = Tailwind 默认 neutral, 保证现有组件零视觉变化 */
+     浅色值 = Tailwind 默认 neutral, 保证存量组件零视觉变化 */
   --neutral-50: oklch(98.510% 0 0);
   --neutral-100: oklch(97.015% 0 0);
   --neutral-200: oklch(92.191% 0 0);
@@ -55,85 +55,25 @@
   --neutral-900: oklch(20.463% 0 0);
   --neutral-950: oklch(14.479% 0 0);
 
-  /* markdown 语义色: 浅色值 = 原硬编码值 (见下方 markdown 样式引用处) */
-  --text-strong: oklch(21.779% 0 0);    /* 标题 #1a1a1a */
-  --text-muted: oklch(51.028% 0 0);  /* blockquote 正文 #666 */
-  --text-link: oklch(54.615% 0.2152 262.9);     /* 链接 #2563eb */
-  --border-soft: oklch(85.761% 0 0); /* blockquote 边 #d0d0d0 */
-  --border: oklch(86.994% 0 0);      /* 表格边 #d4d4d4 */
-  --table-head: oklch(97.015% 0 0);  /* th 底 #f5f5f5 */
-  --divider: oklch(90.670% 0 0);     /* hr #e0e0e0 */
-  --code-bg: oklch(96.348% 0.0045 258.3);     /* 行内代码底 (冷调基座同源, 替换原 #f0f0f0) */
-  --code-text: var(--primary-700); /* 行内代码字: 引用主题色阶而非写死, 换皮肤时随 primary 变 (替换品红 #d63384) */
-  --shiki-bg: oklch(97.913% 0 0);    /* shiki 覆盖底 #f8f8f8 */
-  --term-text: oklch(52.730% 0.1371 150.1);     /* bash 输出绿字 (green-700): 浅底上要压深才可读 */
-  --text-user: oklch(48.820% 0.2172 264.4);     /* 无气泡模式 user 消息色 (blue-700 同值) */
-  --text-on-bubble: oklch(26.862% 0 0); /* 气泡内文字 (默认气泡为浅底深字, 皮肤可覆盖) */
-  --panel: oklch(100.000% 0 0);       /* 浮层/卡片/输入框实心底 (popup/弹窗/设置窗口) */
-  --scrollbar: oklch(57.268% 0 0);   /* 滚动条滑块色 */
+  /* 字体栈: 默认取工坊一套 —— 界面黑体 / AI 回复文楷 / 代码等宽 / 品牌衬线。
+     等宽栈必须接中文黑体: JetBrains Mono 无 CJK 字形, 不接会回退到系统宋体/雅黑,
+     字距发散 (原型实测)。stage 组会覆盖 --f-voice 与 --f-display。
+     中文禁止套拉丁衬线斜体 (Instrument/Cormorant 的 italic 会让中文出伪斜体),
+     --f-display 只用于纯拉丁/数字 (品牌字标、统计大数字)。 */
+  --f-ui: "Noto Sans SC Variable", "Microsoft YaHei UI", sans-serif;
+  --f-voice: "LXGW WenKai", KaiTi, "STKaiti", serif;
+  --f-mono: "JetBrains Mono", "Noto Sans SC Variable", Consolas, monospace;
+  --f-display: "Instrument Serif", "Times New Roman", serif;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-in: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* 容器底色 + 不透明率 (皮肤/slider 运行时覆盖, 持久化) */
-  --surface: oklch(100.000% 0 0);       /* main 区底 */
-  --sidebar-surface: oklch(100.000% 0 0);
-  --chat-opacity: 0.75;         /* 会话区不透明率 (40%–95%) */
-  --sidebar-opacity: 0.6;       /* 侧边栏不透明率 (20%–90%) */
-  --bubble-bg: oklch(100.000% 0 0);     /* 消息气泡底色, 皮肤可覆盖 */
-  --bubble-opacity: 0.55;       /* 气泡不透明率 (0–1, 不设限) */
-  --bg-blur: 10px;              /* 背景层模糊度 (0–30px, slider 运行时覆盖) */
-
-  /* 表面层次体系: 纯色皮肤靠这三档表面色差 + 两档边框撑起视觉结构,
-     背景图皮肤由 applyTheme 依 has_bg 覆盖为皮肤半透明取值。
-     组件只认这一套变量, 不出现 has_bg 分支判断。 */
-  --surface-sunken: oklch(96.995% 0.0029 264.5);  /* 基座: 侧边栏/抽屉底/空状态区 (冷调中性灰, 色相微偏蓝) */
-  --surface-base:   oklch(100.000% 0 0);  /* 内容: 会话区/面板正文 */
-  --surface-raised: oklch(100.000% 0 0);  /* 浮层: 设置窗/输入卡/通知条/popup */
-  --border-subtle:  oklch(92.758% 0.0058 264.5);  /* 常规分隔 */
-  --border-strong:  oklch(87.570% 0.0059 264.5);  /* 需要明确切分的边界 */
-  --chat-alpha:     1;           /* 会话区实际 alpha (applyTheme 按 has_bg 写) */
-  --sidebar-alpha:  1;           /* 侧边栏实际 alpha */
-  --raised-alpha:   0.8;         /* 浮层实际 alpha */
-  --overlay-alpha:  1;           /* 内容流里的小面板 (工具卡片/user 轻气泡) 底色 alpha:
-                                    纯色皮肤=1 撑层次, 背景图皮肤由 applyTheme 降为半透明保留透视 */
-  --code-alpha:     1;           /* 代码块/行内代码底 alpha: 比 overlay 高一档,
-                                    代码要稳定可读, 但背景图皮肤下仍留一点透视 */
-
-  /* diff 增删色 (恒定语义: 增=绿 删=红)。两个方向分别给值, 不走中性色阶反转 ——
-     中性色阶在暗色下整组反转, 会把"深底浅字"翻成"浅底灰字"。行底叠 --code-alpha 通道,
-     与代码块同源, 背景图皮肤下半透明, 透视与可读性兼顾 */
-  --diff-add-bg: oklch(97.671% 0.0362 152.9);  /* 增行底 #e6ffec (GitHub 浅绿) */
-  --diff-add-fg: oklch(54.635% 0.1442 147.3);    /* 增行字 #22863a (无高亮降级用; 有高亮时 shiki span 覆盖) */
-  --diff-del-bg: oklch(96.312% 0.0186 9.3);  /* 删行底 #ffeef0 (GitHub 浅红) */
-  --diff-del-fg: oklch(54.601% 0.2 23.8);    /* 删行字 #cb2431 */
-
-  /* ===== 语义层 (设计稿 token, 改版 UI 用): 与色阶层并存, 皮肤包可逐项覆盖 =====
-     基础面值取自设计稿 [data-theme=light] 块; 品牌色 fallback 引用色阶 (--primary-*),
-     未声明语义色的皮肤包 (存量第三方) 也能得到与主色一致的 accent;
-     内置皮肤从 P7 起逐套声明显式品牌值覆盖 fallback。
-     注: --surface / --border / --border-soft 与上方既有变量同名, 沿用产品现值不重复声明。 */
-  --bg:        oklch(96% 0.004 285);
-  --surface-2: oklch(93% 0.006 285);
-  --fg:        oklch(24% 0.012 285);
-  --muted:     oklch(48% 0.014 285);
-  --faint:     oklch(62% 0.012 285);
-  --accent:        var(--primary-500);
-  --accent-strong: var(--primary-600);
-  --accent-deep:   color-mix(in oklch, var(--accent) 12%, black);
-  --accent-soft:   color-mix(in oklch, var(--accent) 12%, transparent);
-  --on-accent:     oklch(99% 0.002 60);
-  /* 选中底契约: 亮色 = accent 浅 tint 混白 + 深字; 任何组件禁止拿 --accent-deep 当文字底 */
-  --sel-bg:  color-mix(in oklch, var(--accent) 16%, white);
-  /* 会话纸面基底 (勘误后色相 106.4, 见 design.md §4.4); 有壁纸的亮色皮肤覆盖为半透明值 */
-  --chat-bg: oklch(99.079% 0.0013 106.4);
-
-  /* 状态色 (方向无关, 中明度两向可读): 取设计稿值 */
-  --ok:     oklch(72% 0.15 155);
-  --warn:   oklch(75% 0.15 75);
-  --danger: oklch(66% 0.19 25);
-  --cyan:   oklch(78% 0.11 210);
+  /* 独立状态色 (不进新语义表; ChaosLoader 轨道用): 方向无关的中明度 */
+  --warn: oklch(75% 0.15 75);
+  --cyan: oklch(78% 0.11 210);
   --violet: oklch(70% 0.16 300);
 
-  /* 阴影: 双层带色相 (环境光叠直射光), 色相取基座冷调而非纯黑, 压在彩色底/暗色上不发灰发脏
-     浅色: --shadow-hue 与 --surface-sunken 同源冷调深蓝灰 */
+  /* 旧阴影三档: tailwind shadow-sm/md/lg 映射到它们, 未改写组件 (抽屉/弹层) 依赖;
+     新组件浮起用各风格的 --shadow (见下方四组 token) */
   --shadow-hue: oklch(27.950% 0.0368 260);
   --shadow-sm: 0 1px 2px color-mix(in oklch, var(--shadow-hue) 6%, transparent),
                0 1px 1px color-mix(in oklch, var(--shadow-hue) 4%, transparent);
@@ -143,9 +83,181 @@
                0 2px 6px color-mix(in oklch, var(--shadow-hue) 8%, transparent);
 }
 
+/* ============================================================
+   新语义 token · 四组风格 (design §2)
+   data-style 由皮肤 has_bg 派生 (壁纸 = stage), data-base 来自皮肤 base;
+   皮肤 colors 透传的同名变量写 inline style, 优先级高于这里 → 逐套皮肤
+   只覆盖自己声明的项, 未声明的回落本块默认值
+   ============================================================ */
+
+/* 工坊 × 暗 = 原型 foxfire.html night 块 (逐项照抄) */
+[data-style="atelier"][data-base="dark"] {
+  color-scheme: dark;
+  --bg: oklch(15.2% 0.011 55);
+  --rail: oklch(12.6% 0.01 55);
+  --pane: oklch(16.8% 0.012 55);
+  --well: oklch(12.8% 0.01 55);
+  --raise: oklch(20.5% 0.014 55);
+  --hover: oklch(100% 0 0 / 0.045);
+  --line: oklch(100% 0 0 / 0.07);
+  --line-2: oklch(100% 0 0 / 0.12);
+  --fg: oklch(93% 0.014 80);
+  --fg-2: oklch(79% 0.016 75);
+  --fg-3: oklch(61% 0.015 70);
+  --fg-4: oklch(46% 0.012 65);
+  --accent: oklch(71.4% 0.194 48.3);
+  --accent-2: oklch(84% 0.14 80);
+  --accent-soft: color-mix(in oklch, var(--accent) 13%, transparent);
+  --on-accent: oklch(18% 0.02 50);
+  --ok: oklch(76% 0.12 150);
+  --err: oklch(69% 0.18 27);
+  --add-bg: color-mix(in oklch, var(--ok) 13%, transparent);
+  --del-bg: color-mix(in oklch, var(--err) 14%, transparent);
+  --shadow: 0 18px 50px -12px oklch(0% 0 0 / 0.65), 0 2px 8px oklch(0% 0 0 / 0.4);
+  --scrim: 0.8;
+}
+
+/* 工坊 × 亮 = 原型 foxfire.html paper 块 */
+[data-style="atelier"][data-base="light"] {
+  color-scheme: light;
+  --bg: oklch(97% 0.011 85);
+  --rail: oklch(92.5% 0.016 80);
+  --pane: oklch(95% 0.014 82);
+  --well: oklch(93% 0.014 80);
+  --raise: oklch(99% 0.006 85);
+  --hover: oklch(20% 0.03 50 / 0.05);
+  --line: oklch(25% 0.03 50 / 0.1);
+  --line-2: oklch(25% 0.03 50 / 0.17);
+  --fg: oklch(24% 0.022 50);
+  --fg-2: oklch(36% 0.022 52);
+  --fg-3: oklch(52% 0.02 58);
+  --fg-4: oklch(65% 0.018 62);
+  --accent: oklch(62% 0.19 44);
+  --accent-2: oklch(55% 0.15 55);
+  --accent-soft: color-mix(in oklch, var(--accent) 11%, transparent);
+  --on-accent: oklch(99% 0.005 80);
+  --ok: oklch(55% 0.13 150);
+  --err: oklch(56% 0.19 27);
+  --add-bg: color-mix(in oklch, var(--ok) 13%, transparent);
+  --del-bg: color-mix(in oklch, var(--err) 14%, transparent);
+  --shadow: 0 18px 44px -14px oklch(30% 0.04 50 / 0.28), 0 1px 3px oklch(30% 0.04 50 / 0.12);
+  --scrim: 0.8;
+}
+
+/* 舞台 × 暗 = 原型 wallpaper.html :root + rin 块。
+   面板不走 backdrop-filter 的玻璃感, 靠高不透明度半透明填充 (α 0.72–0.88) + 暗幕实现;
+   tint 取 --stage-tint, 皮肤声明后整套面板色相跟随。--bg 必须透明 (壁纸由 .stage-wall 提供) */
+[data-style="stage"][data-base="dark"] {
+  color-scheme: dark;
+  --bg: transparent;
+  --rail: oklch(13% 0.03 var(--stage-tint, 285) / 0.82);
+  --pane: oklch(15% 0.035 var(--stage-tint, 285) / 0.8);
+  --raise: oklch(19% 0.04 var(--stage-tint, 285) / 0.88);
+  --well: oklch(10% 0.03 var(--stage-tint, 285) / 0.72);
+  --hover: oklch(100% 0 0 / 0.07);
+  --line: oklch(100% 0 0 / 0.1);
+  --line-2: oklch(100% 0 0 / 0.17);
+  --fg: oklch(97% 0.008 280);
+  --fg-2: oklch(86% 0.018 280);
+  --fg-3: oklch(72% 0.025 280);
+  --fg-4: oklch(58% 0.028 280);
+  --accent: oklch(62% 0.21 24);
+  --accent-2: oklch(84% 0.12 84);
+  --accent-soft: color-mix(in oklch, var(--accent) 20%, transparent);
+  --on-accent: oklch(98% 0.01 30);
+  --ok: oklch(80% 0.12 160);
+  --err: oklch(70% 0.18 22);
+  --add-bg: color-mix(in oklch, var(--ok) 13%, transparent);
+  --del-bg: color-mix(in oklch, var(--err) 14%, transparent);
+  --shadow: 0 30px 80px -24px oklch(0% 0 0 / 0.65), inset 0 1px 0 oklch(100% 0 0 / 0.06);
+  --f-voice: "Noto Sans SC Variable", "Microsoft YaHei UI", sans-serif;
+  --f-display: "Cormorant Garamond", "Times New Roman", serif;
+  --scrim: 0.8;
+  --wall-pos: 0% 30%;
+  --col-w: 540px;
+  /* 暗幕底色: 舞台皮肤只声明 stage-tint, 幕色与色相由这里派生 */
+  --scrim-color: oklch(8% 0.03 var(--stage-tint, 285));
+  /* 文字列右端坐标 = 图标轨 52 + 会话列表宽 + 列左缩进 36 + 文字列宽;
+     --list-w 由 SessionPane 实时写 :root (拖拽时高频, 不走 React 状态) */
+  --col-end: calc(52px + var(--list-w, 264px) + 36px + var(--col-w));
+}
+
+/* 舞台 × 亮 = 原型没有, 为 sakura-light 新设计: 暗幕换白色半透明幕 (左浓右淡),
+   面板用接近白的高不透明填充, 四级文字转深色, 层次关系照 stage×dark 镜像 */
+[data-style="stage"][data-base="light"] {
+  color-scheme: light;
+  --bg: transparent;
+  --rail: oklch(99% 0.006 var(--stage-tint, 350) / 0.8);
+  --pane: oklch(99.4% 0.005 var(--stage-tint, 350) / 0.84);
+  --raise: oklch(100% 0.002 var(--stage-tint, 350) / 0.9);
+  --well: oklch(96.5% 0.012 var(--stage-tint, 350) / 0.72);
+  --hover: oklch(25% 0.04 350 / 0.06);
+  --line: oklch(25% 0.04 350 / 0.12);
+  --line-2: oklch(25% 0.04 350 / 0.2);
+  --fg: oklch(26% 0.03 350);
+  --fg-2: oklch(38% 0.028 350);
+  --fg-3: oklch(54% 0.024 352);
+  --fg-4: oklch(67% 0.02 352);
+  --accent: oklch(65% 0.15 355);
+  --accent-2: oklch(55% 0.12 350);
+  --accent-soft: color-mix(in oklch, var(--accent) 16%, transparent);
+  --on-accent: oklch(99% 0.003 350);
+  --ok: oklch(55% 0.13 150);
+  --err: oklch(56% 0.19 27);
+  --add-bg: color-mix(in oklch, var(--ok) 13%, transparent);
+  --del-bg: color-mix(in oklch, var(--err) 14%, transparent);
+  --shadow: 0 24px 60px -20px oklch(40% 0.06 340 / 0.35), 0 2px 8px oklch(40% 0.06 340 / 0.12);
+  --f-voice: "Noto Sans SC Variable", "Microsoft YaHei UI", sans-serif;
+  --f-display: "Cormorant Garamond", "Times New Roman", serif;
+  --scrim: 0.8;
+  --wall-pos: 0% 30%;
+  --col-w: 540px;
+  --scrim-color: oklch(99.6% 0.004 var(--stage-tint, 350));
+  --col-end: calc(52px + var(--list-w, 264px) + 36px + var(--col-w));
+}
+
+/* ============================================================
+   过渡别名层 —— 阶段 6 删除
+   ------------------------------------------------------------
+   旧名指向新 token, 让尚未改写的组件 (InputBar / 设置窗各分区 / 工具卡片 /
+   三面板 / DiffView 等) 在新风格下不崩。阶段 6 收尾时 grep 引用, 删掉无人
+   使用的别名。
+   ============================================================ */
+:root {
+  --surface-sunken: var(--pane);
+  --surface-base: var(--bg);
+  --surface-raised: var(--raise);
+  --surface: var(--bg);
+  --sidebar-surface: var(--pane);
+  --surface-2: var(--hover);
+  --panel: var(--raise);
+  --border-subtle: var(--line);
+  --border-soft: var(--line);
+  --border: var(--line-2);
+  --border-strong: var(--line-2);
+  --muted: var(--fg-2);
+  --faint: var(--fg-3);
+  --text-muted: var(--fg-3);
+  --text-strong: var(--fg);
+  --code-bg: var(--well);
+  --sel-bg: var(--accent-soft);
+  --chat-bg: transparent;
+  --danger: var(--err);
+  --term-text: var(--ok);
+  --accent-strong: color-mix(in oklch, var(--accent) 86%, black);
+  --diff-add-bg: var(--add-bg);
+  --diff-del-bg: var(--del-bg);
+  --diff-add-fg: var(--ok);
+  --diff-del-fg: var(--err);
+  /* ToolCallCard / DiffView / FleetSidebarPanel / ModelsPanel 改写前仍读这两条通道;
+     值恒为 1 → 半透明由新 token 自身承担。阶段 6 随组件改写一起删 */
+  --code-alpha: 1;
+  --overlay-alpha: 1;
+  --raised-alpha: 1;
+}
+
 /* 暗色方向: 皮肤 base=dark 时挂在 <html data-base="dark"> 上
-   中性色阶反转 (深底浅字), 容器底色取暗色默认值 (皮肤可覆盖)
-   同时覆盖根容器浅色渐变: 暗色皮肤无背景图时露出 body 暗底色 */
+   中性色阶反转 (深底浅字) + 暗色阴影; 其余语义色由四组 token 与别名层承担 */
 [data-base="dark"] {
   color-scheme: dark;
   --neutral-50: oklch(14.077% 0.0044 285.8);
@@ -159,55 +271,8 @@
   --neutral-800: oklch(96.743% 0.0013 286.4);
   --neutral-900: oklch(98.510% 0 0);
   --neutral-950: oklch(100.000% 0 0);
-  --text-strong: oklch(98.510% 0 0);
-  --text-muted: oklch(71.181% 0.0129 286.1);
-  --text-link: oklch(71.374% 0.1434 254.6);
-  --border-soft: oklch(37.032% 0.0119 285.8);
-  --border: oklch(37.032% 0.0119 285.8);
-  --table-head: oklch(27.394% 0.0055 286);
-  --divider: oklch(37.032% 0.0119 285.8);
-  --code-bg: oklch(23.928% 0.0142 267);         /* 与 surface-raised 同源, 行内代码在暗色下浮起 */
-  --code-text: var(--primary-300); /* 暗色下行内代码用亮一档, 同样引用色阶随皮肤变 */
-  --shiki-bg: oklch(17.628% 0.014 258.4);         /* 与 github-dark 自带底色一致, 避免覆盖冲突 */
-  --term-text: oklch(87.116% 0.1363 154.4);     /* 暗底上换回亮绿 (green-300) */
-  --text-user: oklch(80.907% 0.0956 251.8);     /* 暗色下 user 消息用亮蓝 */
-  --text-on-bubble: oklch(26.862% 0 0);
-  --panel: oklch(21.033% 0.0059 285.9);
-  --scrollbar: oklch(70.576% 0 0);
-  --surface: oklch(13.423% 0.0349 299);           /* 深渊黑蓝底 */
-  --sidebar-surface: oklch(13.423% 0.0349 299);
-  --bubble-bg: oklch(13.423% 0.0349 299);
-
-  /* 暗色表面层次: 不复用中性色阶反转 — 浅色 raised 已到白顶不能更白,
-     暗色 raised 必须更亮, 两个方向物理逻辑相反, 必须分别定义 */
-  --surface-sunken: oklch(17.727% 0.0089 264.3);   /* #0f1115 */
-  --surface-base:   oklch(20.912% 0.0104 268.2);   /* #16181d */
-  --surface-raised: oklch(23.928% 0.0142 267);   /* #1c1f26 */
-  --border-subtle:  oklch(28.397% 0.0141 261.7);
-  --border-strong:  oklch(34.387% 0.0188 264.3);
-
-  /* diff 增删色 (暗色方向): 底色沉一档不刺眼, 字色换亮色保对比度 */
-  --diff-add-bg: oklch(32.105% 0.0611 153.4);      /* 深绿底 */
-  --diff-add-fg: oklch(84.160% 0.1641 145.8);   /* 亮绿字 #7ee787 */
-  --diff-del-bg: oklch(26.778% 0.0535 17.7);      /* 深红底 */
-  --diff-del-fg: oklch(80.135% 0.1134 25.8);   /* 亮红字 #ffa198 */
-
-  /* ===== 语义层 (暗色方向): 基础面值取自设计稿 :root (dark) 块 =====
-     品牌色 fallback 引用色阶, 与亮色同策略; --sel-bg 走 --accent-deep (深 accent 底浅字) */
-  --bg:        oklch(15.5% 0.008 285);
-  --surface-2: oklch(23% 0.013 285);
-  --fg:        oklch(95% 0.005 280);
-  --muted:     oklch(70% 0.010 280);
-  --faint:     oklch(55% 0.012 280);
-  --accent:        var(--primary-500);
-  --accent-strong: var(--primary-600);
-  --accent-deep:   color-mix(in oklch, var(--accent) 15%, black);
-  --accent-soft:   color-mix(in oklch, var(--accent) 13%, transparent);
-  --on-accent:     oklch(99% 0.002 60);
-  --sel-bg:  var(--accent-deep);
-  /* 暗色会话区透明: 有壁纸透出毛玻璃, 无壁纸靠 --surface 深底 */
-  --chat-bg: transparent;
-
+  /* 暗色下 hover 加深方向反转: accent-strong 混白才叫"强调" */
+  --accent-strong: color-mix(in oklch, var(--accent) 86%, white);
   /* 暗色阴影: 色相归零 (暗色下阴影靠暗度而非色相), alpha 整体提高一档 */
   --shadow-hue: oklch(0% 0 0);
   --shadow-sm: 0 1px 2px color-mix(in oklch, var(--shadow-hue) 50%, transparent),
@@ -218,14 +283,20 @@
                0 2px 6px color-mix(in oklch, var(--shadow-hue) 45%, transparent);
 }
 
-/* 暗色下覆盖根容器浅色渐变: 无背景图时露 body 暗底, 有背景图时背景层 (z-0) 盖住渐变 */
-[data-base="dark"] #app-root {
-  background-image: none;
+/* 页面底色: 工坊用 --bg; 舞台下 --bg 透明 (主区透出舞台层), 页面底改由暗幕底色承担,
+   壁纸加载失败/首帧也不露白 */
+html,
+body {
+  background: var(--bg);
+}
+[data-style="stage"],
+[data-style="stage"] body {
+  background: var(--scrim-color);
 }
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "Symbols Nerd Font Mono", sans-serif;
+  font-family: var(--f-ui), "Symbols Nerd Font Mono", sans-serif;
   /* 全局字号基准: 未显式套字号档的元素统一落 --fs-body (13px 主力档),
      而不是浏览器默认 16px — 否则未覆盖元素会显得比周边 UI 大一圈 (设计稿 9 档模板的底座) */
   font-size: var(--fs-body);
@@ -233,11 +304,10 @@ body {
   font-feature-settings: "tnum" 1;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  background: var(--surface);
 }
 
 /* 锁死页面级滚动: 只允许内部滚动容器滚动, 避免整个窗口像浏览器一样被拖动
-   根治靠 App.tsx: app-root / app-bg 用 fixed inset-0 钉死 viewport → document 无文档流内容,
+   根治靠 App.tsx: app-root / 舞台层用 fixed inset-0 钉死 viewport → document 无文档流内容,
    聚焦/滚动锚定找不到可滚祖先; InputBar 的 focus() 全部带 { preventScroll: true } 防御。
    此处 overflow: clip 为辅助层 (clip 比 hidden 更彻底: hidden 仍是 scroll container,
    可被编程滚动; clip 连 scroll container 都不是), 双保险兜底。 */
@@ -266,25 +336,6 @@ html:has([data-pet]) #root {
   display: none !important;
 }
 
-/* 会话工具条状态药丸底座 (改版稿 .ct-pill): 圆角 pill + 语义字号/色。
-   on/off 态由组件用语义变量 class 切换 (accent 边/字/soft 底 vs border-soft + muted) */
-.ct-pill {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  border-width: 1px;
-  padding: 2px 8px;
-  font-size: var(--fs-label);
-  line-height: 1.4;
-  transition: border-color 0.12s ease, color 0.12s ease, background-color 0.12s ease;
-}
-.ct-pill svg {
-  width: 15px;
-  height: 15px;
-}
-
-/* 键盘焦点可见性 (可访问性): 仅键盘 Tab 导航时显示 accent 描边;
-   鼠标点击不显示 (与 :focus 区分, 避免点按钮留框)。覆盖各组件 outline-none */
 /* 键盘焦点可见性 (可访问性): 仅键盘 Tab 导航时显示 accent 描边;
    鼠标点击不显示 (与 :focus 区分, 避免点按钮留框)。
    文本输入元素 (input/textarea) 豁免 — 光标本身就是焦点指示,
@@ -295,7 +346,7 @@ html:has([data-pet]) #root {
   border-radius: 4px;
 }
 
-/* 自定义滚动条: 浅色下用中性灰, 保持细窄 */
+/* 自定义滚动条: 细窄, 颜色走四级文字 token */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -304,14 +355,194 @@ html:has([data-pet]) #root {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in oklch, var(--scrollbar) 25%, transparent);
+  background: color-mix(in oklch, var(--fg-4) 30%, transparent);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklch, var(--scrollbar) 45%, transparent);
+  background: color-mix(in oklch, var(--fg-4) 50%, transparent);
 }
 
-/* Markdown 渲染样式: 浅色主题, 与消息气泡风格一致 */
+/* ============================================================
+   外壳 (框架 C): 图标轨按钮 / 检查器外壳 / 检查器页签
+   两风格的形态差异只在以下三处, 用 data-style 分支表达
+   ============================================================ */
+
+/* 图标轨按钮: 工坊 = 左缘 2px accent 竖条标记激活; 舞台 = accent 实心圆角块 */
+.rail-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  color: var(--fg-4);
+  transition: color 0.15s var(--ease), background-color 0.15s var(--ease);
+}
+.rail-btn:hover {
+  color: var(--fg-2);
+  background: var(--hover);
+}
+.rail-btn.on {
+  color: var(--fg);
+}
+[data-style="atelier"] .rail-btn.on::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 9px;
+  bottom: 9px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+[data-style="stage"] .rail-btn {
+  border-radius: 12px;
+  color: var(--fg-3);
+}
+[data-style="stage"] .rail-btn.on {
+  color: var(--on-accent);
+  background: var(--accent);
+  box-shadow: 0 6px 18px -6px var(--accent);
+}
+
+/* 检查器: 工坊 = 常驻 flex 列 (左缘拖拽调宽); 舞台 = 绝对定位浮卡, 从右滑出盖在角色上 */
+.inspector {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  background: var(--pane);
+}
+.inspector-col {
+  position: relative;
+  flex: none;
+  border-left: 1px solid var(--line);
+  transition: width 0.36s var(--ease);
+}
+[data-style="stage"] .inspector {
+  position: absolute;
+  top: 0;
+  right: 12px;
+  bottom: 12px;
+  width: 360px;
+  z-index: 20;
+  border-radius: 18px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  animation: inspector-in 0.45s var(--ease) both;
+}
+@keyframes inspector-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(100% + 24px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 检查器页签: 工坊 = 下划线; 舞台 = 圆角药丸 */
+.insp-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-label);
+  color: var(--fg-3);
+  white-space: nowrap;
+  transition: color 0.15s var(--ease), background-color 0.15s var(--ease);
+}
+.insp-tab:hover {
+  color: var(--fg-2);
+}
+.insp-tab:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+[data-style="atelier"] .insp-tab.on {
+  color: var(--fg);
+}
+[data-style="atelier"] .insp-tab.on::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+[data-style="stage"] .insp-tab {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+}
+[data-style="stage"] .insp-tab.on {
+  color: var(--fg);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 40%, transparent);
+}
+
+/* 运行中符号: 工坊 = 狐火 (唯一动效符号), 舞台 = 旋转刻印环 */
+.flame {
+  display: inline-block;
+  width: 8px;
+  height: 11px;
+  transform-origin: 50% 90%;
+  border-radius: 50% 50% 45% 45% / 62% 62% 38% 38%;
+  background: radial-gradient(circle at 50% 74%, var(--accent-2) 0 22%, var(--accent) 52%, transparent 74%);
+  filter: drop-shadow(0 0 4px var(--accent));
+  animation: flicker 0.85s ease-in-out infinite alternate;
+}
+@keyframes flicker {
+  0% { transform: scale(1, 1) skewX(0); opacity: 0.9; }
+  35% { transform: scale(0.9, 1.12) skewX(-5deg); opacity: 1; }
+  70% { transform: scale(1.06, 0.94) skewX(4deg); }
+  100% { transform: scale(0.95, 1.1) skewX(-2deg); opacity: 0.95; }
+}
+[data-style="stage"] .flame {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, var(--accent), var(--accent-2), transparent 70%, var(--accent));
+  -webkit-mask: radial-gradient(circle, transparent 3.2px, black 3.6px);
+  mask: radial-gradient(circle, transparent 3.2px, black 3.6px);
+  filter: drop-shadow(0 0 4px var(--accent));
+  animation: seal-spin 1s linear infinite;
+}
+@keyframes seal-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 舞台背景层: 壁纸 (角色保持清晰, 不模糊) + 左重右轻的暗幕。
+   玻璃感不使用 backdrop-filter (WebView2 大面积 backdrop-filter 有内容消失 bug),
+   由暗幕 + 面板高不透明度填充 + 边框 + 内高光实现 */
+.stage-wall {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-image: var(--bg-image, none);
+  background-position: var(--wall-pos, 0% 30%);
+  background-size: auto 114%;
+  background-repeat: no-repeat;
+}
+.stage-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg,
+      color-mix(in oklch, var(--scrim-color) calc(var(--scrim) * 100%), transparent) 0,
+      color-mix(in oklch, var(--scrim-color) calc(var(--scrim) * 88%), transparent) calc(var(--col-end) - 80px),
+      color-mix(in oklch, var(--scrim-color) 30%, transparent) calc(var(--col-end) + 90px),
+      color-mix(in oklch, var(--scrim-color) 4%, transparent) 100%),
+    linear-gradient(to top, color-mix(in oklch, var(--scrim-color) 70%, transparent), transparent 32%);
+}
+
+/* Markdown 渲染样式 */
 .markdown-body {
   line-height: 1.7;
   word-break: break-word;
@@ -336,7 +567,7 @@ html:has([data-pet]) #root {
   margin: 1em 0 0.5em;
   font-weight: 600;
   line-height: 1.35;
-  color: var(--text-strong);
+  color: var(--fg);
 }
 .markdown-body h1 { font-size: 1.4em; }
 .markdown-body h2 { font-size: 1.2em; }
@@ -376,7 +607,7 @@ html:has([data-pet]) #root {
 }
 .markdown-body input[type="checkbox"] {
   margin-right: 0.4em;
-  accent-color: var(--primary-500);
+  accent-color: var(--accent);
 }
 
 /* 代码块 */
@@ -384,7 +615,7 @@ html:has([data-pet]) #root {
   margin: 0.6em 0;
   padding: 0.9em 1em;
   border-radius: 8px;
-  background: color-mix(in oklch, var(--code-bg) calc(var(--code-alpha) * 100%), transparent);
+  background: var(--well);
   overflow-x: auto;
   font-size: 0.88em;
   line-height: 1.5;
@@ -396,9 +627,9 @@ html:has([data-pet]) #root {
   color: inherit;
 }
 
-/* Shiki 高亮代码块: 覆盖主题自带背景, 与聊天区底色统一 (值随 base 方向) */
+/* Shiki 高亮代码块: 覆盖主题自带背景, 与凹陷井底色统一 (值随风格 token 走) */
 .markdown-body .shiki {
-  background: var(--shiki-bg) !important;
+  background: var(--well) !important;
 }
 .markdown-body .shiki code {
   font-family: inherit;
@@ -408,18 +639,19 @@ html:has([data-pet]) #root {
 /* 行内代码 */
 .markdown-body code {
   padding: 0.15em 0.4em;
-  border-radius: 4px;
-  background: color-mix(in oklch, var(--code-bg) calc(var(--code-alpha) * 100%), transparent);
+  border-radius: 5px;
+  background: var(--well);
+  border: 1px solid var(--line);
   font-size: 0.88em;
-  color: var(--code-text);
+  color: var(--accent-2);
 }
 
 /* 引用 */
 .markdown-body blockquote {
   margin: 0.5em 0;
   padding: 0.3em 0.8em;
-  border-left: 3px solid var(--border-soft);
-  color: var(--text-muted);
+  border-left: 3px solid var(--line-2);
+  color: var(--fg-3);
 }
 .markdown-body blockquote p:last-child {
   margin-bottom: 0;
@@ -435,17 +667,17 @@ html:has([data-pet]) #root {
 .markdown-body th,
 .markdown-body td {
   padding: 0.4em 0.7em;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   text-align: left;
 }
 .markdown-body th {
-  background: var(--table-head);
+  background: var(--hover);
   font-weight: 600;
 }
 
 /* 链接 */
 .markdown-body a {
-  color: var(--text-link);
+  color: var(--accent);
   text-decoration: none;
 }
 .markdown-body a:hover {
@@ -456,7 +688,7 @@ html:has([data-pet]) #root {
 .markdown-body hr {
   margin: 1em 0;
   border: none;
-  border-top: 1px solid var(--divider);
+  border-top: 1px solid var(--line);
 }
 
 /* 图片 */
@@ -466,39 +698,9 @@ html:has([data-pet]) #root {
   margin: 0.5em 0;
 }
 
-/* 消息气泡框: 皮肤 --bubble-bg 底色 + slider 不透明率 + 轻阴影
-   不加 backdrop-filter (WebView2 大面积 blur 有内容消失 bug; 背景层已自带 blur, 透出即是毛玻璃)
-   由 MessageItem 开关控制 (开 = 套 .bubble, 关 = 原平铺) */
-.bubble {
-  background: color-mix(in oklch, var(--bubble-bg) calc(var(--bubble-opacity) * 100%), transparent);
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-  padding: 0.6em 0.9em;
-}
-
-/* 气泡内 markdown 标题跟随气泡底色联动 (而非全局 --text-strong):
-   配合 store.updateBubbleTextColor — 深底时 --text-on-bubble 翻浅字, 浅底时翻深字,
-   保证自定义底色下标题可读; 选择器比 .markdown-body h1 多一层 .bubble, 优先级更高 */
-.bubble .markdown-body :is(h1, h2, h3, h4, h5, h6) {
-  color: var(--text-on-bubble);
-}
-
-/* 关闭气泡框时的 user 轻量气泡: 中性底 + 1px 边框, 非主题色底 (结构中性, 强调用主题色)
-   圆角与 .bubble 一致成规整块, 无阴影; assistant 此时不套气泡, 全宽平铺。
-   暗色下浮起靠更亮的 raised, 故 dark 方向覆盖底色 */
-.bubble-user {
-  background: color-mix(in oklch, var(--surface-sunken) calc(var(--overlay-alpha) * 100%), transparent);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 0.6em 0.9em;
-}
-[data-base="dark"] .bubble-user {
-  background: color-mix(in oklch, var(--surface-raised) calc(var(--overlay-alpha) * 100%), transparent);
-}
-
 /* range 滑块: WebView2 浅色下未填充轨道渲染为近黑长条 (accent-color 只作用填充段),
-   显式定义 track 底为 border-subtle、thumb 为 primary-500, 收进强调通道并与表面层次变量同源。
-   禁用态降透明度 + 灰滑块, 与“无背景图时不生效”提示一致表达 */
+   显式定义 track 底为线色、thumb 为 accent, 收进强调通道并与 surface 层次同源。
+   禁用态降透明度 + 灰滑块, 与"仅壁纸皮肤生效"的提示一致表达 */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
@@ -507,7 +709,7 @@ input[type="range"] {
 input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
-  background: var(--border-subtle);
+  background: var(--line-2);
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -516,7 +718,7 @@ input[type="range"]::-webkit-slider-thumb {
   height: 14px;
   margin-top: -5px;
   border-radius: 50%;
-  background: var(--primary-500);
+  background: var(--accent);
   border: none;
   cursor: pointer;
 }
@@ -524,7 +726,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track {
   opacity: 0.5;
 }
 input[type="range"]:disabled::-webkit-slider-thumb {
-  background: var(--neutral-400);
+  background: var(--fg-4);
   cursor: not-allowed;
 }
 
