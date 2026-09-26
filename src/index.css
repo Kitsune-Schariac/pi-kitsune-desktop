@@ -1293,6 +1293,12 @@ html:has([data-pet]) #root {
 [data-style="stage"] .composer-wrap {
   padding: 0 0 6px;
 }
+/* 舞台没有工坊那层渐隐底 (会盖住壁纸), 改在滚动容器上做遮罩: 顶部轻淡入, 底部在输入卡区域淡出,
+   否则滚动中的时间线会从输入卡与窗口底边的缝里露出来 (原型 wallpaper.html .scroll 同法) */
+[data-style="stage"] .tl-scroll {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 24px, black calc(100% - 150px), transparent calc(100% - 60px));
+  mask-image: linear-gradient(to bottom, transparent 0, black 24px, black calc(100% - 150px), transparent calc(100% - 60px));
+}
 .composer {
   pointer-events: auto;
   margin: 0 auto;
@@ -1319,6 +1325,9 @@ html:has([data-pet]) #root {
   max-width: none;
   margin: 0 0 0 36px;
   border-radius: 22px;
+  /* 舞台 --raise 带透明度, 时间线文字滚到输入卡后方会透字 (原型靠 backdrop-filter 糊掉, 这里禁用);
+     实测留 4% 透明时亮色气泡字仍透得出, 故用完全不透明的 --popover, 浮起感交给边框与阴影 */
+  background: var(--popover);
 }
 
 /* 窄宽: 次要 chip 收成纯图标、上下文文字标签让位 (照原型 @container 两档) */
