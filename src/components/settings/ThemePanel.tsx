@@ -34,7 +34,7 @@ function OpacitySlider({
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
-        className={`w-full accent-[var(--accent)] ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+        className={`w-full ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
       />
     </label>
   );
@@ -43,7 +43,7 @@ function OpacitySlider({
 // 设置分区标题: mini 档 + mono + 大写 + faint (对齐改版稿 .set-sec > h3)
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="mb-3 font-mono text-mini font-semibold uppercase tracking-[0.09em] text-fg-3">
+    <h3 className="mb-3 font-mono text-mini font-semibold uppercase tracking-[0.09em] text-fg-4">
       {children}
     </h3>
   );
@@ -99,14 +99,14 @@ export function ThemePanel() {
                 onClick={() => onPick(skin)}
                 disabled={busy !== null}
                 aria-pressed={isActive}
-                className={`group overflow-hidden rounded-md border text-left transition duration-fast ease-out ${
+                className={`group overflow-hidden rounded-lg border text-left transition duration-fast ease-out ${
                   isActive
-                    ? "border-[var(--accent)] ring-2 ring-[color-mix(in_oklch,var(--accent)_25%,transparent)]"
+                    ? "border-[var(--accent)] ring-2 ring-[var(--accent-soft)]"
                     : "border-[var(--line)] hover:border-[var(--line-2)]"
                 } ${busy === skin.id ? "opacity-60" : ""}`}
                 title={`${skin.name}${skin.author ? ` · ${skin.author}` : ""} v${skin.version}`}
               >
-                <div className="h-24 w-full bg-hover">
+                <div className="h-24 w-full bg-[var(--well)]">
                   {skin.preview_data_uri ? (
                     <img
                       src={skin.preview_data_uri}
@@ -119,7 +119,7 @@ export function ThemePanel() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center justify-between gap-2 bg-[var(--raise)] px-3 py-2">
+                <div className="flex items-center justify-between gap-2 border-t border-[var(--line)] bg-[var(--raise)] px-3 py-2">
                   <div className="min-w-0">
                     <div className="truncate text-label font-medium text-fg">{skin.name}</div>
                     <div className="flex items-center gap-1 text-mini text-fg-4">
@@ -144,7 +144,7 @@ export function ThemePanel() {
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             onClick={() => void invoke("open_skins_dir")}
-            className="inline-flex items-center gap-2 rounded-md border border-[var(--line)] px-3 py-2 text-mini text-fg-2 transition duration-fast ease-out hover:border-[var(--line-2)] hover:bg-hover hover:text-fg"
+            className="inline-flex items-center gap-2 rounded-md border border-[var(--line)] px-3 py-2 text-mini text-fg-2 transition duration-fast ease-out hover:border-[var(--line-2)] hover:bg-[var(--hover)] hover:text-fg"
           >
             <FolderOpen className="h-4 w-4" />
             打开皮肤目录
@@ -152,7 +152,7 @@ export function ThemePanel() {
           <button
             onClick={() => void onRefresh()}
             disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-md border border-[var(--line)] px-3 py-2 text-mini text-fg-2 transition duration-fast ease-out hover:border-[var(--line-2)] hover:bg-hover hover:text-fg disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-md border border-[var(--line)] px-3 py-2 text-mini text-fg-2 transition duration-fast ease-out hover:border-[var(--line-2)] hover:bg-[var(--hover)] hover:text-fg disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             刷新皮肤列表
