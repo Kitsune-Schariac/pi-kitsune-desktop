@@ -4,7 +4,26 @@ import { listen } from "@tauri-apps/api/event";
 import App from "./App";
 import { PetWindow } from "./pet/PetWindow";
 import { useSessionStore } from "./store/session";
+// 字体全打包 (D3): 随安装包分发, 离线可用。置于 index.css 之前保持"资源先于样式"的可读顺序
+import "@fontsource-variable/noto-sans-sc";
+import "lxgw-wenkai-webfont/lxgwwenkai-light.css";
+import "lxgw-wenkai-webfont/lxgwwenkai-regular.css";
+import "lxgw-wenkai-webfont/lxgwwenkai-bold.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/500.css";
+import "@fontsource/instrument-serif/400.css";
+import "@fontsource/instrument-serif/400-italic.css";
+import "@fontsource/cormorant-garamond/500.css";
+import "@fontsource/cormorant-garamond/600.css";
+import "@fontsource/cormorant-garamond/500-italic.css";
+import "@fontsource/cormorant-garamond/600-italic.css";
 import "./index.css";
+
+// 主题属性由 theme.ts 的 init/applyTheme 写入; 这里先补默认值 (与 DEFAULT_SKIN_ID=flame 一致的
+// 工坊暗), 避免皮肤列表异步返回前首帧没有任何 token / 方向属性
+const rootEl = document.documentElement;
+rootEl.dataset.style = "atelier";
+rootEl.dataset.base = "dark";
 
 // 同一份 bundle 服务两个窗口, 按 query 分流。桌宠窗口由 Rust 侧
 // open_pet_window 以 index.html?window=pet 打开

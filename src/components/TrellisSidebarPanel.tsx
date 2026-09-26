@@ -94,7 +94,8 @@ function TaskStatusDot({ status }: { status: string }) {
 
 interface Props {
   cwd: string;
-  onClose: () => void;
+  /** 缺省时不渲染关闭按钮 (检查器内嵌时由页签承担收起职责) */
+  onClose?: () => void;
 }
 
 export function TrellisSidebarPanel({ cwd, onClose }: Props) {
@@ -172,13 +173,15 @@ export function TrellisSidebarPanel({ cwd, onClose }: Props) {
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               </button>
-              <button
-                onClick={onClose}
-                className="rounded-md p-1 text-[var(--faint)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--muted)]"
-                title="收起"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              {onClose && (
+                <button
+                  onClick={onClose}
+                  className="rounded-md p-1 text-[var(--faint)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--muted)]"
+                  title="收起"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
           </div>
         ) : (

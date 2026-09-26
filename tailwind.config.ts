@@ -58,6 +58,9 @@ export default {
     borderRadius: {
       sm: "4px",
       md: "8px",
+      lg: "12px",
+      xl: "16px",
+      "2xl": "20px",
       full: "9999px",
     },
     extend: {
@@ -88,8 +91,28 @@ export default {
           900: "color-mix(in oklch, var(--neutral-900) calc(<alpha-value> * 100%), transparent)",
           950: "color-mix(in oklch, var(--neutral-950) calc(<alpha-value> * 100%), transparent)",
         },
-        // 浮层/卡片实心底 (popup/弹窗/设置窗口), 皮肤可覆盖 --panel
+        // 浮层/卡片实心底 (popup/弹窗/设置窗口), 皮肤可覆盖 --panel (过渡别名)
         panel: "color-mix(in oklch, var(--panel) calc(<alpha-value> * 100%), transparent)",
+        // 新语义 token 映射 (design §2.2): 颜色只走 var, 组件用 bg-pane / text-fg-2 / border-line 这类 class;
+        // 用 color-mix 包一层是为了让 /50 等透明度修饰符继续可用 (与 primary/neutral 同机制)
+        bg: "color-mix(in oklch, var(--bg) calc(<alpha-value> * 100%), transparent)",
+        rail: "color-mix(in oklch, var(--rail) calc(<alpha-value> * 100%), transparent)",
+        pane: "color-mix(in oklch, var(--pane) calc(<alpha-value> * 100%), transparent)",
+        raise: "color-mix(in oklch, var(--raise) calc(<alpha-value> * 100%), transparent)",
+        well: "color-mix(in oklch, var(--well) calc(<alpha-value> * 100%), transparent)",
+        hover: "color-mix(in oklch, var(--hover) calc(<alpha-value> * 100%), transparent)",
+        line: "color-mix(in oklch, var(--line) calc(<alpha-value> * 100%), transparent)",
+        "line-2": "color-mix(in oklch, var(--line-2) calc(<alpha-value> * 100%), transparent)",
+        fg: "color-mix(in oklch, var(--fg) calc(<alpha-value> * 100%), transparent)",
+        "fg-2": "color-mix(in oklch, var(--fg-2) calc(<alpha-value> * 100%), transparent)",
+        "fg-3": "color-mix(in oklch, var(--fg-3) calc(<alpha-value> * 100%), transparent)",
+        "fg-4": "color-mix(in oklch, var(--fg-4) calc(<alpha-value> * 100%), transparent)",
+        accent: "color-mix(in oklch, var(--accent) calc(<alpha-value> * 100%), transparent)",
+        "accent-2": "color-mix(in oklch, var(--accent-2) calc(<alpha-value> * 100%), transparent)",
+        "accent-soft": "color-mix(in oklch, var(--accent-soft) calc(<alpha-value> * 100%), transparent)",
+        "on-accent": "color-mix(in oklch, var(--on-accent) calc(<alpha-value> * 100%), transparent)",
+        ok: "color-mix(in oklch, var(--ok) calc(<alpha-value> * 100%), transparent)",
+        err: "color-mix(in oklch, var(--err) calc(<alpha-value> * 100%), transparent)",
       },
       // 动效阶: 显式时长 + 曲线 (裸 transition 必须补全, 见 design 表四)
       transitionDuration: {
