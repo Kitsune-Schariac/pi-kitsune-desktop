@@ -111,6 +111,7 @@
   --on-accent: oklch(18% 0.02 50);
   --ok: oklch(76% 0.12 150);
   --err: oklch(69% 0.18 27);
+  --warn: oklch(78% 0.13 80);
   --add-bg: color-mix(in oklch, var(--ok) 13%, transparent);
   --del-bg: color-mix(in oklch, var(--err) 14%, transparent);
   --shadow: 0 18px 50px -12px oklch(0% 0 0 / 0.65), 0 2px 8px oklch(0% 0 0 / 0.4);
@@ -138,6 +139,7 @@
   --on-accent: oklch(99% 0.005 80);
   --ok: oklch(55% 0.13 150);
   --err: oklch(56% 0.19 27);
+  --warn: oklch(58% 0.15 60);
   --add-bg: color-mix(in oklch, var(--ok) 13%, transparent);
   --del-bg: color-mix(in oklch, var(--err) 14%, transparent);
   --shadow: 0 18px 44px -14px oklch(30% 0.04 50 / 0.28), 0 1px 3px oklch(30% 0.04 50 / 0.12);
@@ -167,6 +169,7 @@
   --on-accent: oklch(98% 0.01 30);
   --ok: oklch(80% 0.12 160);
   --err: oklch(70% 0.18 22);
+  --warn: oklch(80% 0.14 85);
   --add-bg: color-mix(in oklch, var(--ok) 13%, transparent);
   --del-bg: color-mix(in oklch, var(--err) 14%, transparent);
   --shadow: 0 30px 80px -24px oklch(0% 0 0 / 0.65), inset 0 1px 0 oklch(100% 0 0 / 0.06);
@@ -204,6 +207,7 @@
   --on-accent: oklch(99% 0.003 350);
   --ok: oklch(55% 0.13 150);
   --err: oklch(56% 0.19 27);
+  --warn: oklch(60% 0.14 70);
   --add-bg: color-mix(in oklch, var(--ok) 13%, transparent);
   --del-bg: color-mix(in oklch, var(--err) 14%, transparent);
   --shadow: 0 24px 60px -20px oklch(40% 0.06 340 / 0.35), 0 2px 8px oklch(40% 0.06 340 / 0.12);
@@ -698,6 +702,766 @@ html:has([data-pet]) #root {
       color-mix(in oklch, var(--scrim-color) 12%, transparent) calc(var(--col-end) + 90px),
       color-mix(in oklch, var(--scrim-color) 2%, transparent) 100%),
     linear-gradient(to top, color-mix(in oklch, var(--scrim-color) 30%, transparent), transparent 32%);
+}
+
+/* ============================================================
+   时间线 (框架 C 第三列主区) 与检查器步骤详情
+   两风格形态差异 (工坊 = 章节脊线 + 一步一行; 舞台 = 右对齐气泡 + 胶囊串)
+   全部用 data-style 分支表达
+   ============================================================ */
+
+.tl-timeline {
+  position: relative;
+}
+[data-style="atelier"] .tl-timeline {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 40px 44px 0 72px;
+}
+[data-style="stage"] .tl-timeline {
+  /* 文字列靠左, 检查器浮卡打开时同步让位 (--insp-w 由 Inspector 写在 :root) */
+  max-width: min(var(--col-w, 540px), calc(100% - var(--insp-w, 0px) - 72px));
+  margin-left: 36px;
+  padding: 24px 0 0;
+  transition: max-width 0.45s var(--ease);
+}
+
+/* ---- 轮 ---- */
+.tl-turn {
+  position: relative;
+}
+.tl-turn + .tl-turn {
+  margin-top: 56px;
+}
+[data-style="stage"] .tl-turn + .tl-turn {
+  margin-top: 40px;
+}
+[data-style="atelier"] .tl-turn::before {
+  content: "";
+  position: absolute;
+  left: -32px;
+  top: 12px;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(to bottom, var(--line-2), var(--line) 85%, transparent);
+}
+/* 运行中的轮: 脊线流光 (工坊运行态的动效语言) */
+[data-style="atelier"] .tl-turn.live::before {
+  background: linear-gradient(to bottom, transparent 0%, var(--accent) 35%, var(--accent-2) 50%, var(--accent) 65%, transparent 100%);
+  background-size: 100% 240%;
+  animation: tl-spine 1.8s linear infinite;
+  box-shadow: 0 0 10px color-mix(in oklch, var(--accent) 50%, transparent);
+}
+@keyframes tl-spine {
+  from { background-position: 0 100%; }
+  to { background-position: 0 -140%; }
+}
+
+/* ---- 用户提问 ---- */
+[data-style="atelier"] .tl-prompt {
+  position: relative;
+  margin-bottom: 26px;
+}
+[data-style="atelier"] .tl-prompt::before {
+  content: "";
+  position: absolute;
+  left: -36.5px;
+  top: 5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 1.5px;
+  background: var(--accent);
+  transform: rotate(45deg);
+  /* 主区底色描边一圈, 模拟菱形与脊线之间的留白 */
+  box-shadow: 0 0 0 4px var(--bg);
+}
+[data-style="atelier"] .tl-prompt-meta {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  color: var(--fg-4);
+}
+[data-style="atelier"] .tl-prompt-text {
+  margin: 6px 0 0;
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+[data-style="stage"] .tl-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-bottom: 18px;
+}
+[data-style="stage"] .tl-prompt-meta {
+  margin: 0 6px 5px;
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  color: var(--fg-4);
+}
+[data-style="stage"] .tl-prompt-text {
+  margin: 0;
+  max-width: 80%;
+  padding: 10px 16px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  border-radius: 18px 18px 6px 18px;
+  background: color-mix(in oklch, var(--accent) 26%, var(--raise));
+  border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
+  box-shadow: 0 10px 30px -12px color-mix(in oklch, var(--accent) 60%, transparent);
+}
+
+/* ---- AI 回复 ---- */
+.tl-reply-wrap {
+  margin: 14px 0;
+}
+[data-style="atelier"] .tl-reply {
+  font-family: var(--f-voice);
+  font-size: 15.5px;
+  line-height: 1.92;
+  color: var(--fg);
+}
+/* 暗底亮字有光渗, 文楷 400 显胖 → 暗色用 300, 纸面回到 400 (原型实测) */
+[data-style="atelier"][data-base="dark"] .tl-reply {
+  font-weight: 300;
+}
+[data-style="atelier"][data-base="light"] .tl-reply {
+  font-weight: 400;
+}
+.tl-reply strong,
+.tl-reply b {
+  font-weight: 700;
+}
+/* 正文等宽字体不能靠继承 (文楷/黑体都没等宽字形), pre 与行内 code 都要显式切回等宽栈 */
+.tl-reply pre,
+.tl-reply code {
+  font-family: var(--f-mono);
+}
+[data-style="stage"] .tl-reply {
+  font-family: var(--f-ui);
+  font-size: 14.5px;
+  line-height: 1.85;
+  color: var(--fg);
+}
+/* 文字直接落在幕上: 深色幕投黑柔光, 白幕投白柔光托可读性 */
+[data-style="stage"][data-base="dark"] .tl-reply {
+  text-shadow: 0 1px 14px oklch(0% 0 0 / 0.55);
+}
+[data-style="stage"][data-base="light"] .tl-reply {
+  text-shadow: 0 1px 12px oklch(100% 0 0 / 0.65);
+}
+.tl-dots {
+  color: var(--fg-3);
+}
+/* 流式光标: 空回复时内联跟在省略号后; 有文本时用伪元素挂在 Markdown 最后一个块的末尾 */
+.tl-caret {
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.16em;
+  border-radius: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  animation: tl-blink 1s steps(2, start) infinite;
+}
+.tl-reply.tl-streaming .markdown-body > :last-child::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.16em;
+  border-radius: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  animation: tl-blink 1s steps(2, start) infinite;
+}
+@keyframes tl-blink {
+  to { visibility: hidden; }
+}
+
+/* ---- 推理折叠 ---- */
+.tl-think {
+  margin: 10px 0 4px;
+}
+.tl-think-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  color: var(--fg-4);
+  transition: color 0.15s var(--ease);
+}
+.tl-think-head:hover {
+  color: var(--fg-3);
+}
+[data-style="atelier"] .tl-think-head {
+  font-family: var(--f-mono);
+  font-size: 11px;
+}
+[data-style="stage"] .tl-think-head {
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--raise);
+  font-size: 11.5px;
+  color: var(--fg-3);
+}
+[data-style="stage"] .tl-think-head:hover {
+  color: var(--fg);
+}
+.tl-think-len {
+  color: var(--fg-4);
+}
+[data-style="atelier"] .tl-think-len {
+  opacity: 0.8;
+}
+[data-style="stage"] .tl-think-len {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+}
+.tl-chev {
+  transform: rotate(-90deg);
+  transition: transform 0.25s var(--ease);
+}
+.tl-think.open .tl-chev,
+.tl-steps.open .tl-chev {
+  transform: none;
+}
+.tl-think-body {
+  display: none;
+  margin: 6px 0 10px;
+  padding: 2px 0 2px 14px;
+  border-left: 1px solid var(--line-2);
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--fg-3);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.tl-think.open .tl-think-body {
+  display: block;
+  animation: tl-rise 0.3s var(--ease-in);
+}
+[data-style="stage"] .tl-think-body {
+  margin: 8px 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--raise);
+}
+@keyframes tl-rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---- 步骤组 ---- */
+.tl-steps {
+  position: relative;
+  margin: 12px 0;
+}
+.tl-steps-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px 0 0;
+  border-radius: 7px;
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  color: var(--fg-3);
+  text-align: left;
+  transition: color 0.15s var(--ease);
+}
+.tl-steps-head:hover {
+  color: var(--fg-2);
+}
+.tl-steps-title {
+  color: var(--fg-2);
+}
+.tl-steps-tools {
+  color: var(--fg-4);
+}
+.tl-steps-err {
+  color: var(--err);
+}
+.tl-steps-dur {
+  margin-left: auto;
+  color: var(--fg-4);
+}
+.tl-node {
+  position: absolute;
+  left: -36px;
+  top: 11px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--fg-4);
+  background: var(--bg);
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.tl-steps.has-err .tl-node {
+  border-color: var(--err);
+}
+.tl-steps.running .tl-node {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft), 0 0 14px var(--accent);
+}
+.tl-steps-list {
+  list-style: none;
+  margin: 2px 0 6px;
+  padding: 0;
+  display: none;
+}
+.tl-steps.open .tl-steps-list {
+  display: block;
+  animation: tl-rise 0.28s var(--ease-in);
+}
+/* 舞台: 组头仅标签, 胶囊串一直展开 */
+[data-style="stage"] .tl-steps {
+  margin: 10px 0 12px;
+}
+[data-style="stage"] .tl-steps-head {
+  display: inline-flex;
+  gap: 8px;
+  width: auto;
+  height: auto;
+  margin-bottom: 7px;
+  font-size: 11px;
+  color: var(--fg-3);
+  cursor: default;
+}
+[data-style="stage"] .tl-steps-head:hover {
+  color: var(--fg-3);
+}
+[data-style="stage"] .tl-node {
+  position: static;
+  width: 6px;
+  height: 6px;
+  border: 0;
+  background: var(--fg-4);
+}
+[data-style="stage"] .tl-steps.has-err .tl-node {
+  background: var(--err);
+}
+[data-style="stage"] .tl-steps.running .tl-node {
+  background: var(--accent-2);
+  box-shadow: 0 0 10px var(--accent-2);
+}
+[data-style="stage"] .tl-steps-tools,
+[data-style="stage"] .tl-steps-err {
+  display: none;
+}
+[data-style="stage"] .tl-steps-dur {
+  margin-left: 0;
+}
+[data-style="stage"] .tl-chev {
+  display: none;
+}
+[data-style="stage"] .tl-steps .tl-steps-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  animation: none;
+}
+/* 胶囊是换行 flex 的子项, 默认 min-width:auto 会被长命令撑开冲出文字列 (实机出现横向滚动);
+   允许收缩 + 限宽, 摘要走省略号, 全文在 title 与检查器里看 */
+[data-style="stage"] .tl-steps-list > li {
+  min-width: 0;
+  max-width: 100%;
+}
+[data-style="stage"] .tl-step-main {
+  min-width: 0;
+  overflow: hidden;
+}
+[data-style="stage"] .tl-step-sum {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 步骤行 ---- */
+.tl-step-row {
+  display: flex;
+  align-items: center;
+  border-radius: 7px;
+  transition: background-color 0.12s var(--ease);
+}
+.tl-step-row:hover {
+  background: var(--hover);
+}
+.tl-step-row.sel {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.tl-step-row.sel:hover {
+  background: var(--accent-soft);
+}
+.tl-step-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 14px 15px 60px minmax(0, 1fr) auto 52px;
+  align-items: center;
+  gap: 8px;
+  height: 29px;
+  padding: 0 4px 0 8px;
+  font-family: var(--f-mono);
+  font-size: 12px;
+  color: var(--fg-3);
+  text-align: left;
+}
+.tl-step-status {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+}
+.tl-step-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in oklch, var(--ok) 75%, transparent);
+}
+.tl-step-row.err .tl-step-status {
+  color: var(--err);
+}
+.tl-step-icon {
+  color: var(--fg-4);
+}
+.tl-step-name {
+  color: var(--fg-2);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-step-row.err .tl-step-name {
+  color: var(--err);
+}
+.tl-step-sum {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-step-extra {
+  font-size: 11px;
+}
+.tl-plus {
+  font-weight: 400;
+  color: var(--ok);
+}
+.tl-minus {
+  margin-left: 5px;
+  font-style: normal;
+  font-weight: 400;
+  color: var(--err);
+}
+.tl-step-dur {
+  font-size: 11px;
+  color: var(--fg-4);
+  text-align: right;
+}
+.tl-step-fleet {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 2px;
+  border-radius: 5px;
+  color: var(--fg-4);
+  transition: color 0.15s var(--ease), background-color 0.15s var(--ease);
+}
+.tl-step-fleet:hover {
+  color: var(--accent-2);
+  background: var(--hover);
+}
+/* 「在时间线定位」的闪烁提示 (原型 .step.flash) */
+.tl-flash {
+  animation: tl-flash 1.2s var(--ease);
+}
+@keyframes tl-flash {
+  0%, 30% { background: color-mix(in oklch, var(--accent) 28%, transparent); }
+}
+/* 舞台: 一步一胶囊 */
+[data-style="stage"] .tl-step-row {
+  height: 30px;
+  max-width: min(100%, 320px);
+  padding: 0 6px 0 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--raise);
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease), transform 0.2s var(--ease);
+}
+[data-style="stage"] .tl-step-row:hover {
+  border-color: var(--line-2);
+  background: var(--raise);
+  transform: translateY(-1px);
+}
+[data-style="stage"] .tl-step-row.sel {
+  border-color: color-mix(in oklch, var(--accent) 70%, transparent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 16%, transparent), 0 8px 22px -8px var(--accent);
+}
+[data-style="stage"] .tl-step-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 11.5px;
+}
+[data-style="stage"] .tl-step-name {
+  display: none;
+}
+[data-style="stage"] .tl-step-sum {
+  color: var(--fg-2);
+}
+[data-style="stage"] .tl-step-row.err .tl-step-sum {
+  color: var(--err);
+}
+[data-style="stage"] .tl-step-status {
+  width: 12px;
+  height: 12px;
+}
+[data-style="stage"] .tl-step-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--ok);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--ok) 70%, transparent);
+}
+[data-style="stage"] .tl-step-extra {
+  color: var(--fg-3);
+}
+[data-style="stage"] .tl-step-fleet {
+  border-radius: 999px;
+}
+
+/* ---- 通知条目 ---- */
+.tl-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 9px;
+  background: var(--raise);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--fg-2);
+  overflow-wrap: break-word;
+}
+.tl-notice.info {
+  border-left-color: var(--fg-4);
+}
+.tl-notice.warning {
+  border-left-color: var(--warn);
+}
+.tl-notice.error {
+  border-left-color: var(--err);
+}
+.tl-notice.info svg {
+  color: var(--fg-4);
+}
+.tl-notice.warning svg {
+  color: var(--warn);
+}
+.tl-notice.error svg {
+  color: var(--err);
+}
+.tl-notice > span {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* ---- 检查器 · 步骤详情 ---- */
+.sd {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 28px;
+}
+.sd-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 14px;
+  font-size: 11.5px;
+  color: var(--fg-4);
+  transition: color 0.15s var(--ease);
+}
+.sd-back:hover {
+  color: var(--accent);
+}
+.sd-head {
+  margin-bottom: 18px;
+}
+.sd-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--f-mono);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--fg);
+}
+.sd-tool {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--fg-3);
+}
+.sd-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sd-status {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-family: var(--f-ui);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ok);
+  background: color-mix(in oklch, var(--ok) 14%, transparent);
+}
+.sd-status.error {
+  color: var(--err);
+  background: color-mix(in oklch, var(--err) 14%, transparent);
+}
+.sd-status.running {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.sd-meta {
+  display: flex;
+  gap: 14px;
+  margin-top: 6px;
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  color: var(--fg-3);
+}
+.sd-sec {
+  margin-bottom: 16px;
+}
+.sd-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-size: 11.5px;
+  color: var(--fg-3);
+}
+.sd-mono {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+.sd-more {
+  margin-left: auto;
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  color: var(--fg-4);
+}
+.sd-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: 12.5px;
+  color: var(--fg-3);
+}
+.sd-kv b {
+  font-weight: 500;
+  color: var(--fg);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.sd-code {
+  margin: 0;
+  max-height: 340px;
+  overflow: auto;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--well);
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--fg-2);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.sd-code.cmd {
+  color: var(--fg);
+}
+.sd-code.cmd::before {
+  content: "$ ";
+  color: var(--accent);
+}
+.sd-code.out.is-err {
+  color: var(--err);
+  border-color: color-mix(in oklch, var(--err) 30%, transparent);
+}
+.sd-code.diff {
+  white-space: pre;
+  padding: 8px 0;
+}
+.sd-code.diff span {
+  display: block;
+  padding: 0 13px;
+}
+.sd-code.diff .add {
+  background: var(--add-bg);
+  color: var(--ok);
+}
+.sd-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.sd-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--fg-2);
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+.sd-action:hover {
+  color: var(--fg);
+  border-color: var(--line-2);
+}
+.sd-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+[data-style="atelier"] .sd-action {
+  border-radius: 7px;
 }
 
 /* Markdown 渲染样式 */

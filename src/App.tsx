@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSessionStore } from "./store/session";
 import { useProjectsStore } from "./store/projects";
-import { MessageList } from "./components/MessageList";
+import { Timeline } from "./components/timeline/Timeline";
 import { InputBar } from "./components/InputBar";
 import { EmptyState, ProjectCard } from "./components/EmptyState";
 import { ChaosLoader } from "./components/ChaosLoader";
@@ -135,7 +135,7 @@ export default function App() {
                     {active.error}
                   </div>
                 )}
-                <MessageList inputBarH={inputBarH} />
+                <Timeline inputBarH={inputBarH} />
               </>
             ) : (
               <EmptyState />
