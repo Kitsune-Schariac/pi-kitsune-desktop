@@ -12,6 +12,7 @@ import { GitSidebarPanel } from "../GitSidebarPanel";
 import { FleetSidebarPanel } from "../FleetSidebarPanel";
 import { TrellisSidebarPanel } from "../TrellisSidebarPanel";
 import { StepDetail } from "../inspector/StepDetail";
+import { SessionOverview } from "../inspector/SessionOverview";
 
 /**
  * 检查器 (框架 C 第四列): 详情 / Git / 舰队 / 任务四个页签。
@@ -154,11 +155,7 @@ export function Inspector() {
           selectedEntry ? (
             <StepDetail key={selectedEntry.id} entry={selectedEntry} cwd={cwd} />
           ) : (
-            // 概览是阶段 4 的实现范围; 未选中步骤时占位
-            <div className="min-h-0 flex-1 overflow-y-auto p-5">
-              <h2 className="text-title font-medium text-[var(--fg)]">会话概览</h2>
-              <p className="mt-2 text-label text-[var(--fg-4)]">阶段 4 实现</p>
-            </div>
+            <SessionOverview />
           )
         ) : inspectorTab === "git" ? (
           <GitSidebarPanel cwd={cwd} />

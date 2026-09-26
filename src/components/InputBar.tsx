@@ -7,6 +7,7 @@ import {
   ArrowUp, ArrowDown, Clock, DollarSign, Gauge, Database,
 } from "lucide-react";
 import { buildRefsParts, refIcon, refMetaText, type Ref } from "../lib/refs";
+import { cacheHitRate as cacheHit } from "../lib/cacheHit";
 import type { PaletteCommand } from "../lib/commands";
 import type { PathRef } from "../lib/refs";
 import { RefsPopup } from "./refs/RefsPopup";
@@ -517,23 +518,9 @@ export function InputBar({
   const speedTokPerSec = isStreaming
     ? (activeSessionId ? sampleSpeed(activeSessionId) : null)
     : turnStats?.speed ?? null;
-  // 缓存命中率 (最近一次调用口径): cacheRead ÷ (input + cacheRead + cacheWrite),
-  // 缓存写入按未命中计。与 TUI footer 同口径, 详见 pi-kitsune-ui/src/footer.ts 的 cacheHitRate。
-  // 显示条件沿用 pi 官方 footer 的双重判定:
-  //   ① 会话出现过缓存活动 —— 过滤「provider 根本不支持缓存」的情况, 那种场景显示 0%
-  //      会被误读成「缓存失效了」, 而事实是从未有过缓存；
-  //      本轮 cacheSeen 是同一个信号的提前量 (会话累计到 agent_settled 才刷新, 首轮靠它兜底)
-  //   ② 最近一次有 prompt 量 —— 保证分母非 0, 不产生 NaN
-  const lastCache = turnStats?.lastCache ?? null;
-  const cacheActive =
-    (turnStats?.cacheSeen ?? false) ||
-    (active?.tokenStats?.tokens.cacheRead ?? 0) > 0 ||
-    (active?.tokenStats?.tokens.cacheWrite ?? 0) > 0;
-  const cachePromptTokens = lastCache ? lastCache.input + lastCache.cacheRead + lastCache.cacheWrite : 0;
-  const cacheHitRate =
-    lastCache && cacheActive && cachePromptTokens > 0
-      ? (lastCache.cacheRead / cachePromptTokens) * 100
-      : null;
+  // 缓存命中率的计算与双重判定整体抽入 lib/cacheHit.ts (检查器概览与这里共用一份),
+  // 口径说明见该文件头部注释
+  const cacheHitRate = cacheHit(turnStats, active?.tokenStats ?? null);
 
   return (
     // 悬浮输入卡: 底部居中, 宽度与消息列表一致 (max-w-[min(75%,52rem)]), 与消息区分离成浮动层

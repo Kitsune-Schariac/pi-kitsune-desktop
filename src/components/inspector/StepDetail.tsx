@@ -27,8 +27,21 @@ const OUT_LIMIT = 400;
 /**
  * 检查器「详情」页签的步骤视图: bash / write / 带 diff 的 edit / subagent 四类专用呈现,
  * 其余工具给参数 + 结果。数据全部来自 entry (args / result / 计时), 不额外拉取。
+ * onBack / hideLocate 供舰队子会话就地展开时覆盖全局行为 (缺省保持检查器主路径不变)。
  */
-export function StepDetail({ entry, cwd }: { entry: ChatEntry; cwd?: string }) {
+export function StepDetail({
+  entry,
+  cwd,
+  onBack,
+  hideLocate,
+}: {
+  entry: ChatEntry;
+  cwd?: string;
+  /** 返回按钮回调; 缺省回检查器概览 (全局 clearStep), 舰队子会话传收起 */
+  onBack?: () => void;
+  /** 子会话步骤不属于主时间线, 舰队面板内隐藏「在时间线定位」 */
+  hideLocate?: boolean;
+}) {
   const clearStep = useUiStore((s) => s.clearStep);
   const locateStep = useUiStore((s) => s.locateStep);
 
@@ -90,7 +103,7 @@ export function StepDetail({ entry, cwd }: { entry: ChatEntry; cwd?: string }) {
 
   return (
     <section className="sd">
-      <button type="button" className="sd-back" onClick={clearStep}>
+      <button type="button" className="sd-back" onClick={onBack ?? clearStep}>
         <ArrowLeft className="h-3 w-3" />
         概览
       </button>
@@ -226,10 +239,12 @@ export function StepDetail({ entry, cwd }: { entry: ChatEntry; cwd?: string }) {
           <Copy className="h-3 w-3" />
           复制
         </button>
-        <button type="button" className="sd-action" onClick={locateStep}>
-          <Crosshair className="h-3 w-3" />
-          在时间线定位
-        </button>
+        {!hideLocate && (
+          <button type="button" className="sd-action" onClick={locateStep}>
+            <Crosshair className="h-3 w-3" />
+            在时间线定位
+          </button>
+        )}
         {isSubagent && (
           <button
             type="button"

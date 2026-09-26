@@ -14,6 +14,8 @@ interface TurnViewProps {
   selectedId: string | null;
   /** 「在时间线定位」信号 (递增): 传给组以展开折叠中的目标 */
   revealSeq: number;
+  /** 覆盖步骤点击 (缺省走全局 ui.openStep); 舰队子会话传入, 由面板就地展开详情 */
+  onStepClick?: (entry: ChatEntry) => void;
 }
 
 /**
@@ -27,6 +29,7 @@ export const TurnView = memo(function TurnView({
   streamingReplyId,
   selectedId,
   revealSeq,
+  onStepClick,
 }: TurnViewProps) {
   return (
     <article className={`tl-turn${live ? " live" : ""}`}>
@@ -50,6 +53,7 @@ export const TurnView = memo(function TurnView({
               entries={item.entries}
               selectedId={selectedId}
               revealSeq={revealSeq}
+              onStepClick={onStepClick}
             />
           );
         }
@@ -76,6 +80,7 @@ function sameTurnProps(a: TurnViewProps, b: TurnViewProps): boolean {
   if (a.live !== b.live) return false;
   if (a.streamingReplyId !== b.streamingReplyId) return false;
   if (a.selectedId !== b.selectedId || a.revealSeq !== b.revealSeq) return false;
+  if (a.onStepClick !== b.onStepClick) return false;
   if (a.turn.id !== b.turn.id || a.turn.items.length !== b.turn.items.length) return false;
   return a.turn.items.every((item, i) => sameItem(item, b.turn.items[i]));
 }
