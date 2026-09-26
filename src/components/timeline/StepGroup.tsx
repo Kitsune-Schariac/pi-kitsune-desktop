@@ -24,6 +24,8 @@ interface StepGroupProps {
   selectedId: string | null;
   /** 「在时间线定位」信号 (递增): 本组含目标步骤时强制展开, 否则折叠组里找不到行 */
   revealSeq: number;
+  /** 覆盖步骤点击的默认行为 (缺省走全局 ui.openStep); 舰队子会话等非当前会话上下文传入 */
+  onStepClick?: (entry: ChatEntry) => void;
 }
 
 /**
@@ -31,7 +33,7 @@ interface StepGroupProps {
  * 含失败或运行中的组默认展开 (失败必须浮出来), 其余默认折叠; 用户手动开合后由本地 state 记忆。
  * 工坊展开为一步一行, 舞台为一直展开的胶囊串 (index.css 按 data-style 分支)。
  */
-export const StepGroup = memo(function StepGroup({ entries, selectedId, revealSeq }: StepGroupProps) {
+export const StepGroup = memo(function StepGroup({ entries, selectedId, revealSeq, onStepClick }: StepGroupProps) {
   const stats = groupStats(entries);
   const [open, setOpen] = useState(stats.errors > 0 || stats.running);
 
@@ -70,7 +72,7 @@ export const StepGroup = memo(function StepGroup({ entries, selectedId, revealSe
       <ol className="tl-steps-list">
         {entries.map((entry) => (
           <li key={entry.id}>
-            <StepRow entry={entry} selected={entry.id === selectedId} />
+            <StepRow entry={entry} selected={entry.id === selectedId} onOpen={onStepClick} />
           </li>
         ))}
       </ol>
@@ -80,6 +82,7 @@ export const StepGroup = memo(function StepGroup({ entries, selectedId, revealSe
 
 function sameGroupProps(a: StepGroupProps, b: StepGroupProps): boolean {
   if (a.selectedId !== b.selectedId || a.revealSeq !== b.revealSeq) return false;
+  if (a.onStepClick !== b.onStepClick) return false;
   if (a.entries === b.entries) return true;
   if (a.entries.length !== b.entries.length) return false;
   for (let i = 0; i < a.entries.length; i++) {
@@ -88,8 +91,9 @@ function sameGroupProps(a: StepGroupProps, b: StepGroupProps): boolean {
   return true;
 }
 
-/** 单步一行。不订阅任何 store: 选中态由父级传入, 联动按钮用 getState 直调 */
-function StepRow({ entry, selected }: { entry: ChatEntry; selected: boolean }) {
+/** 单步一行。不订阅任何 store: 选中态由父级传入, 联动按钮用 getState 直调;
+ *  点击行为由父级 onOpen 覆盖 (缺省调全局 ui.openStep) */
+function StepRow({ entry, selected, onOpen }: { entry: ChatEntry; selected: boolean; onOpen?: (entry: ChatEntry) => void }) {
   const Icon = TOOL_ICONS[entry.toolName ?? ""] ?? Wrench;
   const subagentDetails = entry.result ? extractSubagentDetails(entry.result) : null;
   const isSubagent = SUBAGENT_TOOLS.has(entry.toolName ?? "") || !!subagentDetails;
@@ -114,7 +118,7 @@ function StepRow({ entry, selected }: { entry: ChatEntry; selected: boolean }) {
         className="tl-step-main"
         data-step-id={entry.id}
         title={isSubagent ? summarizeStep(entry) : summary}
-        onClick={() => useUiStore.getState().openStep(entry.id)}
+        onClick={() => (onOpen ? onOpen(entry) : useUiStore.getState().openStep(entry.id))}
       >
         <span className="tl-step-status">
           {entry.status === "running" ? (

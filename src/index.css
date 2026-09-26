@@ -1464,6 +1464,251 @@ html:has([data-pet]) #root {
   border-radius: 7px;
 }
 
+/* ---- 检查器 · 会话概览 (原型 overview: 工坊 = 大数字 + 细网格; 舞台 = accent 渐变卡) ---- */
+.ov {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px 20px 28px;
+}
+.ov-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 20px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+.ov-k {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  color: var(--fg-4);
+}
+.ov-cost {
+  margin-top: 4px;
+  font-family: var(--f-display);
+  font-size: 54px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+/* $ 小一号且抬到数字基线之上; 仅 $ 与数字用衬线 (中文标签一律黑体) */
+.ov-cost small {
+  margin-right: 2px;
+  font-size: 26px;
+  color: var(--accent);
+  vertical-align: 18px;
+}
+.ov-sub {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--fg-3);
+}
+/* 细网格: 1px gap 由底色导线冒充分隔线 (无需逐格边) */
+.ov-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--line);
+}
+.ov-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: var(--pane);
+}
+.ov-v {
+  font-family: var(--f-display);
+  font-size: 26px;
+  line-height: 1;
+  color: var(--fg);
+}
+.ov-sec {
+  margin-bottom: 22px;
+}
+.ov-title {
+  margin: 0 0 10px;
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  color: var(--fg-4);
+}
+.ov-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: 12.5px;
+  color: var(--fg-3);
+}
+.ov-kv b {
+  font-weight: 500;
+  color: var(--fg);
+}
+.ov-kv b.mono {
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  font-weight: 400;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.ov-bar-row {
+  display: grid;
+  grid-template-columns: 76px 1fr 32px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  color: var(--fg-2);
+}
+.ov-bar-k {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ov-bar {
+  height: 5px;
+  border-radius: 5px;
+  background: var(--well);
+  overflow: hidden;
+}
+.ov-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, color-mix(in oklch, var(--accent) 55%, transparent), var(--accent));
+}
+.ov-bar-v {
+  text-align: right;
+  color: var(--fg-3);
+}
+.ov-none {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fg-4);
+}
+.ov-err {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--err);
+}
+.ov-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--fg-4);
+}
+.ov-hint svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+/* 舞台: 花费卡换 accent→accent-2 渐变底; 数字 (纯数字) 用 Cormorant 斜体 */
+[data-style="stage"] .ov-hero {
+  padding: 18px 18px 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(135deg, color-mix(in oklch, var(--accent) 34%, transparent), color-mix(in oklch, var(--accent-2) 18%, transparent));
+}
+[data-style="stage"] .ov-cost {
+  font-size: 50px;
+  font-style: italic;
+  font-weight: 600;
+}
+[data-style="stage"] .ov-sub {
+  color: var(--fg-2);
+}
+[data-style="stage"] .ov-grid {
+  gap: 8px;
+  margin-bottom: 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+[data-style="stage"] .ov-cell {
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--well);
+}
+[data-style="stage"] .ov-v {
+  font-size: 27px;
+  font-style: italic;
+  font-weight: 600;
+}
+[data-style="stage"] .ov-bar > span {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+[data-style="stage"] .ov-title {
+  font-family: var(--f-ui);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--fg-3);
+}
+[data-style="stage"] .ov-kv {
+  border-bottom-style: solid;
+}
+[data-style="stage"] .ov-hint {
+  border: 0;
+  background: var(--well);
+  color: var(--fg-3);
+}
+
+/* ---- 舰队子会话时间线: 面板宽 ~340px, 去掉工坊脊线与章节菱形并整体收紧 ---- */
+.fs-session {
+  padding: 14px 14px 20px;
+}
+.fs-detail {
+  margin-top: 18px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+/* 内嵌详情不再自撑高度/滚动 (滚动由外层时间线容器承担), 只保留内边距 */
+.fs-detail .sd {
+  padding: 8px 0 0;
+  overflow: visible;
+}
+/* 覆盖 .tl-timeline 的工坊版式 (max-width/margin/padding 在窄面板里放不下) */
+.tl-timeline.fs-timeline {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+[data-style="atelier"] .fs-timeline .tl-turn::before {
+  display: none;
+}
+[data-style="atelier"] .fs-timeline .tl-prompt::before {
+  display: none;
+}
+[data-style="atelier"] .fs-timeline .tl-prompt-text {
+  font-size: 15px;
+}
+.fs-timeline .tl-turn + .tl-turn {
+  margin-top: 28px;
+}
+[data-style="stage"] .fs-timeline .tl-turn + .tl-turn {
+  margin-top: 24px;
+}
+/* 步骤行 6 列栅格在窄面板收窄: 工具名 60→48, 耗时 52→40 */
+.fs-timeline .tl-step-main {
+  grid-template-columns: 14px 15px 48px minmax(0, 1fr) auto 40px;
+}
+
 /* Markdown 渲染样式 */
 .markdown-body {
   line-height: 1.7;
