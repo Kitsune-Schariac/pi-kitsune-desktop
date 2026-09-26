@@ -12,9 +12,9 @@ const LIST_MODES: { key: SessionListMode; label: string }[] = [
 ];
 
 /**
- * 会话列表 (框架 C 第二列): 搜索 + 新建入口 + 「最近 / 项目」分段 + 项目树 + 会话库路径小字。
+ * 会话列表 (框架 C 第二列): 搜索 + 新建入口 + 「最近 / 项目」分段 + 列表体 + 会话库路径小字。
  * 收起与拖拽调宽由 paneOpen / 右缘手柄控制; 宽度同时写 :root 的 --list-w 供舞台暗幕列端点计算。
- * 「最近」视图是阶段 2 的实现范围, 这里先放占位。
+ * 列表体 (最近 / 项目两视图) 都走 ProjectList, 打开 / 删除 / 菜单逻辑单源。
  */
 export function SessionPane() {
   const paneOpen = useUiStore((s) => s.paneOpen);
@@ -70,8 +70,9 @@ export function SessionPane() {
 
   return (
     <aside
+      data-pane={paneOpen ? "open" : "closed"}
       style={{ width: paneOpen ? width : 0 }}
-      className="relative shrink-0 overflow-hidden border-r border-[var(--line)] bg-[var(--pane)] transition-[width] duration-slow ease-swift"
+      className="shell-sessions relative shrink-0 overflow-hidden"
     >
       {/* 内层锁死展开宽度: 收起动画压缩外框时内容不跟着变形 (只被裁切) */}
       <div className="flex h-full flex-col" style={{ width }}>
@@ -90,9 +91,9 @@ export function SessionPane() {
               }}
               placeholder="搜索会话或项目"
               aria-label="搜索会话"
-              className="min-w-0 flex-1 bg-transparent text-[var(--fs-label)] text-[var(--fg)] outline-none placeholder:text-[var(--fg-4)]"
+              className="min-w-0 flex-1 bg-transparent text-label text-[var(--fg)] outline-none placeholder:text-[var(--fg-4)]"
             />
-            <kbd className="shrink-0 rounded-sm border border-[var(--line-2)] px-1 font-mono text-[var(--fs-micro)] text-[var(--fg-4)]">
+            <kbd className="shrink-0 rounded-sm border border-[var(--line-2)] px-1 font-mono text-micro text-[var(--fg-4)]">
               /
             </kbd>
           </label>
@@ -107,18 +108,14 @@ export function SessionPane() {
           </button>
         </div>
 
-        <div className="mx-3 flex gap-1 rounded-md bg-[var(--well)] p-1" role="tablist">
+        {/* 最近 / 项目分段: 形态由 index.css 按 data-style 分支 (工坊下划线页签 / 舞台胶囊) */}
+        <div className="sess-seg" role="tablist">
           {LIST_MODES.map(({ key, label }) => (
             <button
               key={key}
               role="tab"
               aria-selected={listMode === key}
               onClick={() => setListMode(key)}
-              className={`flex-1 rounded-sm px-2 py-1 text-[var(--fs-label)] transition-colors duration-fast ease-out ${
-                listMode === key
-                  ? "bg-[var(--raise)] text-[var(--fg)] shadow-[inset_0_0_0_1px_var(--line)]"
-                  : "text-[var(--fg-3)] hover:text-[var(--fg-2)]"
-              }`}
             >
               {label}
             </button>
@@ -126,27 +123,17 @@ export function SessionPane() {
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          {listMode === "recent" ? (
-            <div className="px-4 py-10 text-center text-[var(--fs-label)] leading-relaxed text-[var(--fg-4)]">
-              最近视图 · 阶段 2 实现
-              <br />
-              先切到「项目」看会话树
+          <ProjectList searchQuery={query} mode={listMode} />
+          {/* 搜索模式提示: 全局拍平, 不按项目分组 (原 Sidebar 行为; 最近视图本就跨项目, 无需提示) */}
+          {query.trim() !== "" && listMode === "projects" && (
+            <div className="px-4 py-1 text-mini leading-relaxed text-[var(--fg-4)]">
+              搜索中：会话不按项目分组
             </div>
-          ) : (
-            <>
-              <ProjectList searchQuery={query} />
-              {/* 搜索模式提示: 全局拍平, 不按项目分组 (原 Sidebar 行为) */}
-              {query.trim() !== "" && (
-                <div className="px-4 py-1 text-[var(--fs-mini)] leading-relaxed text-[var(--fg-4)]">
-                  搜索中：会话不按项目分组
-                </div>
-              )}
-            </>
           )}
         </div>
 
         {/* 会话数据库路径弱化为小字 (改版稿保留项) */}
-        <div className="flex shrink-0 items-center gap-1 border-t border-[var(--line)] px-4 py-2 text-[var(--fs-micro)] text-[var(--fg-4)]">
+        <div className="flex shrink-0 items-center gap-1 border-t border-[var(--line)] px-4 py-2 text-micro text-[var(--fg-4)]">
           <Database className="h-3 w-3 shrink-0" />
           <span className="truncate" title="会话文件存放位置">
             ~/.pi/agent/sessions

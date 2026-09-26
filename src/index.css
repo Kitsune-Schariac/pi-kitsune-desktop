@@ -177,9 +177,9 @@
   --col-w: 540px;
   /* 暗幕底色: 舞台皮肤只声明 stage-tint, 幕色与色相由这里派生 */
   --scrim-color: oklch(8% 0.03 var(--stage-tint, 285));
-  /* 文字列右端坐标 = 图标轨 52 + 会话列表宽 + 列左缩进 36 + 文字列宽;
+  /* 文字列右端坐标 = 浮卡左缘 12 + 图标轨 52 + 卡间距 10 + 会话列表宽 + 卡间距 10 + 列左缩进 36 + 文字列宽;
      --list-w 由 SessionPane 实时写 :root (拖拽时高频, 不走 React 状态) */
-  --col-end: calc(52px + var(--list-w, 264px) + 36px + var(--col-w));
+  --col-end: calc(12px + 52px + 10px + var(--list-w, 264px) + 10px + 36px + var(--col-w));
 }
 
 /* 舞台 × 亮 = 原型没有, 为 sakura-light 新设计: 暗幕换白色半透明幕 (左浓右淡),
@@ -213,7 +213,7 @@
   --wall-pos: 0% 30%;
   --col-w: 540px;
   --scrim-color: oklch(99.6% 0.004 var(--stage-tint, 350));
-  --col-end: calc(52px + var(--list-w, 264px) + 36px + var(--col-w));
+  --col-end: calc(12px + 52px + 10px + var(--list-w, 264px) + 10px + 36px + var(--col-w));
 }
 
 /* ============================================================
@@ -363,9 +363,157 @@ html:has([data-pet]) #root {
 }
 
 /* ============================================================
-   外壳 (框架 C): 图标轨按钮 / 检查器外壳 / 检查器页签
-   两风格的形态差异只在以下三处, 用 data-style 分支表达
+   外壳 (框架 C): 图标轨按钮 / 会话列表 / 检查器外壳 / 检查器页签
+   两风格的形态差异只在以下四处, 用 data-style 分支表达
    ============================================================ */
+
+/* 图标轨与会话列表: 工坊 = 贴边列; 舞台 = 浮在壁纸上的玻璃卡
+   (外边距 + 圆角 + 高不透明度填充 + 内高光, 不用 backdrop-filter) */
+.shell-rail {
+  background: var(--rail);
+  border-right: 1px solid var(--line);
+}
+.shell-sessions {
+  background: var(--pane);
+  border-right: 1px solid var(--line);
+  /* 收起动画: 宽度压缩 + 舞台浮卡同步收边距, 内容只被裁切 */
+  transition: width 0.32s var(--ease), margin-right 0.32s var(--ease),
+    opacity 0.24s var(--ease), border-width 0.32s var(--ease);
+}
+[data-style="stage"] .shell-rail {
+  margin: 10px 10px 12px 12px;
+  border-right-width: 0;
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+[data-style="stage"] .shell-sessions {
+  margin: 10px 10px 12px 0;
+  border-right-width: 0;
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+[data-style="stage"] .shell-sessions[data-pane="closed"] {
+  margin-right: 0;
+  opacity: 0;
+  border-width: 0;
+}
+
+/* 「最近 / 项目」分段: 工坊 = 下划线页签 (原型 .seg); 舞台 = 胶囊分段 (原型 .seg) */
+.sess-seg {
+  display: flex;
+  flex: none;
+}
+.sess-seg button {
+  position: relative;
+  cursor: pointer;
+  color: var(--fg-3);
+  transition: color 0.15s var(--ease), background-color 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+.sess-seg button:hover {
+  color: var(--fg-2);
+}
+.sess-seg button[aria-selected="true"] {
+  color: var(--fg);
+}
+[data-style="atelier"] .sess-seg {
+  gap: 18px;
+  padding: 2px 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+[data-style="atelier"] .sess-seg button {
+  padding: 8px 0 9px;
+  font-size: var(--fs-label);
+}
+[data-style="atelier"] .sess-seg button[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+[data-style="stage"] .sess-seg {
+  margin: 0 12px 4px;
+  padding: 3px;
+  background: var(--well);
+  border-radius: 11px;
+}
+[data-style="stage"] .sess-seg button {
+  flex: 1;
+  padding: 5px 0;
+  font-size: var(--fs-label);
+  border-radius: 8px;
+}
+[data-style="stage"] .sess-seg button[aria-selected="true"] {
+  background: var(--raise);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* 最近视图分组标题 (原型 .grp) */
+.sess-grp {
+  padding: 14px 8px 6px;
+  font-family: var(--f-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  color: var(--fg-4);
+}
+[data-style="stage"] .sess-grp {
+  font-family: var(--f-ui);
+  font-size: var(--fs-mini);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--fg-3);
+}
+
+/* 项目徽标 (最近视图行): 两字母缩写, 色相由项目名哈希稳定派生 (--h 由 inline style 给) */
+.sess-badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 16px;
+  border-radius: 4px;
+  font-family: var(--f-mono);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: oklch(78% 0.08 var(--h));
+  background: oklch(78% 0.08 var(--h) / 0.12);
+}
+[data-style="atelier"][data-base="light"] .sess-badge {
+  color: oklch(45% 0.1 var(--h));
+  background: oklch(55% 0.1 var(--h) / 0.12);
+}
+[data-style="stage"] .sess-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: oklch(90% 0.06 var(--h));
+  background: oklch(60% 0.12 var(--h) / 0.3);
+  box-shadow: inset 0 0 0 1px oklch(80% 0.1 var(--h) / 0.3);
+}
+[data-style="stage"][data-base="light"] .sess-badge {
+  color: oklch(42% 0.11 var(--h));
+  background: oklch(66% 0.12 var(--h) / 0.22);
+  box-shadow: inset 0 0 0 1px oklch(60% 0.1 var(--h) / 0.24);
+}
+
+/* 会话行选中态: 工坊 = 浮起底 + 1px 内描边; 舞台 = accent 浅底 + accent 内描边 (原型 .row.sel) */
+.sess-row.sel {
+  color: var(--fg);
+}
+[data-style="atelier"] .sess-row.sel {
+  background: var(--raise);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+[data-style="stage"] .sess-row.sel {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 40%, transparent);
+}
 
 /* 图标轨按钮: 工坊 = 左缘 2px accent 竖条标记激活; 舞台 = accent 实心圆角块 */
 .rail-btn {
@@ -421,7 +569,7 @@ html:has([data-pet]) #root {
 }
 [data-style="stage"] .inspector {
   position: absolute;
-  top: 0;
+  top: 10px;
   right: 12px;
   bottom: 12px;
   width: 360px;
@@ -430,17 +578,14 @@ html:has([data-pet]) #root {
   background: var(--raise);
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
-  animation: inspector-in 0.45s var(--ease) both;
+  /* 从右滑出 (原型 .insp-closed .inspector): 常驻挂载 + class 切换开合,
+     卸载/重挂只能播一次性入场动画, 表达不了"滑出" */
+  transition: transform 0.45s var(--ease), opacity 0.35s var(--ease);
 }
-@keyframes inspector-in {
-  from {
-    opacity: 0;
-    transform: translateX(calc(100% + 24px));
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+[data-style="stage"] .inspector.insp-closed {
+  transform: translateX(calc(100% + 24px));
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* 检查器页签: 工坊 = 下划线; 舞台 = 圆角药丸 */
@@ -540,6 +685,19 @@ html:has([data-pet]) #root {
       color-mix(in oklch, var(--scrim-color) 30%, transparent) calc(var(--col-end) + 90px),
       color-mix(in oklch, var(--scrim-color) 4%, transparent) 100%),
     linear-gradient(to top, color-mix(in oklch, var(--scrim-color) 70%, transparent), transparent 32%);
+}
+
+/* 舞台 × 亮: 白幕比暗幕更"糊"壁纸 (浅粉底看不出粉色), 整体调淡:
+   列内两档乘在 --scrim 上 (浓度滑杆仍然生效), 列外与底部固定档一并调低。
+   列内最浓处 ≈ scrim(0.8) × 45% = 36% 白幕 —— 托住深色正文, 又不盖死壁纸渐变 */
+[data-style="stage"][data-base="light"] .stage-scrim {
+  background:
+    linear-gradient(90deg,
+      color-mix(in oklch, var(--scrim-color) calc(var(--scrim) * 45%), transparent) 0,
+      color-mix(in oklch, var(--scrim-color) calc(var(--scrim) * 40%), transparent) calc(var(--col-end) - 80px),
+      color-mix(in oklch, var(--scrim-color) 12%, transparent) calc(var(--col-end) + 90px),
+      color-mix(in oklch, var(--scrim-color) 2%, transparent) 100%),
+    linear-gradient(to top, color-mix(in oklch, var(--scrim-color) 30%, transparent), transparent 32%);
 }
 
 /* Markdown 渲染样式 */
