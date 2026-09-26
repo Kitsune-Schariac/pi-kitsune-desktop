@@ -1290,6 +1290,191 @@ html:has([data-pet]) #root {
   overflow-wrap: break-word;
 }
 
+/* ============================================================
+   空状态与输入卡 (design §7 / §8)
+   工坊 = 居中问候 + 底部渐隐浮卡; 舞台 = 问候与输入卡贴文字列左对齐
+   (舞台下 --bg 透明, 输入卡靠 --raise 高不透明度填充呈现, 不用 backdrop-filter)
+   ============================================================ */
+
+/* ---- 空状态 ---- */
+.empty-root {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+[data-style="atelier"] .empty-root {
+  align-items: center;
+  justify-content: center;
+  /* 底部留白让问候整体上移, 空状态内容不被悬浮输入卡压住 */
+  padding: 0 24px 180px;
+}
+[data-style="stage"] .empty-root {
+  align-items: flex-start;
+  padding: 88px 0 0 36px;
+}
+.empty-greeting {
+  font-family: var(--f-voice);
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  color: var(--fg);
+}
+/* 暗底亮字有光渗, 文楷 400 显胖 → 夜工坊用 300 (与 .tl-reply 同一口径) */
+[data-style="atelier"][data-base="dark"] .empty-greeting {
+  font-weight: 300;
+}
+[data-style="atelier"] .empty-greeting {
+  text-align: center;
+}
+[data-style="stage"][data-base="dark"] .empty-greeting {
+  text-shadow: 0 1px 14px oklch(0% 0 0 / 0.55);
+}
+[data-style="stage"][data-base="light"] .empty-greeting {
+  text-shadow: 0 1px 12px oklch(100% 0 0 / 0.65);
+}
+[data-style="stage"] .empty-greeting,
+[data-style="stage"] .empty-sub {
+  max-width: min(var(--col-w, 540px), 100%);
+}
+.empty-recent {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 440px;
+  margin-top: 36px;
+}
+[data-style="stage"] .empty-recent {
+  max-width: min(var(--col-w, 540px), 100%);
+  margin-top: 30px;
+}
+
+/* ---- 输入卡 ---- */
+.composer-wrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+[data-style="atelier"] .composer-wrap {
+  /* 底部渐隐到主区底色: 时间线消息滑到卡片后方时收进底色, 不糊在正文上 */
+  padding: 28px 28px 18px;
+  background: linear-gradient(to bottom, transparent, var(--bg) 42%);
+}
+[data-style="stage"] .composer-wrap {
+  padding: 0 0 6px;
+}
+.composer {
+  pointer-events: auto;
+  margin: 0 auto;
+  width: 100%;
+  /* 原型 composer max-width 720 (时间线 780 含 72/44 不对称内边距, 文字列净宽 664;
+     卡片比文字列略宽是原型既定观感) */
+  max-width: 720px;
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+  background: var(--raise);
+  box-shadow: var(--shadow);
+  transition: border-color 0.25s var(--ease), box-shadow 0.25s var(--ease);
+  /* 工具行窄宽适配的容器查询基准 (见下方 @container) */
+  container-type: inline-size;
+}
+.composer:focus-within {
+  border-color: color-mix(in oklch, var(--accent) 38%, transparent);
+  box-shadow: var(--shadow), 0 0 0 4px var(--accent-soft);
+}
+[data-style="stage"] .composer {
+  /* 与 .tl-timeline 同一公式 (100% 按主区宽算): 左对齐文字列, 检查器浮卡打开时同步让位。
+     左缩进用 margin 而非父级 padding —— padding 会吃掉百分比宽度的基准, 与文字列错开 36px */
+  width: min(var(--col-w, 540px), calc(100% - var(--insp-w, 0px) - 72px));
+  max-width: none;
+  margin: 0 0 0 36px;
+  border-radius: 22px;
+}
+
+/* 窄宽: 次要 chip 收成纯图标、上下文文字标签让位 (照原型 @container 两档) */
+@container (max-width: 600px) {
+  .composer-opt-label,
+  .composer-ctx-label {
+    display: none;
+  }
+  .composer-opt-chip {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+}
+@container (max-width: 500px) {
+  .composer-meta-label {
+    display: none;
+  }
+  /* 项目 chip 是主入口不隐藏, 只收窄文字 (原型 .cb-left .chip span 口径) */
+  .composer-project-label {
+    max-width: 96px;
+  }
+}
+
+/* 发送 / 中止钮: 工坊 = 方形 accent 块, 运行中转描边方块; 舞台 = 圆形 (原型 .send) */
+.composer-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 4px 14px -4px var(--accent);
+  transition: transform 0.15s var(--ease), background-color 0.2s var(--ease),
+    color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.composer-send:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.02);
+}
+.composer-send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.composer-send:disabled {
+  opacity: 0.4;
+}
+.composer-send[data-stop="true"] {
+  background: var(--raise);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+[data-style="stage"] .composer-send {
+  border-radius: 999px;
+}
+[data-style="stage"] .composer-send[data-stop="true"] {
+  background: var(--well);
+  color: var(--accent-2);
+  box-shadow: inset 0 0 0 1.5px var(--accent-2);
+}
+
+/* 排队条 (QueueIndicator): 贴输入卡上沿的整行计数条, 圆角跟随卡片顶角 */
+.queue-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 13px 13px 0 0;
+  background: color-mix(in oklch, var(--accent) 7%, transparent);
+  font-size: var(--fs-label);
+  color: var(--fg-2);
+  text-align: left;
+  transition: background-color 0.15s var(--ease);
+}
+.queue-bar:hover {
+  background: color-mix(in oklch, var(--accent) 11%, transparent);
+}
+[data-style="stage"] .queue-bar {
+  border-radius: 21px 21px 0 0;
+}
+
 /* ---- 检查器 · 步骤详情 ---- */
 .sd {
   min-height: 0;

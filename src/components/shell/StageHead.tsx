@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Folder, MoreHorizontal, PanelRight, X } from "lucide-react";
 import { useSessionStore } from "../../store/session";
 import { useUiStore } from "../../store/ui";
-import { QueueIndicator } from "../QueueIndicator";
 
 /** 路径最后一段 (项目名展示用): 兼容 Windows 反斜杠 */
 function baseName(p: string): string {
@@ -10,8 +9,9 @@ function baseName(p: string): string {
 }
 
 /**
- * 主区头部: 会话标题 + 元信息 (项目 / cwd 悬停 / 运行中胶囊) + 队列指示 +
- * 检查器开关 + 「更多」菜单 (关闭会话)。错误条由 App 渲染在它下方。
+ * 主区头部: 会话标题 + 元信息 (项目 / cwd 悬停 / 运行中胶囊) +
+ * 检查器开关 + 「更多」菜单 (关闭会话)。错误条由 App 渲染在它下方;
+ * 队列指示已迁入输入卡上沿 (QueueIndicator)。
  */
 export function StageHead() {
   const active = useSessionStore((s) =>
@@ -59,7 +59,6 @@ export function StageHead() {
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
-        <QueueIndicator steering={active.steeringQueue} followUp={active.followUpQueue} />
         <button
           onClick={() => setInspectorOpen(!inspectorOpen)}
           className={`grid h-8 w-8 place-items-center rounded-md transition-colors duration-fast ease-out ${
