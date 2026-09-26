@@ -3,7 +3,7 @@ import { useSessionStore } from "./store/session";
 import { useProjectsStore } from "./store/projects";
 import { Timeline } from "./components/timeline/Timeline";
 import { InputBar } from "./components/InputBar";
-import { EmptyState, ProjectCard } from "./components/EmptyState";
+import { EmptyState } from "./components/EmptyState";
 import { ChaosLoader } from "./components/ChaosLoader";
 import { TitleBar } from "./components/TitleBar";
 import { Rail } from "./components/shell/Rail";
@@ -142,12 +142,9 @@ export default function App() {
             )}
             <InputBar
               emptyProject={emptyProject}
+              onEmptyProjectChange={setEmptyProject}
               onHeightChange={setInputBarH}
               onOpenPanel={setPanel}
-              bottomLayer={
-                // 仅空状态: 项目选择卡片压在输入卡下层, 顶部露出可点击
-                !active && <ProjectCard project={emptyProject} onProjectChange={setEmptyProject} />
-              }
             />
           </main>
           {/* 检查器: 有活动会话才渲染 (无会话时详情/面板都无主体可挂) */}
