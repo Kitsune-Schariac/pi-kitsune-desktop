@@ -70,7 +70,7 @@ export const DiffView = memo(function DiffView({ patch, cwd }: { patch: string; 
         return (
           <div
             key={fi}
-            style={fi > 0 ? { borderTop: "1px solid var(--border-subtle)" } : undefined}
+            style={fi > 0 ? { borderTop: "1px solid var(--line)" } : undefined}
           >
             <div
               className="truncate px-2 py-1 font-mono text-mini text-fg-3"

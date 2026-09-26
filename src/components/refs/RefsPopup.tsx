@@ -124,7 +124,7 @@ export function RefsPopup({ root, onPick, onClose }: {
   };
 
   return (
-    <div className="absolute bottom-full left-0 z-50 mb-1 w-[520px] rounded-lg border border-line bg-raise p-3 shadow-[var(--shadow)]">
+    <div className="absolute bottom-full left-0 z-50 mb-1 w-[520px] rounded-lg border border-line bg-popover p-3 shadow-[var(--shadow)]">
       {/* tabs */}
       <div className="mb-2 flex items-center gap-1 border-b border-line pb-2">
         {TABS.map(({ key, label, icon: Icon }) => (

@@ -46,7 +46,7 @@ function MiniSelect({ label, icon: Icon, value, options, onChange, disabled, ope
         <ChevronDown className="h-2 w-2 shrink-0 text-fg-4" />
       </button>
       {openSel && (
-        <div className="absolute bottom-full right-0 z-50 mb-1 max-h-56 overflow-auto rounded-lg border border-line bg-raise py-1 shadow-[var(--shadow)]">
+        <div className="absolute bottom-full right-0 z-50 mb-1 max-h-56 overflow-auto rounded-lg border border-line bg-popover py-1 shadow-[var(--shadow)]">
           {options.map((opt) => (
             <button
               key={opt}
@@ -122,7 +122,7 @@ function ModelPicker({
         <ChevronDown className="h-2 w-2 shrink-0 text-fg-4" />
       </button>
       {openSel && (
-        <div className="absolute bottom-full right-0 z-50 mb-1 w-80 overflow-hidden rounded-lg border border-line bg-raise shadow-[var(--shadow)]">
+        <div className="absolute bottom-full right-0 z-50 mb-1 w-80 overflow-hidden rounded-lg border border-line bg-popover shadow-[var(--shadow)]">
           {/* provider chips 横排 (多时区内滚动, 不撑爆弹层) */}
           {providerList.length > 0 && (
             <div className="flex flex-wrap gap-1 border-b border-line px-2 py-2">
@@ -623,7 +623,7 @@ export function InputBar({
           {/* 引用预览 popover */}
           {preview && (
             <div className="relative">
-              <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-lg border border-line bg-raise shadow-[var(--shadow)]">
+              <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-lg border border-line bg-popover shadow-[var(--shadow)]">
                 <div className="flex items-center justify-between border-b border-line px-3 py-2">
                   <span className="flex items-center gap-2 text-label font-medium text-fg">
                     {(() => {
@@ -694,7 +694,7 @@ export function InputBar({
                   <ChevronDown className="h-3 w-3 shrink-0 text-fg-4" />
                 </button>
                 {projectOpen && (
-                  <div className="absolute bottom-full left-0 z-50 mb-1 max-h-56 w-56 overflow-auto rounded-lg border border-line bg-raise py-1 shadow-[var(--shadow)]">
+                  <div className="absolute bottom-full left-0 z-50 mb-1 max-h-56 w-56 overflow-auto rounded-lg border border-line bg-popover py-1 shadow-[var(--shadow)]">
                     {projects.length === 0 ? (
                       <div className="px-3 py-2 text-label text-fg-4">暂无项目</div>
                     ) : (

@@ -14,7 +14,7 @@ export type SettingsSection = TabKey;
 // 导航项结构一致, 用数组 map 渲染; 描述文案同时用于侧栏第二行与内容区 header
 // 图标与文案对齐改版稿设置导航 (setwin-nav-item); 页签大标题走 --fs-head 17px 档
 const NAV_ITEMS: { key: TabKey; icon: LucideIcon; title: string; desc: string }[] = [
-  { key: "theme", icon: Palette, title: "主题", desc: "皮肤 / 背景 / 不透明率" },
+  { key: "theme", icon: Palette, title: "主题", desc: "皮肤 / 风格 / 暗幕浓度" },
   { key: "pet", icon: Cat, title: "桌宠", desc: "桌面宠物开关 / 角色 / 大小" },
   { key: "stats", icon: BarChart3, title: "Token 统计", desc: "用量与成本分布" },
   { key: "behavior", icon: Activity, title: "行为统计", desc: "轮次 / 工具 / 思考占比" },

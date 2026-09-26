@@ -40,7 +40,7 @@ export function ContextMenu({ x, y, items, onClose }: {
 
   return (
     <div
-      className="fixed z-50 min-w-[160px] rounded-md border border-[var(--line)] bg-[var(--raise)] py-1 shadow-[var(--shadow)]"
+      className="fixed z-50 min-w-[160px] rounded-md border border-[var(--line)] bg-popover py-1 shadow-[var(--shadow)]"
       style={{ left, top }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -727,7 +727,7 @@ export function ProjectList({
       {/* 重命名输入: 会话行内联编辑 */}
       {renamingPath && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20">
-          <div className="w-72 rounded-md border border-[var(--line)] bg-[var(--raise)] p-4 shadow-[var(--shadow)]">
+          <div className="w-72 rounded-md border border-[var(--line)] bg-popover p-4 shadow-[var(--shadow)]">
             <p className="mb-2 text-body font-semibold text-[var(--fg)]">重命名会话</p>
             <input
               autoFocus
