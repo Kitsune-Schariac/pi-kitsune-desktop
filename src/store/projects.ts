@@ -9,6 +9,8 @@ export interface SessionNode {
   timestamp: string;
   session_id: string;
   preview: string;
+  /** 文件最后修改时间 (毫秒); Rust 元数据不可得时为 null, 排序回退文件名时间戳 */
+  mtime_ms?: number | null;
 }
 
 export interface ProjectNode {

@@ -38,15 +38,15 @@ export function StageHead() {
   return (
     <header className="flex shrink-0 items-center gap-4 border-b border-[var(--line)] px-5 py-3">
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-[var(--fs-title)] font-medium text-[var(--fg)]">
+        <h1 className="truncate text-title font-medium text-[var(--fg)]">
           {active.sessionName || baseName(active.cwd)}
         </h1>
-        <div className="mt-1 flex items-center gap-3 text-[var(--fs-mini)] text-[var(--fg-3)]">
+        <div className="mt-1 flex items-center gap-3 text-mini text-[var(--fg-3)]">
           <span className="flex shrink-0 items-center gap-1">
             <Folder className="h-3 w-3" />
             {baseName(active.cwd)}
           </span>
-          <span className="truncate font-mono text-[var(--fs-micro)] text-[var(--fg-4)]" title={active.cwd}>
+          <span className="truncate font-mono text-micro text-[var(--fg-4)]" title={active.cwd}>
             {active.cwd}
           </span>
           {active.isStreaming && (
@@ -93,7 +93,7 @@ export function StageHead() {
                     setMenuOpen(false);
                     if (activeSessionId) stopSession(activeSessionId);
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[var(--fs-label)] text-[var(--fg-2)] transition-colors duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-label text-[var(--fg-2)] transition-colors duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
                 >
                   <X className="h-[14px] w-[14px]" />
                   关闭会话

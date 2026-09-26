@@ -25,7 +25,8 @@ function readPaneOpen(): boolean {
 }
 
 function readListMode(): SessionListMode {
-  return localStorage.getItem(LIST_MODE_KEY) === "recent" ? "recent" : "projects";
+  // 默认「最近」(design §6): 新用户先看到跨项目时间线; 存过「项目」的用户保持原选择
+  return localStorage.getItem(LIST_MODE_KEY) === "projects" ? "projects" : "recent";
 }
 
 interface UiStore {

@@ -76,7 +76,9 @@ export function Inspector() {
     );
   }, [activeHasBg, inspectorOpen, width]);
 
-  if (!inspectorOpen) return null;
+  if (!inspectorOpen && !activeHasBg) return null;
+  // 舞台下常驻挂载: 浮卡用 class 切滑出/滑入 (卸载重挂只能播一次性入场动画, 表达不了"滑出");
+  // 工坊是 grid 常驻列, 收起即卸载让位
 
   const tabs: { key: InspectorTab; label: string; icon: ReactNode; disabled?: boolean; badge?: ReactNode }[] = [
     { key: "detail", label: "详情", icon: <ScanSearch className="h-[14px] w-[14px]" /> },
@@ -88,7 +90,7 @@ export function Inspector() {
       disabled: gitReady && !gitIsRepo,
       badge:
         gitReady && gitIsRepo && gitChangeCount > 0 ? (
-          <span className="font-mono text-[var(--fs-micro)] tabular-nums text-[var(--fg-4)]">
+          <span className="font-mono text-micro tabular-nums text-[var(--fg-4)]">
             {gitChangeCount}
           </span>
         ) : null,
@@ -108,7 +110,7 @@ export function Inspector() {
   ];
 
   return (
-    <aside style={{ width }} className="inspector inspector-col">
+    <aside style={{ width }} className={`inspector inspector-col ${inspectorOpen ? "" : "insp-closed"}`}>
       <div className="flex h-11 shrink-0 items-center gap-3 border-b border-[var(--line)] px-4">
         {tabs.map(({ key, label, icon, disabled, badge }) => (
           <button
@@ -137,8 +139,8 @@ export function Inspector() {
         {inspectorTab === "detail" ? (
           // 概览 / 步骤详情是阶段 4 的实现范围
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
-            <h2 className="text-[var(--fs-title)] font-medium text-[var(--fg)]">会话概览</h2>
-            <p className="mt-2 text-[var(--fs-label)] text-[var(--fg-4)]">阶段 4 实现</p>
+            <h2 className="text-title font-medium text-[var(--fg)]">会话概览</h2>
+            <p className="mt-2 text-label text-[var(--fg-4)]">阶段 4 实现</p>
           </div>
         ) : inspectorTab === "git" ? (
           <GitSidebarPanel cwd={cwd} />
