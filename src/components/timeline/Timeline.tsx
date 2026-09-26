@@ -92,7 +92,7 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
       ref={containerRef}
       onScroll={handleScroll}
       // overflow-x-hidden 兜底: 任何子元素意外撑宽都不能让时间线横向滚动 (定位时 scrollIntoView 会连带横滚把正文切掉)
-      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
+      className="tl-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
       // 底部 padding = 输入卡高 + bottom-4(16px) + 间隔 24px: 滚动到底消息停在卡片上方间隔处,
       // 滚动过程中消息可平滑滑入卡片后方, 不会被提前截断
       style={{ paddingBottom: inputBarH + 40 }}
