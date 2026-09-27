@@ -78,21 +78,19 @@ const LEVEL_LABELS: Record<string, string> = {
   max: "max",
 };
 
-// 主题变量驱动的控件底色: 卡片上的输入框凹陷一档 (raised 卡片 → sunken 输入),
-// 左栏 (sunken 底) 上的输入框反过来用 base。一律走变量, 明暗两套皮肤都成立。
-// placeholder 用 neutral-500 而不是 400: 暗色下色阶反转后 400 只有 113 灰, 压在深底输入框上
-// 对比度约 4.3:1, 小字号偏糊; 500 反转后是 161 灰, 提到 7:1 上下, 且浅色下仍是「比正文弱一档」
+// 控件底色统一走新语义 token: 凹陷井 (--well) + 常规分隔线 (--line), 强调边框走 --accent;
+// 卡片与左栏两种容器下视觉一致, 不再按容器分底色 (旧 surface / alpha 通道已废弃)
 const FIELD_BASE =
-  "w-full rounded-md border px-2 py-2 text-xs text-neutral-800 outline-none transition duration-fast ease-out placeholder:text-neutral-500 focus:border-[var(--primary-400)]";
-const FIELD_ON_CARD = `${FIELD_BASE} border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)]`;
-const FIELD_ON_COL = `${FIELD_BASE} border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-base)_calc(var(--overlay-alpha)_*_100%),transparent)]`;
+  "w-full rounded-md border px-2 py-2 text-xs text-[var(--fg)] outline-none transition duration-fast ease-out placeholder:text-[var(--fg-4)] focus:border-[var(--accent)]";
+const FIELD_ON_CARD = `${FIELD_BASE} border-[var(--line)] bg-[var(--well)]`;
+const FIELD_ON_COL = `${FIELD_BASE} border-[var(--line)] bg-[var(--well)]`;
 
 const BTN_GHOST =
-  "inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-2 py-2 text-xs text-neutral-600 transition duration-fast ease-out hover:border-[var(--border-strong)] hover:bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] hover:text-neutral-800 disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex items-center gap-2 rounded-md border border-[var(--line)] px-2 py-2 text-xs text-[var(--fg-2)] transition duration-fast ease-out hover:border-[var(--line-2)] hover:bg-[var(--hover)] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-40";
 const BTN_PRIMARY =
-  "inline-flex items-center gap-2 rounded-md bg-[var(--primary-500)] px-3 py-2 text-xs font-medium text-white transition duration-fast ease-out hover:bg-[var(--primary-600)] disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-3 py-2 text-xs font-medium text-[var(--on-accent)] transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--accent)_88%,var(--fg))] disabled:cursor-not-allowed disabled:opacity-40";
 const BTN_DANGER =
-  "inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-2 py-2 text-xs text-red-500 transition duration-fast ease-out hover:border-red-500 hover:bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)]";
+  "inline-flex items-center gap-2 rounded-md border border-[var(--line)] px-2 py-2 text-xs text-[var(--err)] transition duration-fast ease-out hover:border-[var(--err)] hover:bg-[color-mix(in_oklch,var(--err)_12%,transparent)]";
 
 const textOf = (v: unknown) => (v === undefined || v === null ? "" : String(v));
 const numTextOf = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? String(v) : "");
@@ -123,13 +121,13 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-raised)_calc(var(--overlay-alpha)_*_100%),transparent)]">
-      <header className="flex items-start gap-2 border-b border-[var(--border-subtle)] px-4 py-3">
-        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--faint)]" />
+    <section className="rounded-lg border border-[var(--line)] bg-[var(--raise)]">
+      <header className="flex items-start gap-2 border-b border-[var(--line)] px-4 py-3">
+        <Icon className="mt-1 h-4 w-4 shrink-0 text-[var(--fg-4)]" />
         <div className="min-w-0 flex-1">
           <h3 className="text-title font-semibold text-[var(--fg)]">{title}</h3>
           {desc && (
-            <p className="mt-1 text-mini leading-relaxed text-[var(--muted)]">{desc}</p>
+            <p className="mt-1 text-mini leading-relaxed text-[var(--fg-3)]">{desc}</p>
           )}
         </div>
         {actions && <div className="shrink-0">{actions}</div>}
@@ -142,23 +140,21 @@ function Section({
 /** 字段标签; 说明性文字统一 text-xs, 与正文 text-xs 拉开层级 */
 function FieldLabel({ children, hint }: { children: ReactNode; hint?: string }) {
   return (
-    <span className="mb-1 flex items-center gap-2 text-xs text-neutral-500">
+    <span className="mb-1 flex items-center gap-2 text-xs text-[var(--fg-3)]">
       {children}
-      {hint && <span className="text-xs text-neutral-400">{hint}</span>}
+      {hint && <span className="text-xs text-[var(--fg-4)]">{hint}</span>}
     </span>
   );
 }
 
 // 徽章: 同一行里只允许一种几何 (高度 / 圆角 / 内边距 / 字号全部相同), 语义层级只靠颜色
 // 区分 —— 形状一多, 「推理 / 文本 / 131.1k 上下文」看着就像三种不同的控件而不是一组属性。
-// 中性档用 neutral-600 而不是 500: 暗色皮肤下整条色阶反转, 600 反而比 500 亮一档,
-// 深灰底上的次要文字才不糊。
+// 中性档用 line-2 描边 + fg-3 字色: 描边在卡片底上必须可辨, 否则三枚并排又变回三种形态;
+// 不靠底色区分 —— 浅淡底在舞台风格下会变成一块浑浊的色斑。
 const BADGE_BASE =
   "inline-flex h-5 shrink-0 items-center rounded-md border px-2 text-xs leading-none";
-const BADGE_ACCENT = `${BADGE_BASE} border-[var(--primary-400)] text-[var(--primary-600)]`;
-// 中性档用 border-strong 而不是 border-subtle: subtle 在卡片底上几乎是隐形的, 结果只有
-// 蓝色那枚看着「有框」, 三枚并排又变回三种形态。不靠底色区分 —— 淡底在暗色下就是浅色块。
-const BADGE_NEUTRAL = `${BADGE_BASE} border-[var(--border-strong)] text-neutral-600`;
+const BADGE_ACCENT = `${BADGE_BASE} border-[color-mix(in_oklch,var(--accent)_45%,transparent)] text-[var(--accent)]`;
+const BADGE_NEUTRAL = `${BADGE_BASE} border-[var(--line-2)] text-[var(--fg-3)]`;
 
 function Badge({
   tone = "neutral",
@@ -241,9 +237,9 @@ function JsonField({
   return (
     <div>
       {label && (
-        <div className="mb-1 flex items-center gap-2 text-xs text-neutral-500">
+        <div className="mb-1 flex items-center gap-2 text-xs text-[var(--fg-3)]">
           <span className="font-mono">{label}</span>
-          {hint && <span className="text-xs text-neutral-400">{hint}</span>}
+          {hint && <span className="text-xs text-[var(--fg-4)]">{hint}</span>}
         </div>
       )}
       {/* min-h 兜底等高: 模型级与 provider 级是同类 JSON 编辑器, 只靠 rows 相同仍会因
@@ -254,13 +250,13 @@ function JsonField({
         spellCheck={false}
         onChange={(e) => onChangeText(e.target.value)}
         onBlur={commit}
-        className={`min-h-[88px] w-full resize-y rounded-md border bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] px-2 py-2 font-mono text-xs leading-relaxed text-neutral-800 outline-none transition duration-fast ease-out ${
+        className={`min-h-[88px] w-full resize-y rounded-md border bg-[var(--well)] px-2 py-2 font-mono text-xs leading-relaxed text-[var(--fg)] outline-none transition duration-fast ease-out ${
           error
-            ? "border-red-500 focus:border-red-500"
-            : "border-[var(--border-subtle)] focus:border-[var(--primary-400)]"
+            ? "border-[var(--err)] focus:border-[var(--err)]"
+            : "border-[var(--line)] focus:border-[var(--accent)]"
         }`}
       />
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+      {error && <p className="mt-1 text-xs text-[var(--err)]">{error}</p>}
     </div>
   );
 }
@@ -495,28 +491,28 @@ export function ModelsPanel() {
   // 顶部工具条状态徽标: 未保存 / 已保存 / 文件损坏 —— 保存后到底生效没有, 必须在第一屏
   // 就能看到, 否则用户会以为「明明保存了却没变化」
   const statusBadge = parseError ? (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-red-500 px-2 py-1 text-xs text-red-500">
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--err)] px-2 py-1 text-xs text-[var(--err)]">
       <AlertTriangle className="h-3 w-3" />
       文件损坏
     </span>
   ) : dirty ? (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-500 px-2 py-1 text-xs text-amber-500">
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--warn)] px-2 py-1 text-xs text-[var(--warn)]">
       未保存
     </span>
   ) : doc ? (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border-subtle)] px-2 py-1 text-xs text-neutral-400">
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--line)] px-2 py-1 text-xs text-[var(--fg-4)]">
       <Check className="h-3 w-3" />
       已保存
     </span>
   ) : null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--surface-base)]">
-      <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-[var(--border-subtle)] px-6">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--bg)]">
+      <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-[var(--line)] px-6">
         <div className="flex min-w-0 items-center gap-2">
-          <FileJson className="h-4 w-4 shrink-0 text-neutral-400" />
+          <FileJson className="h-4 w-4 shrink-0 text-[var(--fg-4)]" />
           <span
-            className="truncate font-mono text-xs text-neutral-500"
+            className="truncate font-mono text-xs text-[var(--fg-3)]"
             title={path || undefined}
           >
             {path || "~/.pi/agent/models.json"}
@@ -545,12 +541,12 @@ export function ModelsPanel() {
       </header>
 
       {savedNotice && (
-        <div className="flex shrink-0 items-start gap-2 border-b border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] px-6 py-2 text-xs text-neutral-600">
-          <Check className="mt-1 h-4 w-4 shrink-0 text-primary-600" />
+        <div className="flex shrink-0 items-start gap-2 border-b border-[var(--line)] bg-[var(--well)] px-6 py-2 text-xs text-[var(--fg-2)]">
+          <Check className="mt-1 h-4 w-4 shrink-0 text-[var(--ok)]" />
           <span className="min-w-0 flex-1">{savedNotice}</span>
           <button
             onClick={dismissNotice}
-            className="shrink-0 text-xs text-neutral-400 transition duration-fast ease-out hover:text-neutral-700"
+            className="shrink-0 text-xs text-[var(--fg-4)] transition duration-fast ease-out hover:text-[var(--fg)]"
           >
             知道了
           </button>
@@ -558,14 +554,14 @@ export function ModelsPanel() {
       )}
 
       {saveError && (
-        <div className="flex shrink-0 items-start gap-2 border-b border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] px-6 py-2 text-xs text-red-500">
+        <div className="flex shrink-0 items-start gap-2 border-b border-[var(--line)] bg-[var(--well)] px-6 py-2 text-xs text-[var(--err)]">
           <AlertTriangle className="mt-1 h-4 w-4 shrink-0" />
           <div className="min-w-0 flex-1">
             <p>{saveError}</p>
             {isConflict && (
               <button
                 onClick={() => void load()}
-                className="mt-2 inline-flex items-center gap-1 rounded-md border border-red-500 px-2 py-1 text-xs text-red-500 transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)]"
+                className="mt-2 inline-flex items-center gap-1 rounded-md border border-[var(--err)] px-2 py-1 text-xs text-[var(--err)] transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--err)_12%,transparent)]"
               >
                 <RefreshCw className="h-3 w-3" />
                 放弃本地改动并重新加载
@@ -576,7 +572,7 @@ export function ModelsPanel() {
       )}
 
       {loading && !doc ? (
-        <div className="flex flex-1 items-center justify-center gap-2 text-xs text-neutral-500">
+        <div className="flex flex-1 items-center justify-center gap-2 text-xs text-[var(--fg-3)]">
           <Loader2 className="h-4 w-4 animate-spin" />
           正在读取配置…
         </div>
@@ -585,27 +581,27 @@ export function ModelsPanel() {
         // 绝不能以空配置覆盖用户的坏文件 —— 那份文件里可能有 GUI 看不懂但 pi 认的配置。
         <div className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-2xl">
-            <div className="flex items-start gap-2 rounded-md border border-red-500 bg-[color-mix(in_oklch,var(--surface-raised)_calc(var(--overlay-alpha)_*_100%),transparent)] p-4">
-              <AlertTriangle className="mt-1 h-4 w-4 shrink-0 text-red-500" />
+            <div className="flex items-start gap-2 rounded-lg border border-[var(--err)] bg-[var(--raise)] p-4">
+              <AlertTriangle className="mt-1 h-4 w-4 shrink-0 text-[var(--err)]" />
               <div className="min-w-0 space-y-2">
-                <p className="text-sm font-medium text-red-500">
+                <p className="text-sm font-medium text-[var(--err)]">
                   models.json 无法解析, 已禁用全部编辑
                 </p>
-                <p className="break-all font-mono text-xs text-red-500">{parseError}</p>
-                <p className="text-xs leading-relaxed text-neutral-500">
+                <p className="break-all font-mono text-xs text-[var(--err)]">{parseError}</p>
+                <p className="text-xs leading-relaxed text-[var(--fg-3)]">
                   请在外部编辑器修复后点击「重新加载」。为保护你的配置, 此状态下不会覆盖原文件。
                 </p>
               </div>
             </div>
-            <p className="mt-3 break-all font-mono text-xs text-neutral-500">{path}</p>
+            <p className="mt-3 break-all font-mono text-xs text-[var(--fg-3)]">{path}</p>
           </div>
         </div>
       ) : !doc ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-          <FileJson className="h-8 w-8 text-neutral-400" />
+          <FileJson className="h-8 w-8 text-[var(--fg-4)]" />
           <div>
-            <p className="text-sm text-neutral-700">尚未创建 models.json</p>
-            <p className="mt-1 break-all font-mono text-xs text-neutral-500">{path}</p>
+            <p className="text-sm text-[var(--fg-2)]">尚未创建 models.json</p>
+            <p className="mt-1 break-all font-mono text-xs text-[var(--fg-3)]">{path}</p>
           </div>
           <button onClick={createInitialDoc} className={BTN_PRIMARY}>
             <Plus className="h-4 w-4" />
@@ -615,10 +611,10 @@ export function ModelsPanel() {
       ) : (
         <div className="flex min-h-0 flex-1">
           {/* 左栏: provider 列表 + 搜索 + 新增 */}
-          <aside className="flex w-72 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)]">
-            <div className="shrink-0 border-b border-[var(--border-subtle)] p-2">
+          <aside className="flex w-72 shrink-0 flex-col border-r border-[var(--line)] bg-[var(--pane)]">
+            <div className="shrink-0 border-b border-[var(--line)] p-2">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--fg-4)]" />
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
@@ -630,12 +626,12 @@ export function ModelsPanel() {
 
             <div className="flex-1 space-y-1 overflow-y-auto p-2">
               {providerIds(doc).length === 0 && (
-                <p className="px-2 py-6 text-center text-xs leading-relaxed text-neutral-400">
+                <p className="px-2 py-6 text-center text-xs leading-relaxed text-[var(--fg-4)]">
                   暂无 provider, 点击下方按钮新增
                 </p>
               )}
               {providerIds(doc).length > 0 && providerEntries.length === 0 && (
-                <p className="px-2 py-6 text-center text-xs text-neutral-400">
+                <p className="px-2 py-6 text-center text-xs text-[var(--fg-4)]">
                   没有匹配「{query.trim()}」的 provider
                 </p>
               )}
@@ -646,15 +642,15 @@ export function ModelsPanel() {
                 return (
                   <div
                     key={id}
-                    className={`group relative rounded-md border px-2 py-2 transition duration-fast ease-out ${
+                    className={`group relative rounded-lg border px-2 py-2 transition duration-fast ease-out ${
                       active
-                        ? "border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-raised)_calc(var(--overlay-alpha)_*_100%),transparent)]"
-                        : "border-transparent hover:border-[var(--border-strong)]"
+                        ? "border-[var(--line)] bg-[var(--raise)]"
+                        : "border-transparent hover:border-[var(--line-2)] hover:bg-[var(--hover)]"
                     }`}
                   >
-                    {/* 选中指示条: 2px primary 竖条, 比整块换底色更省视觉预算 */}
+                    {/* 选中指示条: 2px accent 竖条, 比整块换底色更省视觉预算 */}
                     {active && (
-                      <span className="absolute inset-y-2 left-0 w-1 rounded-full bg-[var(--primary-500)]" />
+                      <span className="absolute inset-y-2 left-0 w-1 rounded-full bg-[var(--accent)]" />
                     )}
                     <button
                       onClick={() => selectProvider(id)}
@@ -662,19 +658,19 @@ export function ModelsPanel() {
                       title={id}
                     >
                       <div className="flex items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-800">
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--fg)]">
                           {id}
                         </span>
                         {active && (
-                          <Check className="h-4 w-4 shrink-0 text-primary-600" />
+                          <Check className="h-4 w-4 shrink-0 text-[var(--accent)]" />
                         )}
                       </div>
                       {textOf(p.name) && (
-                        <div className="mt-1 truncate text-xs text-neutral-500">
+                        <div className="mt-1 truncate text-xs text-[var(--fg-3)]">
                           {textOf(p.name)}
                         </div>
                       )}
-                      <div className="mt-2 flex items-center gap-2 text-xs text-neutral-400">
+                      <div className="mt-2 flex items-center gap-2 text-xs text-[var(--fg-4)]">
                         <span>{modelCount} 模型</span>
                         <span
                           className="inline-flex"
@@ -682,7 +678,7 @@ export function ModelsPanel() {
                         >
                           <KeyRound
                             className={`h-4 w-4 ${
-                              p.apiKey ? "text-primary-500" : "text-neutral-400"
+                              p.apiKey ? "text-[var(--accent)]" : "text-[var(--fg-4)]"
                             }`}
                           />
                         </span>
@@ -699,7 +695,7 @@ export function ModelsPanel() {
                           () => deleteProvider(id),
                         )
                       }
-                      className="absolute bottom-2 right-2 rounded-sm p-1 text-neutral-400 opacity-0 transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] hover:text-red-500 group-hover:opacity-100"
+                      className="absolute bottom-2 right-2 rounded-sm p-1 text-[var(--fg-4)] opacity-0 transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--err)] group-hover:opacity-100"
                       title="删除 provider"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -709,7 +705,7 @@ export function ModelsPanel() {
               })}
             </div>
 
-            <div className="shrink-0 border-t border-[var(--border-subtle)] p-2">
+            <div className="shrink-0 border-t border-[var(--line)] p-2">
               {addingProvider ? (
                 <div className="flex items-center gap-2">
                   <input
@@ -729,7 +725,7 @@ export function ModelsPanel() {
                   <button
                     onClick={onAddProvider}
                     disabled={!newProviderId.trim()}
-                    className="shrink-0 rounded-md border border-[var(--border-subtle)] p-2 text-neutral-500 transition duration-fast ease-out hover:border-[var(--primary-400)] hover:text-primary-600 disabled:opacity-40"
+                    className="shrink-0 rounded-md border border-[var(--line)] p-2 text-[var(--fg-3)] transition duration-fast ease-out hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
                     title="确认新增"
                   >
                     <Check className="h-4 w-4" />
@@ -739,7 +735,7 @@ export function ModelsPanel() {
                       setNewProviderId("");
                       setAddingProvider(false);
                     }}
-                    className="shrink-0 rounded-md border border-[var(--border-subtle)] p-2 text-neutral-400 transition duration-fast ease-out hover:text-neutral-700"
+                    className="shrink-0 rounded-md border border-[var(--line)] p-2 text-[var(--fg-4)] transition duration-fast ease-out hover:text-[var(--fg)]"
                     title="取消"
                   >
                     <X className="h-4 w-4" />
@@ -748,7 +744,7 @@ export function ModelsPanel() {
               ) : (
                 <button
                   onClick={() => setAddingProvider(true)}
-                  className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-[var(--border-strong)] px-2 py-2 text-xs text-neutral-500 transition duration-fast ease-out hover:border-[var(--primary-400)] hover:text-neutral-800"
+                  className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-[var(--line-2)] px-2 py-2 text-xs text-[var(--fg-3)] transition duration-fast ease-out hover:border-[var(--accent)] hover:text-[var(--fg)]"
                 >
                   <Plus className="h-4 w-4" />
                   新增 provider
@@ -760,7 +756,7 @@ export function ModelsPanel() {
           {/* 右栏: 选中 provider 的分区详情 */}
           <div className="flex-1 overflow-y-auto p-6">
             {!pid ? (
-              <p className="pt-16 text-center text-xs text-neutral-500">
+              <p className="pt-16 text-center text-xs text-[var(--fg-3)]">
                 在左侧选择或新增一个 provider
               </p>
             ) : (
@@ -830,7 +826,7 @@ export function ModelsPanel() {
                   {/* 单字段分区, 输入框走全宽: 收窄成六成宽会在全宽 baseUrl 与两列网格之间
                       多出一块无主的空白 */}
                   <div>
-                    <div className="mb-1 flex items-center gap-2 text-xs text-neutral-500">
+                    <div className="mb-1 flex items-center gap-2 text-xs text-[var(--fg-3)]">
                       <span>apiKey</span>
                       {isEnvRef && <Badge tone="accent">环境变量引用</Badge>}
                       {isCommandRef && <Badge tone="accent">命令取值</Badge>}
@@ -847,7 +843,7 @@ export function ModelsPanel() {
                         <button
                           type="button"
                           onClick={() => setShowApiKey(!showApiKey)}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 transition duration-fast ease-out hover:text-neutral-700"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--fg-4)] transition duration-fast ease-out hover:text-[var(--fg)]"
                           title={showApiKey ? "隐藏" : "显示"}
                         >
                           {showApiKey ? (
@@ -874,7 +870,7 @@ export function ModelsPanel() {
                   }
                 >
                   {rawModels.length === 0 ? (
-                    <p className="text-xs text-neutral-400">
+                    <p className="text-xs text-[var(--fg-4)]">
                       暂无自定义模型, 点击右上「新增模型」添加
                     </p>
                   ) : (
@@ -888,12 +884,12 @@ export function ModelsPanel() {
                           return (
                             <div
                               key={`illegal:${i}`}
-                              className="flex items-center gap-2 rounded-md border border-dashed border-red-500 px-3 py-2"
+                              className="flex items-center gap-2 rounded-md border border-dashed border-[var(--err)] px-3 py-2"
                             >
-                              <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
-                              <span className="shrink-0 text-xs text-red-500">非法项</span>
+                              <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--err)]" />
+                              <span className="shrink-0 text-xs text-[var(--err)]">非法项</span>
                               <span
-                                className="min-w-0 flex-1 truncate font-mono text-xs text-neutral-500"
+                                className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--fg-3)]"
                                 title={`非法项: ${preview} —— 缺少非空 id, 后端会拒绝保存; 请在此删除或在外部编辑器修正`}
                               >
                                 {preview}
@@ -905,7 +901,7 @@ export function ModelsPanel() {
                                     () => deleteModelAt(pid, i),
                                   )
                                 }
-                                className="shrink-0 text-neutral-400 transition duration-fast ease-out hover:text-red-500"
+                                className="shrink-0 text-[var(--fg-4)] transition duration-fast ease-out hover:text-[var(--err)]"
                                 title="删除该非法项"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -922,10 +918,10 @@ export function ModelsPanel() {
                         return (
                           <div
                             key={`model:${i}:${mid}`}
-                            className={`rounded-md border transition duration-fast ease-out ${
+                            className={`rounded-lg border transition duration-fast ease-out ${
                               active
-                                ? "border-[var(--border-strong)]"
-                                : "border-[var(--border-subtle)] hover:border-[var(--border-strong)]"
+                                ? "border-[color-mix(in_oklch,var(--accent)_45%,transparent)] bg-[var(--accent-soft)]"
+                                : "border-[var(--line)] hover:border-[var(--line-2)]"
                             }`}
                           >
                             <div className="flex items-center gap-2 px-3 py-2">
@@ -935,15 +931,15 @@ export function ModelsPanel() {
                                 title={mid}
                               >
                                 {active ? (
-                                  <ChevronUp className="h-4 w-4 shrink-0 text-neutral-400" />
+                                  <ChevronUp className="h-4 w-4 shrink-0 text-[var(--fg-4)]" />
                                 ) : (
-                                  <ChevronDown className="h-4 w-4 shrink-0 text-neutral-400" />
+                                  <ChevronDown className="h-4 w-4 shrink-0 text-[var(--fg-4)]" />
                                 )}
-                                <span className="min-w-0 truncate font-mono text-xs font-medium text-neutral-800">
+                                <span className="min-w-0 truncate font-mono text-xs font-medium text-[var(--fg)]">
                                   {mid}
                                 </span>
                                 {textOf(m.name) && (
-                                  <span className="min-w-0 truncate text-xs text-neutral-500">
+                                  <span className="min-w-0 truncate text-xs text-[var(--fg-3)]">
                                     {textOf(m.name)}
                                   </span>
                                 )}
@@ -977,7 +973,7 @@ export function ModelsPanel() {
                             </div>
 
                             {active && model && (
-                              <div className="space-y-4 border-t border-[var(--border-subtle)] px-3 py-4">
+                              <div className="space-y-4 border-t border-[var(--line)] px-3 py-4">
                                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                                   <label className="block">
                                     <FieldLabel>id (必填)</FieldLabel>
@@ -1031,9 +1027,9 @@ export function ModelsPanel() {
                                     间距暗示会让裸文字 input 看着像漏了勾选框的字段 */}
                                 <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
                                   <div className="flex items-center gap-2">
-                                    <span className="text-xs text-neutral-500">能力</span>
+                                    <span className="text-xs text-[var(--fg-3)]">能力</span>
                                     <label
-                                      className="flex items-center gap-2 text-xs text-neutral-600"
+                                      className="flex items-center gap-2 text-xs text-[var(--fg-2)]"
                                       title="reasoning: 该模型支持扩展思考"
                                     >
                                       <input
@@ -1052,13 +1048,13 @@ export function ModelsPanel() {
                                     </label>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <span className="text-xs text-neutral-500">输入类型</span>
+                                    <span className="text-xs text-[var(--fg-3)]">输入类型</span>
                                     {INPUT_KINDS.map((kind) => {
                                       const checked = modelInputKnown.includes(kind);
                                       return (
                                         <label
                                           key={kind}
-                                          className="flex items-center gap-2 text-xs text-neutral-600"
+                                          className="flex items-center gap-2 text-xs text-[var(--fg-2)]"
                                         >
                                           <input
                                             type="checkbox"
@@ -1110,7 +1106,7 @@ export function ModelsPanel() {
                                               },
                                             )
                                           }
-                                          className="shrink-0 text-xs text-neutral-400 transition duration-fast ease-out hover:text-red-500"
+                                          className="shrink-0 text-xs text-[var(--fg-4)] transition duration-fast ease-out hover:text-[var(--err)]"
                                         >
                                           清除价格
                                         </button>
@@ -1122,7 +1118,7 @@ export function ModelsPanel() {
                                       const err = costErrors[k];
                                       return (
                                         <label key={k} className="block">
-                                          <span className="mb-1 block text-xs text-neutral-400">
+                                          <span className="mb-1 block text-xs text-[var(--fg-4)]">
                                             {label}
                                           </span>
                                           <input
@@ -1133,11 +1129,11 @@ export function ModelsPanel() {
                                             inputMode="decimal"
                                             title={err ? "请输入非负数字 (如 2.5 / 0.05 / 0)" : undefined}
                                             className={`${FIELD_ON_CARD} ${
-                                              err ? "border-red-500 focus:border-red-500" : ""
+                                              err ? "border-[var(--err)] focus:border-[var(--err)]" : ""
                                             }`}
                                           />
                                           {err && (
-                                            <span className="mt-0.5 block text-xs text-red-500">
+                                            <span className="mt-[2px] block text-xs text-[var(--err)]">
                                               非负数字才有效
                                             </span>
                                           )}
@@ -1145,7 +1141,7 @@ export function ModelsPanel() {
                                       );
                                     })}
                                   </div>
-                                  <p className="mt-1 text-xs text-neutral-400">
+                                  <p className="mt-1 text-xs text-[var(--fg-4)]">
                                     空值按 0 保存, 四项齐全才能通过 pi 启动校验
                                   </p>
                                 </div>
@@ -1176,7 +1172,7 @@ export function ModelsPanel() {
                                               },
                                             )
                                           }
-                                          className="shrink-0 text-xs text-neutral-400 transition duration-fast ease-out hover:text-red-500"
+                                          className="shrink-0 text-xs text-[var(--fg-4)] transition duration-fast ease-out hover:text-[var(--err)]"
                                         >
                                           清除映射
                                         </button>
@@ -1196,14 +1192,14 @@ export function ModelsPanel() {
                                       return (
                                         <div
                                           key={level}
-                                          className="flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-2 py-1"
+                                          className="flex items-center gap-2 rounded-md border border-[var(--line)] px-2 py-1"
                                         >
-                                          <span className="w-20 shrink-0 font-mono text-xs text-neutral-500">
+                                          <span className="w-20 shrink-0 font-mono text-xs text-[var(--fg-3)]">
                                             {LEVEL_LABELS[level]}
                                           </span>
                                           {unsupported || abnormal ? (
                                             <>
-                                              <span className="min-w-0 flex-1 truncate text-xs italic text-neutral-400">
+                                              <span className="min-w-0 flex-1 truncate text-xs italic text-[var(--fg-4)]">
                                                 {unsupported ? "不支持 (null)" : `值异常 (${String(v)})`}
                                                 —— 见下方 JSON 编辑
                                               </span>
@@ -1236,7 +1232,7 @@ export function ModelsPanel() {
                                               {custom && (
                                                 <button
                                                   onClick={() => onLevelChange(level, undefined)}
-                                                  className="shrink-0 rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] hover:text-red-500"
+                                                  className="shrink-0 rounded-sm p-1 text-[var(--fg-4)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--err)]"
                                                   title={`移除「${level}」的自定义映射, 恢复默认`}
                                                 >
                                                   <X className="h-4 w-4" />
@@ -1289,7 +1285,7 @@ export function ModelsPanel() {
                                       } as const;
                                       return (
                                         <div key={flag} className="flex items-center gap-2">
-                                          <span className="shrink-0 text-xs text-neutral-600">{label}</span>
+                                          <span className="shrink-0 text-xs text-[var(--fg-2)]">{label}</span>
                                           <Select
                                             value={cur}
                                             onChange={(e) => onCompatFlag(flag, e.target.value)}
@@ -1307,7 +1303,7 @@ export function ModelsPanel() {
                                             <option value="true">{optionText.true}</option>
                                             <option value="false">{optionText.false}</option>
                                           </Select>
-                                          <span className="font-mono text-micro text-neutral-400">
+                                          <span className="font-mono text-micro text-[var(--fg-4)]">
                                             {flag}
                                           </span>
                                         </div>
@@ -1318,8 +1314,8 @@ export function ModelsPanel() {
 
                                 {/* 模型级长尾字段 (samplingParams / thinkingLevelMap / compat / headers 仍可走 JSON,
                                     thinkingLevelMap 与 compat 的可视区改动会通过 rev 重挂载同步 JSON 草稿) */}
-                                <div className="border-t border-[var(--border-subtle)] pt-3">
-                                  <p className="mb-2 text-xs text-neutral-600">
+                                <div className="border-t border-[var(--line)] pt-3">
+                                  <p className="mb-2 text-xs text-[var(--fg-2)]">
                                     模型级高级字段 (JSON, 留空表示删除该键; thinkingLevelMap / compat 已可视, 高级编辑在此)
                                   </p>
                                   <div className="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -1362,17 +1358,17 @@ export function ModelsPanel() {
                   desc="只覆盖内置模型的个别字段, 不影响模型列表; 未知的 model id 会被 pi 静默忽略。"
                 >
                   {Object.keys(overrides).length === 0 ? (
-                    <p className="text-xs text-neutral-400">暂无覆盖项</p>
+                    <p className="text-xs text-[var(--fg-4)]">暂无覆盖项</p>
                   ) : (
                     <div className="space-y-2">
                       {Object.entries(overrides).map(([mid, val]) => (
                         <div
                           key={mid}
-                          className="rounded-md border border-[var(--border-subtle)] p-3"
+                          className="rounded-md border border-[var(--line)] p-3"
                         >
                           <div className="mb-2 flex items-center justify-between gap-2">
                             <span
-                              className="min-w-0 truncate font-mono text-xs font-medium text-neutral-700"
+                              className="min-w-0 truncate font-mono text-xs font-medium text-[var(--fg-2)]"
                               title={mid}
                             >
                               {mid}
@@ -1387,7 +1383,7 @@ export function ModelsPanel() {
                                   () => deleteModelOverride(pid, mid),
                                 )
                               }
-                              className="shrink-0 rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:text-red-500"
+                              className="shrink-0 rounded-sm p-1 text-[var(--fg-4)] transition duration-fast ease-out hover:text-[var(--err)]"
                               title="删除该覆盖项"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1461,7 +1457,7 @@ export function ModelsPanel() {
                 </Section>
 
                 {!exists && (
-                  <p className="text-xs text-neutral-400">
+                  <p className="text-xs text-[var(--fg-4)]">
                     该文件尚不存在, 保存时会新建 (mtime 令牌为 0)。
                   </p>
                 )}

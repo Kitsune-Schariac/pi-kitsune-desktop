@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useProjectsStore, pathEq, type SessionNode, type ProjectNode } from "../store/projects";
 import { useSessionStore, type SessionState } from "../store/session";
 import {
   ChevronRight, ChevronDown, Trash2, Plus,
-  Loader2, MessageSquare, FolderOpen, X,
+  MessageSquare, FolderOpen, X,
 } from "lucide-react";
+import {
+  abbr, hue, isTempProject, parseSessionTs, recentGroupLabel, formatRecentTime,
+} from "../lib/projectGroups";
 
 export interface MenuItem {
   label: string;
@@ -37,7 +40,7 @@ export function ContextMenu({ x, y, items, onClose }: {
 
   return (
     <div
-      className="fixed z-50 min-w-[160px] rounded-md border border-[var(--border-soft)] bg-[var(--panel)] py-1 shadow-[var(--shadow-lg)]"
+      className="fixed z-50 min-w-[160px] rounded-md border border-[var(--line)] bg-popover py-1 shadow-[var(--shadow)]"
       style={{ left, top }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -51,8 +54,8 @@ export function ContextMenu({ x, y, items, onClose }: {
           }}
           className={`flex w-full items-center gap-2 px-3 py-2 text-left text-body transition duration-fast ease-out disabled:opacity-40 ${
             item.danger
-              ? "text-[var(--danger)] hover:bg-[color-mix(in_oklch,var(--danger)_14%,transparent)]"
-              : "text-[var(--fg)] hover:bg-[var(--sel-bg)]"
+              ? "text-[var(--err)] hover:bg-[color-mix(in_oklch,var(--err)_14%,transparent)]"
+              : "text-[var(--fg)] hover:bg-[var(--hover)]"
           }`}
         >
           {item.icon && <item.icon className="h-4 w-4" />}
@@ -63,13 +66,11 @@ export function ContextMenu({ x, y, items, onClose }: {
   );
 }
 
-// 文件名时间戳 → 本地时间字符串 (文件名格式 2026-08-02T12-43-11-490Z, 非标准 ISO, 需转换)
+// 文件名时间戳 (非标准 ISO, 见 parseSessionTs) → 本地 MM-DD; 解析失败原样返回
 function formatTime(ts: string): string {
-  const iso = ts
-    .replace(/-\d{3}Z$/, (m) => m.replace("-", "."))
-    .replace(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/, "$1T$2:$3:$4");
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return ts;
+  const ms = parseSessionTs(ts);
+  if (ms === null) return ts;
+  const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
@@ -99,11 +100,17 @@ function openOnlySessions(
     .filter((x) => !x.s.sessionPath || !p.sessions.some((ds) => pathEq(ds.session_path, x.s.sessionPath)));
 }
 
-// 会话行 (树模式 + 搜索拍平共用): 单行紧凑 (padding 5px 8px ≈ 27px 高), 无前置图标,
-// 右侧状态三态 (工作中转圈 / 完成未读 accent 圆点 / 默认时间); 选中底色 ≠ 活跃, 无活跃徽标。
-// hover 删除钮绝对定位于右侧状态位之上 (状态淡出、按钮浮入), 不参与流式布局 → 行高零变化
+// 拍平条目 (搜索模式与最近视图共用): 磁盘会话 / 打开中且磁盘列表查不到的会话
+type FlatHit =
+  | { kind: "disk"; p: ProjectNode; s: SessionNode }
+  | { kind: "open"; p: ProjectNode; sid: string; s: SessionState };
+
+// 会话行 (树模式 + 拍平模式共用): 单行紧凑 (padding 5px 8px ≈ 27px 高), 无前置图标,
+// 右侧状态三态 (工作中狐火 / 完成未读 accent 圆点 / 默认时间); 选中底色 ≠ 活跃。最近视图
+// 前置项目徽标 (leading), 树模式不传。hover 删除钮绝对定位于右侧状态位之上, 行高零变化
 function SessionRow({
   title,
+  leading,
   hint,
   isActive,
   right,
@@ -112,6 +119,8 @@ function SessionRow({
   onContext,
 }: {
   title: string;
+  /** 前置徽标 (最近视图: 项目缩写圆形/圆角标; 项目树不传) */
+  leading?: ReactNode;
   /** hover 提示 (搜索模式显示所属项目) */
   hint?: string;
   isActive: boolean;
@@ -124,10 +133,10 @@ function SessionRow({
 }) {
   return (
     <div
-      className={`group relative flex cursor-pointer items-center rounded-md py-[5px] pl-2 pr-2 text-body transition duration-fast ease-out ${
+      className={`sess-row group relative flex cursor-pointer items-center gap-2 rounded-md py-[5px] pl-2 pr-2 text-body transition duration-fast ease-out ${
         isActive
-          ? "bg-[var(--sel-bg)] font-medium text-[var(--fg)]"
-          : "text-[var(--muted)] hover:bg-[color-mix(in_oklch,var(--surface-2)_65%,transparent)] hover:text-[var(--fg)]"
+          ? "sel font-medium"
+          : "text-[var(--fg-2)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
       }`}
       onClick={onOpen}
       onContextMenu={(e) => {
@@ -135,19 +144,21 @@ function SessionRow({
         onContext(e);
       }}
     >
+      {leading}
       <span className="min-w-0 flex-1 truncate group-hover:pr-6" title={hint ?? title}>
         {title}
       </span>
       {/* 右侧状态位: 常驻占位保布局稳定, hover 时淡出让位给删除钮 */}
-      <span className="shrink-0 pl-1 transition-opacity duration-fast ease-out group-hover:opacity-0">
+      <span className="flex shrink-0 items-center justify-center pl-1 transition-opacity duration-fast ease-out group-hover:opacity-0">
         {right === "spinner" ? (
-          <Loader2 className="h-3 w-3 animate-spin text-[var(--accent)]" />
+          // 运行中符号: 工坊狐火 / 舞台刻印环 (index.css 按 data-style 分支, 替代转圈图标)
+          <span className="flame" aria-hidden />
         ) : right === "dot" ? (
           <span className="h-[5.5px] w-[5.5px] rounded-full bg-[var(--accent)] shadow-[0_0_5px_color-mix(in_oklch,var(--accent)_55%,transparent)]" />
         ) : right === null ? (
-          <span className="text-mini text-[var(--faint)]">新会话</span>
+          <span className="text-mini text-[var(--fg-4)]">新会话</span>
         ) : (
-          <span className="text-label tabular-nums text-[var(--muted)]">{right}</span>
+          <span className="text-label tabular-nums text-[var(--fg-3)]">{right}</span>
         )}
       </span>
       {/* hover 浮现删除钮: 绝对定位在右侧状态位上方, 不进流式布局 */}
@@ -156,7 +167,7 @@ function SessionRow({
           e.stopPropagation();
           onDelete();
         }}
-        className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--faint)] opacity-0 transition duration-fast ease-out hover:text-red-500 group-hover:opacity-100"
+        className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--fg-4)] opacity-0 transition duration-fast ease-out hover:text-[var(--err)] group-hover:opacity-100"
         title="删除会话"
       >
         <Trash2 className="h-3 w-3" />
@@ -165,7 +176,21 @@ function SessionRow({
   );
 }
 
-export function ProjectList({ searchQuery = "" }: { searchQuery?: string }) {
+// 最近视图每页条数 (「显示更多」步长)
+const RECENT_PAGE = 50;
+// 临时目录组展开态持久化键 (默认折叠)
+const TEMP_GROUP_KEY = "kitsune.tempGroupOpen";
+
+// 项目条目: storeIndex = store 里的下标 (拖拽排序用), -1 = 虚拟项目 (仅承载打开中会话, 不可拖)
+type ProjectEntry = { p: ProjectNode; storeIndex: number };
+
+export function ProjectList({
+  searchQuery = "",
+  mode = "projects",
+}: {
+  searchQuery?: string;
+  mode?: "recent" | "projects";
+}) {
   const projects = useProjectsStore((s) => s.projects);
   const loaded = useProjectsStore((s) => s.loaded);
   const error = useProjectsStore((s) => s.error);
@@ -191,13 +216,15 @@ export function ProjectList({ searchQuery = "" }: { searchQuery?: string }) {
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [recentLimit, setRecentLimit] = useState(RECENT_PAGE);
+  const [tempOpen, setTempOpen] = useState(() => localStorage.getItem(TEMP_GROUP_KEY) === "1");
 
   if (!loaded) {
-    return <div className="px-4 py-6 text-body text-[var(--faint)]">加载中…</div>;
+    return <div className="px-4 py-6 text-body text-[var(--fg-4)]">加载中…</div>;
   }
   if (error) {
     return (
-      <div className="px-4 py-6 text-body text-[var(--muted)]">
+      <div className="px-4 py-6 text-body text-[var(--fg-2)]">
         <p>{error}</p>
         <button onClick={loadProjects} className="mt-2 text-[var(--accent)] hover:underline">
           重试
@@ -231,27 +258,43 @@ export function ProjectList({ searchQuery = "" }: { searchQuery?: string }) {
   // 磁盘项目在前, 虚拟项目追加在后 (虚拟项目不参与持久化顺序/拖拽)
   const displayProjects = [...projects, ...uniqueVirtual];
 
-  // 搜索模式: 跨项目拍平所有会话 (磁盘 + 未落盘), 按标题/项目名包含过滤, 不按项目分组。
-  // 数据源与树模式同一批 (projects + virtual + openOnly), 不引入设计稿假数据
+  // 拍平数据源 (搜索与最近视图共用): 磁盘会话 + 打开中未落盘, 不搜索时不过滤
   const searching = searchQuery.trim() !== "";
   const q = searchQuery.trim().toLowerCase();
-  const flatHits = searching
-    ? displayProjects.flatMap((p) => {
-        const projHit = p.display_name.toLowerCase().includes(q);
-        const disk = p.sessions
-          .filter((s) => projHit || sessionTitle(s).toLowerCase().includes(q))
-          .map((s) => ({ kind: "disk" as const, p, s }));
-        const openOnly = openOnlySessions(p, sessionOrder, sessions)
-          .filter(({ s }) => projHit || openSessionTitle(s).toLowerCase().includes(q))
-          .map(({ sid, s }) => ({ kind: "open" as const, p, sid, s }));
-        return [...disk, ...openOnly];
-      })
-    : [];
+  const flatHits: FlatHit[] = displayProjects.flatMap((p) => {
+    const projHit = searching && p.display_name.toLowerCase().includes(q);
+    const disk = p.sessions
+      .filter((s) => !searching || projHit || sessionTitle(s).toLowerCase().includes(q))
+      .map((s) => ({ kind: "disk" as const, p, s }));
+    const openOnly = openOnlySessions(p, sessionOrder, sessions)
+      .filter(({ s }) => !searching || projHit || openSessionTitle(s).toLowerCase().includes(q))
+      .map(({ sid, s }) => ({ kind: "open" as const, p, sid, s }));
+    return [...disk, ...openOnly];
+  });
+
+  // 最近视图排序键: 打开中且磁盘列表查不到的会话视为最新 (未落盘 / 扫描未刷新),
+  // 同一批内后打开的排前; 磁盘条目用文件 mtime, 缺失时回退文件名时间戳
+  const recentRank = (h: FlatHit): number =>
+    h.kind === "open"
+      ? Number.MAX_SAFE_INTEGER + sessionOrder.indexOf(h.sid)
+      : h.s.mtime_ms ?? parseSessionTs(h.s.timestamp) ?? 0;
+
+  // 最近视图: 全量拍平 → 时间降序 → 按页截断 → 今天 / 本周 / 更早分组。
+  // 先截断再分组, 保证「显示更多」展开的是全局下一段而不是某一组的尾巴
+  const recentSorted =
+    mode === "recent" && !searching ? [...flatHits].sort((a, b) => recentRank(b) - recentRank(a)) : [];
+  const recentGroups: { label: string; items: FlatHit[] }[] = [];
+  for (const h of recentSorted.slice(0, recentLimit)) {
+    const label = recentGroupLabel(recentRank(h));
+    const tail = recentGroups[recentGroups.length - 1];
+    if (tail && tail.label === label) tail.items.push(h);
+    else recentGroups.push({ label, items: [h] });
+  }
 
   if (projects.length === 0 && uniqueVirtual.length === 0) {
     return (
-      <div className="px-4 py-6 text-body text-[var(--faint)]">
-        暂无项目。在对话区选择项目即可开始。
+      <div className="px-4 py-6 text-body text-[var(--fg-4)]">
+        {mode === "recent" ? "还没有任何会话。在对话区开始第一段对话即可。" : "暂无项目。在对话区选择项目即可开始。"}
       </div>
     );
   }
@@ -318,291 +361,386 @@ export function ProjectList({ searchQuery = "" }: { searchQuery?: string }) {
     setRenamingPath(null);
   };
 
-  return (
-    <div className="flex-1 overflow-y-auto px-2 py-1">
-      {/* 搜索模式: 平铺过滤结果 */}
-      {searching && (
-        <div className="space-y-1 px-1 py-1">
-          {flatHits.length === 0 ? (
-            <div className="px-3 py-4 text-mini text-[var(--faint)]">无匹配会话</div>
+  /**
+   * 拍平行渲染 (搜索模式与最近视图共用): 打开 / 删除 / 右键菜单与搜索模式完全一致,
+   * 只多一个可选徽标与时间格式开关。提前把 union 判别成明确分支变量: 回调闭包内
+   * TS 对 hit.kind 收窄不可靠 (沿用原搜索模式的写法)。
+   */
+  const renderFlatRow = (
+    hit: FlatHit,
+    opts?: { timeMode?: "date" | "recent"; badge?: ReactNode }
+  ) => {
+    const diskHit = hit.kind === "disk" ? hit : null;
+    const openHit = hit.kind === "open" ? hit : null;
+    const title = diskHit ? sessionTitle(diskHit.s) : openSessionTitle(openHit!.s);
+    // 磁盘会话: 查它是否已在打开列表; 打开中会话: sid 本身
+    const openId = diskHit
+      ? sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, diskHit.s.session_path))
+      : openHit!.sid;
+    const isActive = openId === activeSessionId;
+    const right: "spinner" | "dot" | string | null =
+      openId && sessions[openId]?.isStreaming
+        ? "spinner"
+        : openId && sessions[openId]?.hasUnread
+          ? "dot"
+          : diskHit
+            ? opts?.timeMode === "recent"
+              ? formatRecentTime(recentRank(diskHit))
+              : formatTime(diskHit.s.timestamp)
+            : null;
+    return (
+      <SessionRow
+        key={diskHit ? diskHit.s.session_path : `open:${openHit!.sid}`}
+        leading={opts?.badge}
+        title={title}
+        hint={hit.p.display_name}
+        isActive={isActive}
+        right={right}
+        onOpen={() =>
+          diskHit ? handleOpenSession(diskHit.p.path, diskHit.s) : setActiveSession(openHit!.sid)
+        }
+        onDelete={() =>
+          diskHit
+            ? handleDeleteSession(diskHit.p.path, diskHit.s)
+            : (stopSession(openHit!.sid), removeSessionState(openHit!.sid))
+        }
+        onContext={(e) => {
+          if (diskHit) {
+            const open = sessionOrder.find((sid) =>
+              pathEq(sessions[sid]?.sessionPath, diskHit.s.session_path),
+            );
+            setCtx({
+              x: e.clientX, y: e.clientY,
+              items: [
+                { label: "打开", icon: FolderOpen, onClick: () => handleOpenSession(diskHit.p.path, diskHit.s) },
+                {
+                  label: "重命名",
+                  icon: MessageSquare,
+                  disabled: !open,
+                  onClick: () => {
+                    setRenamingPath(diskHit.s.session_path);
+                    setRenameValue(sessionTitle(diskHit.s));
+                  },
+                },
+                {
+                  label: "删除会话",
+                  icon: Trash2,
+                  danger: true,
+                  onClick: () => handleDeleteSession(diskHit.p.path, diskHit.s),
+                },
+              ],
+            });
+          } else {
+            const o = openHit!;
+            setCtx({
+              x: e.clientX, y: e.clientY,
+              items: [
+                { label: "打开", icon: FolderOpen, onClick: () => setActiveSession(o.sid) },
+                {
+                  label: "删除会话",
+                  icon: Trash2,
+                  danger: true,
+                  onClick: () => {
+                    stopSession(o.sid);
+                    removeSessionState(o.sid);
+                  },
+                },
+              ],
+            });
+          }
+        }}
+      />
+    );
+  };
+
+  /**
+   * 项目行渲染 (主列表与临时目录组共用): draggable 只在主列表为 true。
+   * 虚拟项目 (storeIndex = -1) 与临时目录组的项目都不参与持久化排序。
+   */
+  const renderProjectNode = (entry: ProjectEntry, draggable: boolean) => {
+    const { p, storeIndex } = entry;
+    const isVirtual = storeIndex < 0;
+    return (
+      <div
+        key={p.path}
+        draggable={draggable}
+        onDragStart={(e) => {
+          if (!draggable) return;
+          setDragIndex(storeIndex);
+          e.dataTransfer.effectAllowed = "move";
+        }}
+        // 非拖拽区不 preventDefault: 浏览器不把它当有效放置目标, drop 不会落进来
+        onDragOver={(e) => {
+          if (!draggable) return;
+          e.preventDefault();
+        }}
+        onDrop={(e) => {
+          if (!draggable) return;
+          e.preventDefault();
+          if (dragIndex !== null && dragIndex !== storeIndex) moveProject(dragIndex, storeIndex);
+          setDragIndex(null);
+        }}
+        className="mb-1"
+      >
+        {/* 项目行: hover 按钮绝对定位不参与流式布局 (0b31a75 防行高跳动的延续) */}
+        <div
+          className="group relative flex cursor-pointer items-center gap-2 rounded-md py-[5px] pl-2 pr-2 text-body transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+          onClick={() => toggleProject(p.path)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setCtx({
+              x: e.clientX, y: e.clientY,
+              items: isVirtual
+                ? [
+                    { label: "新建会话", icon: Plus, onClick: () => handleNewSession(p.path) },
+                    { label: "移除项目", icon: X, danger: true, onClick: () => stopAllCwdSessions(p.path) },
+                  ]
+                : [
+                    { label: "新建会话", icon: Plus, onClick: () => handleNewSession(p.path) },
+                    { label: "移除项目", icon: X, danger: true, onClick: () => removeProject(p.path) },
+                  ],
+            });
+          }}
+        >
+          {p.expanded ? (
+            <ChevronDown className="h-4 w-4 shrink-0 text-[var(--fg-3)] transition duration-fast ease-out group-hover:text-[var(--accent)]" />
           ) : (
-            flatHits.map((hit) => {
-              // 提前把 union 判别成明确分支变量: 回调闭包内 TS 对 hit.kind 收窄不可靠
-              const diskHit = hit.kind === "disk" ? hit : null;
-              const openHit = hit.kind === "open" ? hit : null;
-              const title = diskHit ? sessionTitle(diskHit.s) : openSessionTitle(openHit!.s);
-              const sessionPath = diskHit ? diskHit.s.session_path : null;
-              const openIdOf = diskHit
-                ? sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, sessionPath))
-                : undefined;
-              const isActive = diskHit
-                ? openIdOf === activeSessionId
-                : openHit!.sid === activeSessionId;
-              const right: "spinner" | "dot" | string | null = diskHit
-                ? openIdOf && sessions[openIdOf]?.isStreaming
-                  ? "spinner"
-                  : openIdOf && sessions[openIdOf]?.hasUnread
-                    ? "dot"
-                    : formatTime(diskHit.s.timestamp)
-                : openHit!.s.isStreaming
-                  ? "spinner"
-                  : openHit!.s.hasUnread
-                    ? "dot"
-                    : null;
+            <ChevronRight className="h-4 w-4 shrink-0 text-[var(--fg-3)] transition duration-fast ease-out group-hover:text-[var(--accent)]" />
+          )}
+          <FolderOpen className="h-4 w-4 shrink-0 text-[var(--fg-3)] transition duration-fast ease-out group-hover:text-[var(--accent)]" />
+          <span
+            className="min-w-0 flex-1 truncate font-medium text-[var(--fg-2)] transition duration-fast ease-out group-hover:pr-8 group-hover:text-[var(--fg)]"
+            title={p.path}
+          >
+            {p.display_name}
+          </span>
+          {/* 会话计数: hover 淡出让位给操作钮 */}
+          <span className="shrink-0 pr-1 font-mono text-micro text-[var(--fg-4)] transition-opacity duration-fast ease-out group-hover:opacity-0">
+            {p.sessions.length}
+          </span>
+          {/* 浮现操作钮 (绝对定位, 不撑高行) */}
+          <span className="absolute right-2 top-1/2 hidden -translate-y-1/2 items-center gap-1 group-hover:flex">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleNewSession(p.path);
+              }}
+              className="rounded p-1 text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+              title="新建会话"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                isVirtual ? stopAllCwdSessions(p.path) : removeProject(p.path);
+              }}
+              className="rounded p-1 text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--err)]"
+              title="移除项目"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        </div>
+
+        {/* 会话列表: 最近 5 个, 点省略号每次 +7 */}
+        {p.expanded && (
+          <div className="ml-4 pl-2">
+            {p.sessions.slice(0, p.visibleCount).map((s) => {
+              const openId = sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, s.session_path));
+              const isActive = openId === activeSessionId;
+              const isLoading = startingPath === s.session_path;
+              const right: "spinner" | "dot" | string | null = isLoading || (openId && sessions[openId]?.isStreaming)
+                ? "spinner"
+                : openId && sessions[openId]?.hasUnread
+                  ? "dot"
+                  : formatTime(s.timestamp);
               return (
                 <SessionRow
-                  key={diskHit ? diskHit.s.session_path : `open:${openHit!.sid}`}
-                  title={title}
-                  hint={hit.p.display_name}
+                  key={s.session_path}
+                  title={sessionTitle(s)}
                   isActive={isActive}
                   right={right}
-                  onOpen={() =>
-                    diskHit
-                      ? handleOpenSession(diskHit.p.path, diskHit.s)
-                      : setActiveSession(openHit!.sid)
-                  }
-                  onDelete={() =>
-                    diskHit
-                      ? handleDeleteSession(diskHit.p.path, diskHit.s)
-                      : (stopSession(openHit!.sid), removeSessionState(openHit!.sid))
-                  }
+                  onOpen={() => handleOpenSession(p.path, s)}
+                  onDelete={() => handleDeleteSession(p.path, s)}
                   onContext={(e) => {
-                    if (diskHit) {
-                      const open = sessionOrder.find((sid) =>
-                        pathEq(sessions[sid]?.sessionPath, diskHit.s.session_path),
-                      );
-                      setCtx({
-                        x: e.clientX, y: e.clientY,
-                        items: [
-                          { label: "打开", icon: FolderOpen, onClick: () => handleOpenSession(diskHit.p.path, diskHit.s) },
-                          {
-                            label: "重命名",
-                            icon: MessageSquare,
-                            disabled: !open,
-                            onClick: () => {
-                              setRenamingPath(diskHit.s.session_path);
-                              setRenameValue(sessionTitle(diskHit.s));
-                            },
-                          },
-                          {
-                            label: "删除会话",
-                            icon: Trash2,
-                            danger: true,
-                            onClick: () => handleDeleteSession(diskHit.p.path, diskHit.s),
-                          },
-                        ],
-                      });
-                    } else {
-                      const o = openHit!;
-                      setCtx({
-                        x: e.clientX, y: e.clientY,
-                        items: [
-                          { label: "打开", icon: FolderOpen, onClick: () => setActiveSession(o.sid) },
-                          {
-                            label: "删除会话",
-                            icon: Trash2,
-                            danger: true,
-                            onClick: () => {
-                              stopSession(o.sid);
-                              removeSessionState(o.sid);
-                            },
-                          },
-                        ],
-                      });
-                    }
-                  }}
-                />
-              );
-            })
-          )}
-        </div>
-      )}
-
-      {/* 树模式 */}
-      {!searching && displayProjects.map((p, index) => {
-        // 虚拟项目 (磁盘无记录, 只承载打开中的会话): 不可拖拽, 移除 = 关闭该 cwd 全部会话
-        const isVirtual = index >= projects.length;
-        return (
-        <div
-          key={p.path}
-          draggable={!isVirtual}
-          onDragStart={(e) => {
-            if (isVirtual) return; // 虚拟项目不参与持久化排序
-            setDragIndex(index);
-            e.dataTransfer.effectAllowed = "move";
-          }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            if (dragIndex !== null && dragIndex !== index) moveProject(dragIndex, index);
-            setDragIndex(null);
-          }}
-          className="mb-1"
-        >
-          {/* 项目行: hover 按钮绝对定位不参与流式布局 (0b31a75 防行高跳动的延续) */}
-          <div
-            className="group relative flex cursor-pointer items-center gap-2 rounded-md py-[5px] pl-2 pr-2 text-body transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--surface-2)_55%,transparent)] hover:text-[var(--fg)]"
-            onClick={() => toggleProject(p.path)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setCtx({
-                x: e.clientX, y: e.clientY,
-                items: isVirtual
-                  ? [
-                      { label: "新建会话", icon: Plus, onClick: () => handleNewSession(p.path) },
-                      { label: "移除项目", icon: X, danger: true, onClick: () => stopAllCwdSessions(p.path) },
-                    ]
-                  : [
-                      { label: "新建会话", icon: Plus, onClick: () => handleNewSession(p.path) },
-                      { label: "移除项目", icon: X, danger: true, onClick: () => removeProject(p.path) },
-                    ],
-              });
-            }}
-          >
-            {p.expanded ? (
-              <ChevronDown className="h-4 w-4 shrink-0 text-[var(--faint)] transition duration-fast ease-out group-hover:text-[var(--accent)]" />
-            ) : (
-              <ChevronRight className="h-4 w-4 shrink-0 text-[var(--faint)] transition duration-fast ease-out group-hover:text-[var(--accent)]" />
-            )}
-            <FolderOpen className="h-4 w-4 shrink-0 text-[var(--faint)] transition duration-fast ease-out group-hover:text-[var(--accent)]" />
-            <span
-              className="min-w-0 flex-1 truncate font-medium text-[var(--muted)] transition duration-fast ease-out group-hover:pr-8 group-hover:text-[var(--fg)]"
-              title={p.path}
-            >
-              {p.display_name}
-            </span>
-            {/* 会话计数: hover 淡出让位给操作钮 */}
-            <span className="shrink-0 pr-1 font-mono text-micro text-[var(--faint)] transition-opacity duration-fast ease-out group-hover:opacity-0">
-              {p.sessions.length}
-            </span>
-            {/* 浮现操作钮 (绝对定位, 不撑高行) */}
-            <span className="absolute right-2 top-1/2 hidden -translate-y-1/2 items-center gap-1 group-hover:flex">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleNewSession(p.path);
-                }}
-                className="rounded p-1 text-[var(--faint)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
-                title="新建会话"
-              >
-                <Plus className="h-3 w-3" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  isVirtual ? stopAllCwdSessions(p.path) : removeProject(p.path);
-                }}
-                className="rounded p-1 text-[var(--faint)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-red-500"
-                title="移除项目"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          </div>
-
-          {/* 会话列表: 最近 5 个, 点省略号每次 +7 */}
-          {p.expanded && (
-            <div className="ml-4 pl-2">
-              {p.sessions.slice(0, p.visibleCount).map((s) => {
-                const openId = sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, s.session_path));
-                const isActive = openId === activeSessionId;
-                const isLoading = startingPath === s.session_path;
-                const right: "spinner" | "dot" | string | null = isLoading || (openId && sessions[openId]?.isStreaming)
-                  ? "spinner"
-                  : openId && sessions[openId]?.hasUnread
-                    ? "dot"
-                    : formatTime(s.timestamp);
-                return (
-                  <SessionRow
-                    key={s.session_path}
-                    title={sessionTitle(s)}
-                    isActive={isActive}
-                    right={right}
-                    onOpen={() => handleOpenSession(p.path, s)}
-                    onDelete={() => handleDeleteSession(p.path, s)}
-                    onContext={(e) => {
-                      const open = sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, s.session_path));
-                      setCtx({
-                        x: e.clientX, y: e.clientY,
-                        items: [
-                          { label: "打开", icon: FolderOpen, onClick: () => handleOpenSession(p.path, s) },
-                          {
-                            label: "重命名",
-                            icon: MessageSquare,
-                            disabled: !open,
-                            onClick: () => { setRenamingPath(s.session_path); setRenameValue(sessionTitle(s)); },
-                          },
-                          { label: "删除会话", icon: Trash2, danger: true, onClick: () => handleDeleteSession(p.path, s) },
-                        ],
-                      });
-                    }}
-                  />
-                );
-              })}
-              {p.sessions.length > p.visibleCount && (
-                <button
-                  onClick={() => loadMore(p.path)}
-                  className="w-full rounded-md py-1 pl-2 text-left text-mini text-[var(--muted)] transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--surface-2)_55%,transparent)] hover:text-[var(--fg)]"
-                >
-                  显示更多 ({p.sessions.length - p.visibleCount})…
-                </button>
-              )}
-              {/* 打开中但磁盘列表没有的会话 (新会话未落盘 / 已落盘未刷新): 直接可点回 */}
-              {openOnlySessions(p, sessionOrder, sessions).map(({ sid, s }) => (
-                <SessionRow
-                  key={`open:${sid}`}
-                  title={openSessionTitle(s)}
-                  isActive={sid === activeSessionId}
-                  right={s.isStreaming ? "spinner" : s.hasUnread ? "dot" : null}
-                  onOpen={() => setActiveSession(sid)}
-                  onDelete={() => {
-                    stopSession(sid);
-                    removeSessionState(sid);
-                  }}
-                  onContext={(e) => {
+                    const open = sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, s.session_path));
                     setCtx({
                       x: e.clientX, y: e.clientY,
                       items: [
-                        { label: "打开", icon: FolderOpen, onClick: () => setActiveSession(sid) },
+                        { label: "打开", icon: FolderOpen, onClick: () => handleOpenSession(p.path, s) },
                         {
-                          label: "删除会话",
-                          icon: Trash2,
-                          danger: true,
-                          onClick: () => {
-                            stopSession(sid);
-                            removeSessionState(sid);
-                          },
+                          label: "重命名",
+                          icon: MessageSquare,
+                          disabled: !open,
+                          onClick: () => { setRenamingPath(s.session_path); setRenameValue(sessionTitle(s)); },
                         },
+                        { label: "删除会话", icon: Trash2, danger: true, onClick: () => handleDeleteSession(p.path, s) },
                       ],
                     });
                   }}
                 />
-              ))}
-            </div>
+              );
+            })}
+            {p.sessions.length > p.visibleCount && (
+              <button
+                onClick={() => loadMore(p.path)}
+                className="w-full rounded-md py-1 pl-2 text-left text-mini text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+              >
+                显示更多 ({p.sessions.length - p.visibleCount})…
+              </button>
+            )}
+            {/* 打开中但磁盘列表没有的会话 (新会话未落盘 / 已落盘未刷新): 直接可点回 */}
+            {openOnlySessions(p, sessionOrder, sessions).map(({ sid, s }) => (
+              <SessionRow
+                key={`open:${sid}`}
+                title={openSessionTitle(s)}
+                isActive={sid === activeSessionId}
+                right={s.isStreaming ? "spinner" : s.hasUnread ? "dot" : null}
+                onOpen={() => setActiveSession(sid)}
+                onDelete={() => {
+                  stopSession(sid);
+                  removeSessionState(sid);
+                }}
+                onContext={(e) => {
+                  setCtx({
+                    x: e.clientX, y: e.clientY,
+                    items: [
+                      { label: "打开", icon: FolderOpen, onClick: () => setActiveSession(sid) },
+                      {
+                        label: "删除会话",
+                        icon: Trash2,
+                        danger: true,
+                        onClick: () => {
+                          stopSession(sid);
+                          removeSessionState(sid);
+                        },
+                      },
+                    ],
+                  });
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // 项目树分两段: 主列表 (参与拖拽排序) + 底部「临时目录」折叠组 (不参与)
+  const allEntries: ProjectEntry[] = [
+    ...projects.map((p, storeIndex) => ({ p, storeIndex })),
+    ...uniqueVirtual.map((p) => ({ p, storeIndex: -1 })),
+  ];
+  const mainEntries = allEntries.filter(({ p }) => !isTempProject(p.path, p.display_name));
+  const tempEntries = allEntries.filter(({ p }) => isTempProject(p.path, p.display_name));
+
+  return (
+    <div className="flex-1 overflow-y-auto px-2 py-1">
+      {/* 搜索模式: 两种视图共用的平铺过滤结果 (不分组) */}
+      {searching && (
+        <div className="space-y-1 px-1 py-1">
+          {flatHits.length === 0 ? (
+            <div className="px-3 py-4 text-mini text-[var(--fg-4)]">无匹配会话</div>
+          ) : (
+            flatHits.map((hit) => renderFlatRow(hit))
           )}
         </div>
-        );
-      })}
+      )}
+
+      {/* 最近视图 (design §6): 跨项目按修改时间降序, 今天 / 本周 / 更早分组, 单行 = 徽标 + 标题 + 三态 */}
+      {!searching && mode === "recent" && (
+        <div className="flex flex-col">
+          {recentGroups.length === 0 ? (
+            <div className="px-3 py-4 text-mini text-[var(--fg-4)]">暂无会话</div>
+          ) : (
+            recentGroups.map((g) => (
+              <div key={g.label}>
+                <div className="sess-grp">{g.label}</div>
+                {g.items.map((h) =>
+                  renderFlatRow(h, {
+                    timeMode: "recent",
+                    badge: (
+                      <span
+                        className="sess-badge"
+                        // CSS 自定义属性 --h 不在 CSSProperties 类型定义内, 双重断言绕过
+                        style={{ "--h": String(hue(h.p.display_name)) } as unknown as CSSProperties}
+                        aria-hidden
+                      >
+                        {abbr(h.p.display_name)}
+                      </span>
+                    ),
+                  }),
+                )}
+              </div>
+            ))
+          )}
+          {recentSorted.length > recentLimit && (
+            <button
+              onClick={() => setRecentLimit((n) => n + RECENT_PAGE)}
+              className="w-full rounded-md py-1 pl-2 text-left text-mini text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+            >
+              显示更多 ({recentSorted.length - recentLimit})…
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 项目视图: 主列表 + 临时目录组 */}
+      {!searching && mode === "projects" && (
+        <>
+          {mainEntries.map((entry) => renderProjectNode(entry, entry.storeIndex >= 0))}
+          {tempEntries.length > 0 && (
+            // 临时目录组 (design §6): UUID / AppData 下的项目收进底部, 默认折叠, 展开态持久化
+            <div className="mt-3 border-t border-dashed border-[var(--line-2)] pt-2">
+              <button
+                onClick={() => {
+                  setTempOpen((v) => {
+                    const next = !v;
+                    try {
+                      localStorage.setItem(TEMP_GROUP_KEY, next ? "1" : "0");
+                    } catch { /* ignore */ }
+                    return next;
+                  });
+                }}
+                className="flex h-[30px] w-full cursor-pointer items-center gap-2 rounded-md px-2 text-body text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg-2)]"
+                title="临时目录（自动收起，不参与排序）"
+              >
+                {tempOpen ? (
+                  <ChevronDown className="h-4 w-4 shrink-0" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0" />
+                )}
+                <span className="min-w-0 flex-1 truncate text-left text-[var(--fg-4)]">临时目录</span>
+                <span className="shrink-0 pr-1 font-mono text-micro text-[var(--fg-4)]">
+                  {tempEntries.length}
+                </span>
+              </button>
+              {tempOpen && tempEntries.map((entry) => renderProjectNode(entry, false))}
+            </div>
+          )}
+        </>
+      )}
 
       {ctx && <ContextMenu {...ctx} onClose={() => setCtx(null)} />}
 
       {/* 重命名输入: 会话行内联编辑 */}
       {renamingPath && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20">
-          <div className="w-72 rounded-md border border-[var(--border-soft)] bg-[var(--panel)] p-4 shadow-[var(--shadow-lg)]">
+          <div className="w-72 rounded-md border border-[var(--line)] bg-popover p-4 shadow-[var(--shadow)]">
             <p className="mb-2 text-body font-semibold text-[var(--fg)]">重命名会话</p>
             <input
               autoFocus
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submitRename()}
-              className="w-full rounded-md border border-[var(--border)] bg-[var(--surface-base)] px-3 py-2 text-body text-[var(--fg)] outline-none placeholder:text-[var(--faint)] focus:border-[var(--accent)]"
+              className="w-full rounded-md border border-[var(--line-2)] bg-[var(--well)] px-3 py-2 text-body text-[var(--fg)] outline-none placeholder:text-[var(--fg-4)] focus:border-[var(--accent)]"
               placeholder="会话名称"
             />
             <div className="mt-3 flex justify-end gap-2">
               <button
                 onClick={() => setRenamingPath(null)}
-                className="rounded-md px-3 py-2 text-body text-[var(--muted)] transition duration-fast ease-out hover:bg-[var(--surface-2)]"
+                className="rounded-md px-3 py-2 text-body text-[var(--fg-2)] transition duration-fast ease-out hover:bg-[var(--hover)]"
               >
                 取消
               </button>

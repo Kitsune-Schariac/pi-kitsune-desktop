@@ -137,7 +137,7 @@ export function TokenStatsPanel() {
         <div className="flex items-center gap-2">
           {loading && <Loader2 className="h-4 w-4 animate-spin text-[var(--accent)]" />}
           {error && (
-            <span className="flex items-center gap-1 text-mini text-[var(--danger)]">
+            <span className="flex items-center gap-1 text-mini text-[var(--err)]">
               <AlertCircle className="h-4 w-4" /> {error}
             </span>
           )}
@@ -148,7 +148,7 @@ export function TokenStatsPanel() {
       <StatsFilterBar projects={filters?.projects ?? []}>
         <select
           value={provider} onChange={(e) => setProvider(e.target.value)}
-          className="rounded-md border border-neutral-200 bg-panel px-2 py-2 text-neutral-700 outline-none focus:border-primary-400"
+          className="rounded-md border border-[var(--line)] bg-[var(--raise)] px-2 py-2 text-[var(--fg-2)] outline-none transition duration-fast ease-out focus:border-[var(--accent)]"
           title="按供应商筛选"
         >
           <option value="">全部供应商</option>
@@ -158,7 +158,7 @@ export function TokenStatsPanel() {
         </select>
         <select
           value={model} onChange={(e) => setModel(e.target.value)}
-          className="rounded-md border border-neutral-200 bg-panel px-2 py-2 text-neutral-700 outline-none focus:border-primary-400"
+          className="rounded-md border border-[var(--line)] bg-[var(--raise)] px-2 py-2 text-[var(--fg-2)] outline-none transition duration-fast ease-out focus:border-[var(--accent)]"
           title="按模型筛选"
         >
           <option value="">全部模型</option>
@@ -168,7 +168,7 @@ export function TokenStatsPanel() {
         </select>
         <select
           value={agent} onChange={(e) => setAgent(e.target.value)}
-          className="rounded-md border border-neutral-200 bg-panel px-2 py-2 text-neutral-700 outline-none focus:border-primary-400"
+          className="rounded-md border border-[var(--line)] bg-[var(--raise)] px-2 py-2 text-[var(--fg-2)] outline-none transition duration-fast ease-out focus:border-[var(--accent)]"
           title="按来源筛选: 主会话 / 子代理"
         >
           <option value="">全部来源</option>
@@ -203,13 +203,13 @@ export function TokenStatsPanel() {
             { label: "消息数", value: fmt(summary.messageCount), icon: MessageSquare },
             { label: "会话数", value: fmt(summary.sessionCount), icon: FolderKanban },
           ].map(({ label, value, icon: Icon, sub, title }) => (
-            <div key={label} className="rounded-md border border-neutral-200 bg-panel p-3" title={title}>
-              <div className="mb-1 flex items-center gap-1 text-xs text-neutral-400">
-                <Icon className="h-4 w-4 text-primary-500" />
+            <div key={label} className="rounded-lg border border-[var(--line)] bg-[var(--raise)] p-3" title={title}>
+              <div className="mb-1 flex items-center gap-1 text-xs text-[var(--fg-4)]">
+                <Icon className="h-4 w-4 text-[var(--accent)]" />
                 {label}
               </div>
-              <div className="text-num font-semibold tabular-nums text-neutral-900">{value}</div>
-              {sub && <div className="mt-1 text-mini tabular-nums text-neutral-400">{sub}</div>}
+              <div className="text-num font-light tabular-nums text-[var(--fg)]">{value}</div>
+              {sub && <div className="mt-1 text-mini tabular-nums text-[var(--fg-4)]">{sub}</div>}
             </div>
           ))}
         </div>
@@ -218,22 +218,22 @@ export function TokenStatsPanel() {
       {/* 不可见量提示条: 前台同步子代理的 token 根本没落盘, 只能如实说明有多少次算不到。
           不做任何估算 —— 没有的数据就是没有 */}
       {summary && summary.opaqueDispatches > 0 && (
-        <div className="flex items-start gap-2 rounded-md border border-amber-200/70 bg-amber-50/50 px-4 py-3 text-xs leading-relaxed text-neutral-600">
-          <EyeOff className="mt-1 h-4 w-4 shrink-0 text-amber-500" />
+        <div className="flex items-start gap-2 rounded-lg border border-[color-mix(in_oklch,var(--warn)_40%,transparent)] bg-[color-mix(in_oklch,var(--warn)_10%,transparent)] px-4 py-3 text-xs leading-relaxed text-[var(--fg-2)]">
+          <EyeOff className="mt-1 h-4 w-4 shrink-0 text-[var(--warn)]" />
           <div>
-            另有 <span className="font-semibold tabular-nums text-neutral-900">{fmt(summary.opaqueDispatches)}</span> 次
+            另有 <span className="font-semibold tabular-nums text-[var(--fg)]">{fmt(summary.opaqueDispatches)}</span> 次
             前台同步子代理调用, pi 未落盘其 token, <span className="font-medium">无法计入</span>上方统计 —— 实际消耗高于此处显示。
-            <span className="text-neutral-400">（该计数只随时间与项目筛选变化, 不受供应商 / 模型 / 来源筛选影响）</span>
+            <span className="text-[var(--fg-4)]">（该计数只随时间与项目筛选变化, 不受供应商 / 模型 / 来源筛选影响）</span>
           </div>
         </div>
       )}
 
       {/* 按天趋势 (纯 CSS bar, 高度按当日总量归一化) */}
       {byDay.length > 0 && (
-        <section className="rounded-md border border-neutral-200 bg-panel p-4">
+        <section className="rounded-lg border border-[var(--line)] bg-[var(--raise)] p-4">
           <div className="mb-3 flex items-baseline justify-between">
-            <h3 className="text-sm font-medium text-neutral-700">按天趋势</h3>
-            <span className="text-xs text-neutral-400">
+            <h3 className="text-sm font-medium text-[var(--fg)]">按天趋势</h3>
+            <span className="text-xs text-[var(--fg-4)]">
               {byDay[0].date} ~ {byDay[byDay.length - 1].date}
             </span>
           </div>
@@ -244,7 +244,7 @@ export function TokenStatsPanel() {
                 {byDay.map((d) => (
                   <div
                     key={d.date}
-                    className="group relative flex-1 rounded-t-sm bg-primary-400/70 transition duration-fast ease-out hover:bg-primary-500"
+                    className="group relative flex-1 rounded-t-sm bg-[color-mix(in_oklch,var(--accent)_65%,transparent)] transition duration-fast ease-out hover:bg-[var(--accent)]"
                     style={{ height: `${Math.max((d.total / max) * 100, 1.5)}%` }}
                     title={`${d.date} · ${fmt(d.total)} tokens · ${fmt(d.messageCount)} 条消息 · 命中率 ${hitRate(d.cacheRead, d.cacheWrite, d.input)}`}
                   />
@@ -257,21 +257,21 @@ export function TokenStatsPanel() {
 
       {/* 会话明细: 顶层会话可展开, 其下挂该会话派出的子代理 */}
       {topRows.length > 0 && (
-        <section className="rounded-md border border-neutral-200 bg-panel">
-          <h3 className="border-b border-neutral-100 px-4 py-3 text-sm font-medium text-neutral-700">
+        <section className="rounded-lg border border-[var(--line)] bg-[var(--raise)]">
+          <h3 className="border-b border-[var(--line)] px-4 py-3 text-sm font-medium text-[var(--fg)]">
             会话明细 ({topRows.length}
             {sessions.length > topRows.length && ` + ${sessions.length - topRows.length} 子代理`})
           </h3>
           <div className="max-h-72 overflow-y-auto">
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-neutral-50 text-left text-neutral-400">
+              <thead className="sticky top-0 bg-[var(--well)] text-left text-[var(--fg-4)]">
                 <tr>
                   {["时间", "项目 / 来源", "模型", "输入", "输出", "缓存", "命中", "总计", "花费"].map((h) => (
                     <th key={h} className="whitespace-nowrap px-3 py-2 font-medium">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-neutral-100 text-neutral-600">
+              <tbody className="divide-y divide-[var(--line)] text-[var(--fg-2)]">
                 {topRows.map((s) => {
                   const kids = childrenOf.get(s.path) ?? [];
                   const open = expanded.has(s.path);
@@ -291,13 +291,13 @@ export function TokenStatsPanel() {
                   const kidTotal = sum.total - s.total;
                   return (
                     <Fragment key={s.path}>
-                      <tr className="hover:bg-neutral-50">
-                        <td className="whitespace-nowrap px-3 py-2 tabular-nums text-neutral-500">
+                      <tr className="hover:bg-[var(--hover)]">
+                        <td className="whitespace-nowrap px-3 py-2 tabular-nums text-[var(--fg-3)]">
                           <div className="flex items-center gap-1">
                             {kids.length > 0 ? (
                               <button
                                 onClick={() => toggle(s.path)}
-                                className="rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-200 hover:text-neutral-700"
+                                className="rounded-sm p-1 text-[var(--fg-4)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
                                 title={open ? "收起子代理" : `展开 ${kids.length} 个子代理`}
                               >
                                 {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -315,14 +315,14 @@ export function TokenStatsPanel() {
                           <div className="flex items-center gap-2">
                             <span className="truncate">{projectLabel(s.project)}</span>
                             {s.agent && (
-                              <span className="flex shrink-0 items-center gap-1 rounded-sm bg-neutral-100 px-2 py-1 text-xs text-neutral-500">
+                              <span className="flex shrink-0 items-center gap-1 rounded-sm bg-[var(--hover)] px-2 py-1 text-xs text-[var(--fg-3)]">
                                 <Bot className="h-3 w-3" />
                                 {s.agent}
                               </span>
                             )}
                             {s.opaqueDispatches > 0 && (
                               <span
-                                className="flex shrink-0 items-center gap-1 rounded-sm bg-amber-50 px-2 py-1 text-xs text-amber-600"
+                                className="flex shrink-0 items-center gap-1 rounded-sm bg-[color-mix(in_oklch,var(--warn)_14%,transparent)] px-2 py-1 text-xs text-[var(--warn)]"
                                 title={`该会话有 ${s.opaqueDispatches} 次前台同步子代理调用, 其 token 未被 pi 落盘, 无法计入`}
                               >
                                 <EyeOff className="h-3 w-3" />
@@ -338,10 +338,10 @@ export function TokenStatsPanel() {
                         <td className="px-3 py-2 tabular-nums">{fmt(sum.output)}</td>
                         <td className="px-3 py-2 tabular-nums">{fmt(sum.cacheRead + sum.cacheWrite)}</td>
                         <td className="px-3 py-2 tabular-nums">{hitRate(sum.cacheRead, sum.cacheWrite, sum.input)}</td>
-                        <td className="px-3 py-2 font-medium tabular-nums text-neutral-900">
+                        <td className="px-3 py-2 font-medium tabular-nums text-[var(--fg)]">
                           {fmt(sum.total)}
                           {kidTotal > 0 && (
-                            <span className="ml-1 text-xs font-normal text-neutral-400">
+                            <span className="ml-1 text-xs font-normal text-[var(--fg-4)]">
                               其中子代理 {fmt(kidTotal)}
                             </span>
                           )}
@@ -350,7 +350,7 @@ export function TokenStatsPanel() {
                       </tr>
                       {open &&
                         kids.map((k) => (
-                          <tr key={k.path} className="bg-neutral-50/40 text-neutral-500 hover:bg-neutral-50">
+                          <tr key={k.path} className="bg-[var(--well)] text-[var(--fg-3)] hover:bg-[var(--hover)]">
                             <td className="whitespace-nowrap py-2 pl-9 pr-3 tabular-nums">
                               {new Date(k.timestamp).toLocaleString("zh-CN", {
                                 month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
@@ -358,7 +358,7 @@ export function TokenStatsPanel() {
                             </td>
                             <td className="max-w-[200px] px-3 py-2" title={k.cwd}>
                               <span className="flex items-center gap-1 text-xs">
-                                <Bot className="h-3 w-3 shrink-0 text-neutral-400" />
+                                <Bot className="h-3 w-3 shrink-0 text-[var(--fg-4)]" />
                                 {k.agent || "子代理"}
                               </span>
                             </td>
@@ -384,7 +384,7 @@ export function TokenStatsPanel() {
 
       {/* 空态: 无数据且非加载中 */}
       {!loading && !error && summary && summary.total === 0 && (
-        <p className="rounded-md border border-dashed border-neutral-200 px-4 py-10 text-center text-sm text-neutral-400">
+        <p className="rounded-lg border border-dashed border-[var(--line-2)] px-4 py-10 text-center text-sm text-[var(--fg-4)]">
           该筛选范围内暂无 token 数据
         </p>
       )}

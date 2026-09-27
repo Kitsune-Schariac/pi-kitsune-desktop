@@ -5,12 +5,11 @@ import type {
 } from "react";
 
 // 输入原语 (token 驱动)。样式源出 ModelsPanel 的 FIELD_BASE / FIELD_ON_CARD / FIELD_ON_COL。
-// 两类底色: "card" = 落在 raised 卡片上的凹陷输入 (sunken 底);
-//          "col"  = 落在 sunken 侧栏上的输入 (base 底)。背景随所在容器语义选, 皮肤自动适配。
+// surface 形参保留兼容旧调用方 (card/col); 新语义下两种容器都落凹陷井 (--well) + 常规分隔线 (--line)。
 // 尺寸: md = 常规 (h-8), sm = 行内紧凑 (h-7)。调用方不要覆盖 py/h (同名冲突谁赢看 CSS 顺序)。
 
 const FIELD_BASE =
-  "w-full rounded-md border text-xs text-neutral-800 outline-none transition duration-fast ease-out placeholder:text-neutral-500 focus:border-[var(--primary-400)]";
+  "w-full rounded-md border text-xs text-[var(--fg)] outline-none transition duration-fast ease-out placeholder:text-[var(--fg-4)] focus:border-[var(--accent)]";
 
 // 尺寸档: md = 常规 (32px), sm = 行内紧凑 (28px)。py 由尺寸档控制,
 // 调用方不再覆盖 py (同名 class 冲突时谁赢由 CSS 顺序定, 不靠 className 拼接顺序)
@@ -23,9 +22,9 @@ export type FieldSize = keyof typeof FIELD_SIZE;
 
 const FIELD_BG = {
   // 卡片上的输入: 比卡片底凹陷一档
-  card: "border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)]",
-  // 侧栏 (sunken 底) 上的输入: 反用 base 底, 视觉上浮起
-  col: "border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-base)_calc(var(--overlay-alpha)_*_100%),transparent)]",
+  card: "border-[var(--line)] bg-[var(--well)]",
+  // 侧栏上的输入: 新语义下同样落凹陷井 (旧 base 底通道废弃, 保留形参兼容调用方)
+  col: "border-[var(--line)] bg-[var(--well)]",
 } as const;
 
 export type FieldSurface = keyof typeof FIELD_BG;
@@ -33,9 +32,9 @@ export type FieldSurface = keyof typeof FIELD_BG;
 /** 字段标签; hint 是弱化说明 (比正文再弱一档) */
 export function FieldLabel({ children, hint }: { children: ReactNode; hint?: string }) {
   return (
-    <span className="mb-1 flex items-center gap-2 text-xs text-neutral-500">
+    <span className="mb-1 flex items-center gap-2 text-xs text-[var(--fg-3)]">
       {children}
-      {hint && <span className="text-xs text-neutral-400">{hint}</span>}
+      {hint && <span className="text-xs text-[var(--fg-4)]">{hint}</span>}
     </span>
   );
 }

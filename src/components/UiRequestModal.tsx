@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   FileText,
@@ -55,13 +55,13 @@ export function UiRequestModal({
 
   const icon =
     request.method === "confirm" ? (
-      <ShieldAlert className="h-5 w-5 text-primary-500" />
+      <ShieldAlert className="h-5 w-5 text-[var(--accent)]" />
     ) : request.method === "select" ? (
-      <ListChecks className="h-5 w-5 text-primary-500" />
+      <ListChecks className="h-5 w-5 text-[var(--accent)]" />
     ) : request.method === "editor" ? (
-      <FileText className="h-5 w-5 text-primary-500" />
+      <FileText className="h-5 w-5 text-[var(--accent)]" />
     ) : (
-      <TextCursorInput className="h-5 w-5 text-primary-500" />
+      <TextCursorInput className="h-5 w-5 text-[var(--accent)]" />
     );
 
   const submit = () => onResolve(request.id, { value });
@@ -74,15 +74,15 @@ export function UiRequestModal({
         if (e.target === e.currentTarget) onCancel(request.id);
       }}
     >
-      <div className="w-[420px] max-w-[90vw] rounded-md border border-neutral-200 bg-panel shadow-lg">
-        <div className="flex items-center gap-2 border-b border-neutral-200 px-5 py-4">
+      <div className="w-[420px] max-w-[90vw] rounded-lg border border-[var(--line)] bg-popover shadow-[var(--shadow)]">
+        <div className="flex items-center gap-2 border-b border-[var(--line)] px-5 py-4">
           {icon}
-          <span className="flex-1 truncate text-body font-semibold text-neutral-800">
+          <span className="flex-1 truncate text-body font-semibold text-[var(--fg)]">
             {request.title || "扩展请求"}
           </span>
           <button
             onClick={() => onCancel(request.id)}
-            className="rounded-md p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-100 hover:text-neutral-700"
+            className="rounded-md p-1 text-[var(--fg-4)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
             title="取消 (Esc)"
           >
             <X className="h-4 w-4" />
@@ -91,7 +91,7 @@ export function UiRequestModal({
 
         <div className="px-5 py-4">
           {request.method === "confirm" && (
-            <p className="text-body leading-relaxed text-neutral-600">
+            <p className="text-body leading-relaxed text-[var(--fg-2)]">
               {request.message || "请确认此操作"}
             </p>
           )}
@@ -103,14 +103,14 @@ export function UiRequestModal({
                   <button
                     key={opt}
                     onClick={() => onResolve(request.id, { value: opt })}
-                    className="flex w-full items-center justify-between rounded-md border border-neutral-200 px-4 py-2 text-left text-body text-neutral-700 transition duration-fast ease-out hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700"
+                    className="flex w-full items-center justify-between rounded-md border border-[var(--line)] px-4 py-2 text-left text-body text-[var(--fg-2)] transition duration-fast ease-out hover:border-[color-mix(in_oklch,var(--accent)_45%,transparent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
                   >
                     <span className="truncate">{opt}</span>
-                    <ListChecks className="h-4 w-4 shrink-0 text-neutral-300" />
+                    <ListChecks className="h-4 w-4 shrink-0 text-[var(--fg-4)]" />
                   </button>
                 ))
               ) : (
-                <p className="text-body text-neutral-400">没有可用选项</p>
+                <p className="text-body text-[var(--fg-4)]">没有可用选项</p>
               )}
             </div>
           )}
@@ -124,7 +124,7 @@ export function UiRequestModal({
                 if (e.key === "Enter") submit();
               }}
               placeholder={request.placeholder || "输入内容…"}
-              className="w-full rounded-md border border-neutral-200 px-3 py-2 text-body outline-none transition duration-fast ease-out focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+              className="w-full rounded-md border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-body text-[var(--fg)] outline-none transition duration-fast ease-out placeholder:text-[var(--fg-4)] focus:border-[color-mix(in_oklch,var(--accent)_50%,transparent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
             />
           )}
 
@@ -138,22 +138,22 @@ export function UiRequestModal({
                 if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit();
               }}
               rows={8}
-              className="w-full resize-y rounded-md border border-neutral-200 px-3 py-2 font-mono text-body outline-none transition duration-fast ease-out focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+              className="w-full resize-y rounded-md border border-[var(--line)] bg-[var(--well)] px-3 py-2 font-mono text-body text-[var(--fg)] outline-none transition duration-fast ease-out placeholder:text-[var(--fg-4)] focus:border-[color-mix(in_oklch,var(--accent)_50%,transparent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
             />
           )}
         </div>
 
         {(request.method === "confirm" || request.method === "input" || request.method === "editor") && (
-          <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-4">
+          <div className="flex justify-end gap-2 border-t border-[var(--line)] px-5 py-4">
             <button
               onClick={() => onCancel(request.id)}
-              className="rounded-md px-4 py-2 text-body text-neutral-600 transition duration-fast ease-out hover:bg-neutral-100 hover:text-neutral-800"
+              className="rounded-md px-4 py-2 text-body text-[var(--fg-2)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
             >
               取消
             </button>
             <button
               onClick={request.method === "confirm" ? () => onResolve(request.id, { confirmed: true }) : submit}
-              className="rounded-md bg-primary-500 px-4 py-2 text-body font-medium text-white transition duration-fast ease-out hover:bg-primary-600"
+              className="rounded-md bg-[var(--accent)] px-4 py-2 text-body font-medium text-[var(--on-accent)] transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--accent)_88%,black)]"
             >
               {request.method === "confirm" ? "确认" : "提交"}
             </button>
@@ -164,52 +164,117 @@ export function UiRequestModal({
   );
 }
 
-// notify 通知条: 右下角堆叠, 自动消失 (info/warning/error 三态)
+// notify 通知条: 主区右上 (StageHead 下方) 堆叠, 自动消失 (info/warning/error 三态)
+// 位置选右上而非输入卡上方: 输入卡上方是 steer 队列浮层的地盘, 贴主区顶部不与其争位;
+// 舞台下检查器浮卡从右缘滑出, 容器按 --insp-w 让位后不会叠在浮卡上
+const TOAST_TTL = 3500;
+/** 同屏最多展示的通知组数, 多出的折叠为「还有 N 条」 (防通知刷屏遮住正文) */
+const MAX_VISIBLE_GROUPS = 3;
+
+type ToastNotification = { id: string; message: string; notifyType: "info" | "warning" | "error" };
+
+interface NotificationGroup {
+  key: string;
+  message: string;
+  notifyType: ToastNotification["notifyType"];
+  /** 组内全部成员: 关闭与自动消失都要按组操作, 只 dismiss 一条会让 ×N 计数错乱 */
+  items: ToastNotification[];
+}
+
+// 同文 (message + notifyType) 归为一组: 扩展连续 notify 同一句话时不再堆叠多张卡片。
+// 数据与 store 逻辑不动, 合并只做在渲染层
+function groupNotifications(notifications: ToastNotification[]): NotificationGroup[] {
+  const map = new Map<string, NotificationGroup>();
+  for (const n of notifications) {
+    // \u0000 分隔两段: message 可含任意字符, 防止拼接出跨组碰撞
+    const key = `${n.notifyType}\u0000${n.message}`;
+    const hit = map.get(key);
+    if (hit) hit.items.push(n);
+    else map.set(key, { key, message: n.message, notifyType: n.notifyType, items: [n] });
+  }
+  // Map 迭代 = 组首次出现顺序
+  return [...map.values()];
+}
+
+/** 类型色: info 走 --fg-3 (不抢眼), warning/error 走状态色 */
+function notificationTone(t: ToastNotification["notifyType"]): string {
+  return t === "error" ? "var(--err)" : t === "warning" ? "var(--warn)" : "var(--fg-3)";
+}
+
 export function NotificationToasts({
   notifications,
   onDismiss,
 }: {
-  notifications: { id: string; message: string; notifyType: "info" | "warning" | "error" }[];
+  notifications: ToastNotification[];
   onDismiss: (id: string) => void;
 }) {
+  const groups = useMemo(() => groupNotifications(notifications), [notifications]);
+  // 展示最新的几组: 刚发生的消息优先可见; 更早的组仍在独立计时, 到期后自动消失并递补
+  const hidden = Math.max(0, groups.length - MAX_VISIBLE_GROUPS);
+  const visible = hidden > 0 ? groups.slice(hidden) : groups;
+
   return (
-    <div className="fixed bottom-6 right-6 z-40 flex w-[320px] flex-col gap-2">
-      {notifications.map((n) => (
-        <NotificationToast key={n.id} n={n} onDismiss={onDismiss} />
+    <div
+      className="pointer-events-none absolute top-[72px] z-40 flex w-[340px] max-w-[calc(100%-32px)] flex-col gap-2"
+      style={{ right: "calc(var(--insp-w, 0px) + 16px)" }}
+    >
+      {/* 计时器与卡片分离: 折叠未渲染的组也要按时到期, 否则数据会永远留在 store 里 */}
+      {groups.map((g) => (
+        <GroupTimer key={g.key} group={g} onDismiss={onDismiss} />
+      ))}
+      {hidden > 0 && (
+        <div className="pointer-events-auto self-end rounded-full border border-[var(--line)] bg-popover px-3 py-1 text-micro text-[var(--fg-3)] shadow-[var(--shadow)]">
+          还有 {hidden} 条通知
+        </div>
+      )}
+      {visible.map((g) => (
+        <NotificationToast key={g.key} group={g} onDismiss={onDismiss} />
       ))}
     </div>
   );
 }
 
+/** 每组的自动消失计时 (以组内最新一条为准); 不渲染 UI */
+function GroupTimer({ group, onDismiss }: { group: NotificationGroup; onDismiss: (id: string) => void }) {
+  // 组内 id 串作依赖: 同文重复到达 (新成员入组) 时重置计时, 让用户多看一眼
+  const sig = group.items.map((n) => n.id).join("|");
+  useEffect(() => {
+    const t = setTimeout(() => {
+      group.items.forEach((n) => onDismiss(n.id));
+    }, TOAST_TTL);
+    return () => clearTimeout(t);
+    // group 每次渲染重建, 不能进依赖; sig 变化时本 effect 重跑, 闭包拿到的是当次快照
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sig, onDismiss]);
+  return null;
+}
+
 function NotificationToast({
-  n,
+  group,
   onDismiss,
 }: {
-  n: { id: string; message: string; notifyType: "info" | "warning" | "error" };
+  group: NotificationGroup;
   onDismiss: (id: string) => void;
 }) {
-  // 3.5s 自动消失; 卸载时清理定时器
-  useEffect(() => {
-    const t = setTimeout(() => onDismiss(n.id), 3500);
-    return () => clearTimeout(t);
-  }, [n.id, onDismiss]);
-
-  const style =
-    n.notifyType === "error"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : n.notifyType === "warning"
-        ? "border-primary-200 bg-primary-50 text-primary-700"
-        : "border-neutral-200 bg-panel text-neutral-700";
-  const Icon =
-    n.notifyType === "error" ? XCircle : n.notifyType === "warning" ? AlertTriangle : Info;
+  const { notifyType, message, items } = group;
+  const tone = notificationTone(notifyType);
+  const Icon = notifyType === "error" ? XCircle : notifyType === "warning" ? AlertTriangle : Info;
 
   return (
-    <div className={`flex items-start gap-2 rounded-md border px-4 py-2 shadow-lg ${style}`}>
-      <Icon className="mt-1 h-4 w-4 shrink-0" />
-      <span className="flex-1 break-words text-body leading-snug">{n.message}</span>
+    <div
+      className="pointer-events-auto flex items-start gap-2 rounded-md border border-[var(--line)] border-l-[3px] bg-popover px-3 py-2 shadow-[var(--shadow)]"
+      style={{ borderLeftColor: tone }}
+    >
+      <Icon className="mt-1 h-4 w-4 shrink-0" style={{ color: tone }} />
+      <span className="flex-1 break-words text-label leading-snug text-[var(--fg-2)]">
+        {message}
+        {items.length > 1 && <span className="ml-1 text-micro text-[var(--fg-4)]">×{items.length}</span>}
+      </span>
       <button
-        onClick={() => onDismiss(n.id)}
-        className="shrink-0 rounded-sm p-1 opacity-50 transition duration-fast ease-out hover:opacity-100"
+        onClick={() => items.forEach((n) => onDismiss(n.id))}
+        className="shrink-0 rounded-sm p-1 text-[var(--fg-4)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+        title="关闭"
+        aria-label="关闭通知"
       >
         <X className="h-4 w-4" />
       </button>

@@ -1,8 +1,8 @@
 // Subagent 舰队侧栏面板: 会话区右侧内嵌面板, 三态视图机 fleet → run → subsession。
 // 交互骨架对齐 GitSidebarPanel (右侧内嵌圆角卡片、左缘拖拽调宽、Esc 层级)。
 // 数据源: store/fleet.ts 2s 轮询 status.json (面板开着才轮询), 详情/子会话懒加载。
-// 视觉走皮肤 CSS token (surface/border/primary/red), 禁 backdrop-filter/emoji/硬编码色。
-import { useEffect, useMemo, useRef, useState } from "react";
+// 视觉走新语义 token (fg/pane/line/accent 等), 禁 backdrop-filter/emoji/硬编码色。
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -14,9 +14,9 @@ import { useFleetStore, toArtifactEntry, toStreamEntry, parseSessionUuid, type F
 import type { FleetRunSummary, FleetStepSummary } from "../store/fleet";
 import { useSessionStore, mapHistoryEntries, type ChatEntry } from "../store/session";
 import { useFleetStreamEntries } from "../hooks/useFleetStreamEntries";
-import { MessageItem } from "./MessageItem";
-import { ToolCallCard } from "./ToolCallCard";
-import { NotificationItem } from "./NotificationItem";
+import { buildTimeline } from "../lib/timeline";
+import { TurnView } from "./timeline/TurnView";
+import { StepDetail } from "./inspector/StepDetail";
 
 // 三态视图: fleet 为顶层, run 从 fleet 进入 (点 run 卡片), subsession 从 run 进入 (点 step)。
 // subsession→run, run→fleet 是 Esc 与 ‹返回的回退路径; fleet 不响应 Esc (常驻面板)。
@@ -58,8 +58,8 @@ function fmtTime(ms: number): string {
   return new Date(ms).toLocaleTimeString("zh-CN", { hour12: false });
 }
 
-// 状态灯: 活动 = primary 呼吸 (animate-pulse 2s); failed = 固定红; 完成 = 中性; 未知 = 灰。
-// 红是危险语义固定色 (spec 保留), 其余走皮肤 primary/neutral (随主题翻转)
+// 状态灯: 活动 = accent 呼吸 (animate-pulse 2s); failed = err; 完成 = fg-4; 未知 = line-2。
+// 全部走新语义 token (随风格翻转)
 function StatusDot({ state, active }: { state: string; active: boolean }) {
   if (active) {
     return (
@@ -68,16 +68,17 @@ function StatusDot({ state, active }: { state: string; active: boolean }) {
   }
   const t = (state || "").toLowerCase();
   if (["failed", "error", "aborted"].includes(t)) {
-    return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--danger)]" />;
+    return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--err)]" />;
   }
   if (["complete", "completed", "success", "succeeded", "done"].includes(t)) {
-    return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-neutral-500" />;
+    return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--fg-4)]" />;
   }
-  return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-neutral-300" />;
+  return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--line-2)]" />;
 }
 
 interface Props {
-  onClose: () => void;
+  /** 缺省时不渲染关闭按钮 (检查器内嵌时由页签承担收起职责) */
+  onClose?: () => void;
 }
 
 export function FleetSidebarPanel({ onClose }: Props) {
@@ -184,43 +185,45 @@ export function FleetSidebarPanel({ onClose }: Props) {
           {/* header: 三态各异。fleet = 标题+刷新+收起; run = ‹返回+runId+state; subsession = ‹返回+只读横幅 */}
           {view.kind === "fleet" ? (
             <>
-            <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-4 py-3">
+            <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
               <div className="flex min-w-0 items-center gap-2">
-                <Radar className="h-4 w-4 shrink-0 text-[var(--muted)]" />
+                <Radar className="h-4 w-4 shrink-0 text-[var(--fg-2)]" />
                 <span className="text-title font-medium">舰队</span>
                 {runs.length > 0 && (
-                  <span className="text-mini text-[var(--faint)]">· {runs.length}</span>
+                  <span className="text-mini text-[var(--fg-3)]">· {runs.length}</span>
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <button
                   onClick={() => void refresh()}
                   disabled={loading}
-                  className="rounded-md p-1 text-[var(--faint)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--muted)] disabled:opacity-40"
+                  className="rounded-md p-1 text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg-2)] disabled:opacity-40"
                   title="刷新"
                 >
                   <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                 </button>
-                <button
-                  onClick={onClose}
-                  className="rounded-md p-1 text-[var(--faint)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--muted)]"
-                  title="收起"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                {onClose && (
+                  <button
+                    onClick={onClose}
+                    className="rounded-md p-1 text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg-2)]"
+                    title="收起"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
             {/* segmented control: 本会话 / 全部 (design §3 会话锚定), 仅 fleet 态显示 */}
             {/* 高亮用生效态: scope=current 但 sessionPath 未就绪时实际渲染全部,
                 UI 必须反映生效态而非选择态 (review SF2); 点击仍写 scope, 就绪后自动回到用户选择 */}
-            <div className="flex items-center gap-1 border-b border-[var(--border-soft)] px-3 py-2">
-              <div className="flex rounded-md border border-[var(--border-subtle)] p-1">
+            <div className="flex items-center gap-1 border-b border-[var(--line)] px-3 py-2">
+              <div className="flex rounded-md border border-[var(--line)] p-1">
                 <button
                   onClick={() => setScope("current")}
                   className={`rounded-md px-3 py-1 text-mini transition duration-fast ease-out ${
                     scope === "current" && currentUuid !== ""
-                      ? "bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] text-[var(--fg)]"
-                      : "text-[var(--muted)] hover:text-[var(--muted)]"
+                      ? "bg-[var(--well)] text-[var(--fg)]"
+                      : "text-[var(--fg-3)] hover:text-[var(--fg-2)]"
                   }`
                 }
                 >
@@ -230,8 +233,8 @@ export function FleetSidebarPanel({ onClose }: Props) {
                   onClick={() => setScope("all")}
                   className={`rounded-md px-3 py-1 text-mini transition duration-fast ease-out ${
                     scope === "all"
-                      ? "bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] text-[var(--fg)]"
-                      : "text-[var(--muted)] hover:text-[var(--muted)]"
+                      ? "bg-[var(--well)] text-[var(--fg)]"
+                      : "text-[var(--fg-3)] hover:text-[var(--fg-2)]"
                   }`
                 }
                 >
@@ -241,10 +244,10 @@ export function FleetSidebarPanel({ onClose }: Props) {
             </div>
             </>
           ) : view.kind === "run" ? (
-            <div className="flex items-center gap-2 border-b border-[var(--border-soft)] px-3 py-2">
+            <div className="flex items-center gap-2 border-b border-[var(--line)] px-3 py-2">
               <button
                 onClick={() => setView({ kind: "fleet" })}
-                className="flex items-center rounded-md p-1 text-[var(--muted)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
+                className="flex items-center rounded-md p-1 text-[var(--fg-2)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
                 title="返回 (Esc)"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -252,33 +255,33 @@ export function FleetSidebarPanel({ onClose }: Props) {
               {runSummary ? (
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <StatusDot state={runSummary.state} active={runSummary.active} />
-                  <span className="truncate font-mono text-mini text-[var(--muted)]" title={runSummary.run_id}>
+                  <span className="truncate font-mono text-mini text-[var(--fg-2)]" title={runSummary.run_id}>
                     {runSummary.run_id.slice(0, 8)}
                   </span>
-                  <span className="shrink-0 text-mini text-[var(--faint)]">{runSummary.mode}</span>
-                  <span className="shrink-0 text-mini text-[var(--faint)]">· {runSummary.state}</span>
+                  <span className="shrink-0 text-mini text-[var(--fg-3)]">{runSummary.mode}</span>
+                  <span className="shrink-0 text-mini text-[var(--fg-3)]">· {runSummary.state}</span>
                 </div>
               ) : (
-                <span className="text-mini text-[var(--faint)]">run 已不在列表 (可能已结束并被清理)</span>
+                <span className="text-mini text-[var(--fg-3)]">run 已不在列表 (可能已结束并被清理)</span>
               )}
             </div>
           ) : (
             // subsession: 常驻只读横幅 (PRD R3 红线: 子会话属于子 agent 生命周期, 不接成可对话会话)
-            <div className="border-b border-[var(--border-soft)]">
+            <div className="border-b border-[var(--line)]">
               <div className="flex items-center gap-2 px-3 py-2">
                 <button
                   onClick={() => setView({ kind: "run", dir: view.dir })}
-                  className="flex items-center rounded-md p-1 text-[var(--muted)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
+                  className="flex items-center rounded-md p-1 text-[var(--fg-2)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
                   title="返回 (Esc)"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 <span className="flex min-w-0 flex-1 items-center gap-2 text-title font-medium">
-                  <FileText className="h-4 w-4 shrink-0 text-[var(--faint)]" />
+                  <FileText className="h-4 w-4 shrink-0 text-[var(--fg-3)]" />
                   <span className="truncate" title={view.title}>{view.title}</span>
                 </span>
               </div>
-              <div className="flex items-center gap-2 bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] px-3 py-2 text-mini text-[var(--muted)]">
+              <div className="flex items-center gap-2 bg-[var(--well)] px-3 py-2 text-mini text-[var(--fg-2)]">
                 <AlertCircle className="h-3 w-3 shrink-0" />
                 子 agent 会话 · 只读视图
               </div>
@@ -332,11 +335,11 @@ function FleetList({
   if (entries.length === 0 && otherActive.length === 0 && !lastError) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-16 text-center">
-        <Radar className="h-8 w-8 text-[var(--faint)]" />
-        <p className="text-body text-[var(--faint)]">
+        <Radar className="h-12 w-12 rounded-full border border-dashed border-[var(--line-2)] p-3 text-[var(--fg-3)]" />
+        <p className="text-body text-[var(--fg-3)]">
           {scope === "current" ? "本会话还没有 subagent 记录" : "舰队停泊中"}
         </p>
-        <p className="text-mini text-[var(--faint)]">
+        <p className="text-mini text-[var(--fg-3)]">
           {scope === "current" ? "派发子代理后会在这里显示" : "没有发现 subagent 运行产物"}
         </p>
       </div>
@@ -348,14 +351,14 @@ function FleetList({
   return (
     <div>
       {lastError && (
-        <div className="flex items-center gap-2 border-b border-[var(--border-soft)] px-4 py-2 text-mini text-[var(--faint)]">
+        <div className="flex items-center gap-2 border-b border-[var(--line)] px-4 py-2 text-mini text-[var(--fg-3)]">
           <AlertCircle className="h-3 w-3 shrink-0" />
           产物目录不可达 · 已降级为空
         </div>
       )}
       {active.length > 0 && (
         <div className="py-1">
-          <div className="px-4 py-1 text-mini font-medium uppercase tracking-wide text-[var(--faint)]">
+          <div className="px-4 py-1 text-mini font-medium uppercase tracking-wide text-[var(--fg-3)]">
             活动中 ({active.length})
           </div>
           {active.map((e) => (
@@ -365,7 +368,7 @@ function FleetList({
       )}
       {history.length > 0 && (
         <div className="py-1">
-          <div className="px-4 py-1 text-mini font-medium uppercase tracking-wide text-[var(--faint)]">
+          <div className="px-4 py-1 text-mini font-medium uppercase tracking-wide text-[var(--fg-3)]">
             历史 ({history.length}{historyTotal > 10 ? ` / ${historyTotal}` : ""})
           </div>
           {history.map((e) => (
@@ -411,17 +414,17 @@ function StreamDrawer({ entry, expanded }: { entry: FleetEntry; expanded: boolea
   if (!call) return null;
   return (
     <div className={`overflow-hidden transition-[max-height] duration-200 ${expanded ? "max-h-[600px]" : "max-h-0"}`}>
-      <div className="mt-1 space-y-2 border-t border-[var(--border-subtle)] pt-2">
+      <div className="mt-1 space-y-2 border-t border-[var(--line)] pt-2">
         <div>
-          <div className="mb-1 text-mini font-medium uppercase tracking-wide text-[var(--faint)]">Prompt</div>
-          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 font-mono text-mini leading-relaxed text-[var(--muted)]">
+          <div className="mb-1 text-mini font-medium uppercase tracking-wide text-[var(--fg-3)]">Prompt</div>
+          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-[var(--well)] p-2 font-mono text-mini leading-relaxed text-[var(--fg-2)]">
             {call.fullPrompt || "—"}
           </pre>
         </div>
         {call.fullResult && (
           <div>
-            <div className="mb-1 text-mini font-medium uppercase tracking-wide text-[var(--faint)]">结果</div>
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 font-mono text-mini leading-relaxed text-[var(--muted)]">
+            <div className="mb-1 text-mini font-medium uppercase tracking-wide text-[var(--fg-3)]">结果</div>
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-[var(--well)] p-2 font-mono text-mini leading-relaxed text-[var(--fg-2)]">
               {call.fullResult}
             </pre>
           </div>
@@ -436,21 +439,21 @@ function StreamCard({ entry }: { entry: FleetEntry }) {
   const [expanded, setExpanded] = useState(false);
   const call = entry.call!;
   return (
-    <div className="mx-2 mb-1 flex w-[calc(100%-1rem)] flex-col gap-1 rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] px-3 py-2 transition duration-fast ease-out hover:border-[var(--border-strong)]">
+    <div className="mx-2 mb-1 flex w-[calc(100%-1rem)] flex-col gap-1 rounded-md border border-[var(--line)] bg-[var(--well)] px-3 py-2 transition duration-fast ease-out hover:border-[var(--line-2)]">
       <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-2 text-left">
         <StatusDot state={entry.state} active={entry.state === "running"} />
-        <span title="对话派发" className="shrink-0"><MessageSquareText className="h-4 w-4 text-[var(--faint)]" /></span>
+        <span title="对话派发" className="shrink-0"><MessageSquareText className="h-4 w-4 text-[var(--fg-3)]" /></span>
         <span className="min-w-0 flex-1 truncate text-mini font-medium text-[var(--fg)]">{call.agent}</span>
-        <span className="shrink-0 font-mono text-mini tabular-nums text-[var(--muted)]">
+        <span className="shrink-0 font-mono text-mini tabular-nums text-[var(--fg-2)]">
           {entry.durationMs != null ? fmtDuration(entry.durationMs) : "—"}
         </span>
         {expanded ? (
-          <ChevronDown className="h-4 w-4 shrink-0 text-[var(--faint)]" />
+          <ChevronDown className="h-4 w-4 shrink-0 text-[var(--fg-3)]" />
         ) : (
-          <ChevronRight className="h-4 w-4 shrink-0 text-[var(--faint)]" />
+          <ChevronRight className="h-4 w-4 shrink-0 text-[var(--fg-3)]" />
         )}
       </button>
-      <div className="truncate text-mini text-[var(--muted)]" title={call.prompt}>
+      <div className="truncate text-mini text-[var(--fg-2)]" title={call.prompt}>
         {call.prompt || (entry.state === "running" ? "运行中…" : "—")}
       </div>
       <StreamDrawer entry={entry} expanded={expanded} />
@@ -466,18 +469,18 @@ function StreamRow({ entry }: { entry: FleetEntry }) {
     <div className="flex flex-col">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 px-4 py-2 text-left text-mini transition duration-fast ease-out hover:bg-[var(--surface-2)]"
+        className="flex w-full items-center gap-2 px-4 py-2 text-left text-mini transition duration-fast ease-out hover:bg-[var(--hover)]"
       >
         <StatusDot state={entry.state} active={false} />
-        <span title="对话派发" className="shrink-0"><MessageSquareText className="h-3 w-3 text-[var(--faint)]" /></span>
-        <span className="min-w-0 flex-1 truncate text-[var(--muted)]">{call.agent}</span>
-        <span className="shrink-0 font-mono tabular-nums text-[var(--faint)]">
+        <span title="对话派发" className="shrink-0"><MessageSquareText className="h-3 w-3 text-[var(--fg-3)]" /></span>
+        <span className="min-w-0 flex-1 truncate text-[var(--fg-2)]">{call.agent}</span>
+        <span className="shrink-0 font-mono tabular-nums text-[var(--fg-3)]">
           {entry.durationMs != null ? fmtDuration(entry.durationMs) : "—"}
         </span>
         {expanded ? (
-          <ChevronDown className="h-3 w-3 shrink-0 text-[var(--faint)]" />
+          <ChevronDown className="h-3 w-3 shrink-0 text-[var(--fg-3)]" />
         ) : (
-          <ChevronRight className="h-3 w-3 shrink-0 text-[var(--faint)]" />
+          <ChevronRight className="h-3 w-3 shrink-0 text-[var(--fg-3)]" />
         )}
       </button>
       <StreamDrawer entry={entry} expanded={expanded} />
@@ -494,7 +497,7 @@ function OtherActiveFold({ entries, now }: { entries: FleetEntry[]; now: number 
     <div className="py-1">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 px-4 py-2 text-left text-mini text-[var(--muted)] transition duration-fast ease-out hover:bg-[var(--surface-2)]"
+        className="flex w-full items-center gap-2 px-4 py-2 text-left text-mini text-[var(--fg-2)] transition duration-fast ease-out hover:bg-[var(--hover)]"
       >
         <ChevronRight className={`h-3 w-3 shrink-0 transition-transform duration-base ease-swift ${expanded ? "rotate-90" : ""}`} />
         <span>其他会话 {entries.length} 个活动中</span>
@@ -504,17 +507,17 @@ function OtherActiveFold({ entries, now }: { entries: FleetEntry[]; now: number 
           {entries.map((e) => (
             <div key={e.key} className="flex items-center gap-2 px-6 py-1 text-mini">
               <StatusDot state={e.state} active />
-              <span title="后台产物" className="shrink-0"><Database className="h-3 w-3 text-[var(--faint)]" /></span>
-              <span className="min-w-0 flex-1 truncate text-[var(--muted)]">{e.agent}</span>
-              <span className="shrink-0 font-mono tabular-nums text-[var(--faint)]">
+              <span title="后台产物" className="shrink-0"><Database className="h-3 w-3 text-[var(--fg-3)]" /></span>
+              <span className="min-w-0 flex-1 truncate text-[var(--fg-2)]">{e.agent}</span>
+              <span className="shrink-0 font-mono tabular-nums text-[var(--fg-3)]">
                 {e.run ? fmtDuration(e.run.active ? Math.max(0, now - e.run.started_at) : e.run.duration_ms) : "—"}
               </span>
-              <span className="shrink-0 truncate text-[var(--faint)]" title={e.run?.cwd}>
+              <span className="shrink-0 truncate text-[var(--fg-3)]" title={e.run?.cwd}>
                 {e.run?.cwd.split(/[\\/]/).pop()}
               </span>
             </div>
           ))}
-          <div className="px-6 py-1 text-mini text-[var(--faint)]">切到「全部」视图查看详情</div>
+          <div className="px-6 py-1 text-mini text-[var(--fg-3)]">切到「全部」视图查看详情</div>
         </div>
       )}
     </div>
@@ -538,17 +541,17 @@ function RunCard({
   return (
     <button
       onClick={() => onOpen(run.dir)}
-      className="group mx-2 mb-1 flex w-[calc(100%-1rem)] flex-col gap-2 rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] px-3 py-2 text-left transition duration-base ease-swift hover:-translate-y-px hover:border-[var(--border-strong)]"
+      className="group mx-2 mb-1 flex w-[calc(100%-1rem)] flex-col gap-2 rounded-md border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-left transition duration-base ease-swift hover:-translate-y-px hover:border-[var(--line-2)]"
     >
       <div className="flex items-center gap-2">
         <StatusDot state={run.state} active={run.active} />
         <span className="flex min-w-0 flex-1 items-center gap-1 text-mini font-medium text-[var(--fg)]">
-          <span title="后台产物" className="shrink-0"><Database className="h-4 w-4 text-[var(--faint)]" /></span>
+          <span title="后台产物" className="shrink-0"><Database className="h-4 w-4 text-[var(--fg-3)]" /></span>
           <span className="truncate">{currentStep?.agent || run.run_id.slice(0, 8)}</span>
         </span>
-        <span className="shrink-0 font-mono text-mini tabular-nums text-[var(--muted)]">{fmtDuration(liveDur)}</span>
+        <span className="shrink-0 font-mono text-mini tabular-nums text-[var(--fg-2)]">{fmtDuration(liveDur)}</span>
       </div>
-      <div className="flex items-center gap-2 text-mini text-[var(--faint)]">
+      <div className="flex items-center gap-2 text-mini text-[var(--fg-3)]">
         {currentStep?.model && (
           <span className="flex items-center gap-1 truncate">
             <Cpu className="h-3 w-3 shrink-0" />
@@ -583,8 +586,8 @@ function RunCard({
               key={i}
               className={`flex max-w-full items-center gap-1 rounded-sm px-2 py-1 text-mini ${
                 t.done
-                  ? "bg-[color-mix(in_oklch,var(--border-subtle)_50%,transparent)] text-[var(--faint)]"
-                  : "bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                  ? "bg-[var(--hover)] text-[var(--fg-3)]"
+                  : "bg-[var(--accent-soft)] text-[var(--accent-2)]"
               }`}
               title={`${t.name} ${t.summary}`}
             >
@@ -595,26 +598,26 @@ function RunCard({
               )}
               <span className="truncate">{t.name}</span>
               {t.summary && (
-                <span className={`truncate font-mono ${t.done ? "text-[var(--faint)]/80" : "text-[var(--accent-strong)]"}`}>
+                <span className={`truncate font-mono ${t.done ? "text-[var(--fg-3)]" : "text-[var(--accent-2)]"}`}>
                   {t.summary}
                 </span>
               )}
             </span>
           ))}
           {activeTools.length > 3 && (
-            <span className="rounded-sm px-2 py-1 text-mini text-[var(--faint)]">
+            <span className="rounded-sm px-2 py-1 text-mini text-[var(--fg-3)]">
               +{activeTools.length - 3}
             </span>
           )}
         </div>
       )}
       {lastOutput && (
-        <div className="truncate font-mono text-mini text-[var(--faint)]" title={lastOutput}>
+        <div className="truncate font-mono text-mini text-[var(--fg-3)]" title={lastOutput}>
           {lastOutput}
         </div>
       )}
       {run.error && (
-        <div className="truncate text-mini text-[var(--danger)]" title={run.error}>
+        <div className="truncate text-mini text-[var(--err)]" title={run.error}>
           {run.error}
         </div>
       )}
@@ -628,19 +631,19 @@ function RunRow({ run, onOpen }: { run: FleetRunSummary; onOpen: (dir: string) =
   return (
     <button
       onClick={() => onOpen(run.dir)}
-      className="flex w-full items-center gap-2 px-4 py-2 text-left text-mini transition duration-fast ease-out hover:bg-[var(--surface-2)]"
+      className="flex w-full items-center gap-2 px-4 py-2 text-left text-mini transition duration-fast ease-out hover:bg-[var(--hover)]"
     >
       <StatusDot state={run.state} active={false} />
-      <span className="shrink-0 font-mono text-[var(--muted)]" title={run.run_id}>
+      <span className="shrink-0 font-mono text-[var(--fg-2)]" title={run.run_id}>
         {run.run_id.slice(0, 8)}
       </span>
       {lastStep?.agent && (
-        <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-[var(--muted)]">
-          <span title="后台产物" className="shrink-0"><Database className="h-3 w-3 text-[var(--faint)]" /></span>
+        <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-[var(--fg-2)]">
+          <span title="后台产物" className="shrink-0"><Database className="h-3 w-3 text-[var(--fg-3)]" /></span>
           <span className="truncate">{lastStep.agent}</span>
         </span>
       )}
-      <span className="shrink-0 font-mono tabular-nums text-[var(--faint)]">{fmtDuration(run.duration_ms)}</span>
+      <span className="shrink-0 font-mono tabular-nums text-[var(--fg-3)]">{fmtDuration(run.duration_ms)}</span>
     </button>
   );
 }
@@ -662,14 +665,14 @@ function RunDetail({
     return <Hint icon={<Loader2 className="h-4 w-4 animate-spin" />} text="加载中…" />;
   }
   if (detailError) {
-    return <p className="px-4 py-6 text-body text-[var(--danger)]">{detailError}</p>;
+    return <p className="px-4 py-6 text-body text-[var(--err)]">{detailError}</p>;
   }
   // events 尾部时间线 (从 detail 懒加载; detail 未就绪时不显示)
   const events = detailMatches ? detail?.events ?? [] : [];
   return (
     <div>
       {/* 汇总数据行 */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--border-soft)] px-4 py-2 text-mini text-[var(--muted)]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--line)] px-4 py-2 text-mini text-[var(--fg-2)]">
         <span className="flex items-center gap-1">
           <Clock className="h-3 w-3" />
           <span className="tabular-nums">{fmtDuration(summary.active ? Math.max(0, now - summary.started_at) : summary.duration_ms)}</span>
@@ -688,10 +691,10 @@ function RunDetail({
         )}
         <span className="tabular-nums">{summary.turn_count} 轮</span>
         <span className="tabular-nums">{summary.tool_count} 工具</span>
-        <span className="truncate text-[var(--faint)]" title={summary.cwd}>{summary.cwd}</span>
+        <span className="truncate text-[var(--fg-3)]" title={summary.cwd}>{summary.cwd}</span>
       </div>
       {summary.error && (
-        <div className="flex items-start gap-2 border-b border-[var(--border-subtle)] bg-[color-mix(in_oklch,var(--surface-sunken)_calc(var(--overlay-alpha)_*_100%),transparent)] px-4 py-2 text-mini text-[var(--danger)]">
+        <div className="flex items-start gap-2 border-b border-[var(--line)] bg-[var(--well)] px-4 py-2 text-mini text-[var(--err)]">
           <AlertCircle className="mt-1 h-4 w-4 shrink-0" />
           <span className="whitespace-pre-line">{summary.error}</span>
         </div>
@@ -713,17 +716,17 @@ function RunDetail({
       )}
       {/* events 时间线 (尾部, 等宽小字) */}
       {events.length > 0 && (
-        <div className="border-t border-[var(--border-soft)] px-4 py-2">
-          <div className="mb-1 text-mini font-medium uppercase tracking-wide text-[var(--faint)]">
+        <div className="border-t border-[var(--line)] px-4 py-2">
+          <div className="mb-1 text-mini font-medium uppercase tracking-wide text-[var(--fg-3)]">
             事件流 ({events.length})
           </div>
-          <div className="space-y-1 font-mono text-mini text-[var(--muted)]">
+          <div className="space-y-1 font-mono text-mini text-[var(--fg-2)]">
             {events.map((ev, i) => {
               const type = String(ev.type ?? "");
               const ts = ev.ts as number | undefined;
               return (
                 <div key={i} className="flex gap-2">
-                  <span className="shrink-0 tabular-nums text-[var(--faint)]">{ts ? fmtTime(ts) : "—"}</span>
+                  <span className="shrink-0 tabular-nums text-[var(--fg-3)]">{ts ? fmtTime(ts) : "—"}</span>
                   <span className="truncate" title={type}>{type}</span>
                 </div>
               );
@@ -757,17 +760,17 @@ function StepCard({
   const sessionFile = step.session_file || runSessionFile;
   const canDrill = !!sessionFile;
   return (
-    <div className="border-b border-[var(--border-soft)] px-4 py-2">
+    <div className="border-b border-[var(--line)] px-4 py-2">
       <div className="flex items-center gap-2">
-        <span className="shrink-0 text-mini tabular-nums text-[var(--faint)]">{index + 1}</span>
+        <span className="shrink-0 text-mini tabular-nums text-[var(--fg-3)]">{index + 1}</span>
         <StatusDot state={step.status} active={active} />
         <span className="flex min-w-0 flex-1 items-center gap-1 text-mini font-medium text-[var(--fg)]">
-          <Bot className="h-4 w-4 shrink-0 text-[var(--faint)]" />
+          <Bot className="h-4 w-4 shrink-0 text-[var(--fg-3)]" />
           <span className="truncate">{step.agent || "(未命名)"}</span>
         </span>
-        <span className="shrink-0 text-mini text-[var(--faint)]">{step.status}</span>
+        <span className="shrink-0 text-mini text-[var(--fg-3)]">{step.status}</span>
       </div>
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-mini text-[var(--faint)]">
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-mini text-[var(--fg-3)]">
         {step.model && (
           <span className="flex items-center gap-1">
             <Cpu className="h-3 w-3" />
@@ -786,14 +789,14 @@ function StepCard({
         )}
       </div>
       {step.error && (
-        <div className="mt-1 text-mini text-[var(--danger)]" title={step.error}>
+        <div className="mt-1 text-mini text-[var(--err)]" title={step.error}>
           {step.error}
         </div>
       )}
       {step.recent_output.length > 0 && (
         <div
           ref={outRef}
-          className="mt-2 max-h-32 overflow-y-auto rounded-sm bg-[color-mix(in_oklch,var(--code-bg)_calc(var(--code-alpha)_*_100%),transparent)] p-2 font-mono text-mini leading-relaxed text-[var(--muted)]"
+          className="mt-2 max-h-32 overflow-y-auto rounded-sm bg-[var(--well)] p-2 font-mono text-mini leading-relaxed text-[var(--fg-2)]"
         >
           {step.recent_output.map((line, i) => (
             <div key={i} className="whitespace-pre-wrap break-all">{line}</div>
@@ -803,7 +806,7 @@ function StepCard({
       {canDrill && (
         <button
           onClick={() => onOpenSubsession(sessionFile!, `${step.agent || "subagent"} 子会话`)}
-          className="mt-2 flex items-center gap-1 text-mini text-[var(--accent-strong)] transition duration-fast ease-out hover:text-[var(--accent-strong)]"
+          className="mt-2 flex items-center gap-1 text-mini text-[var(--accent-2)] transition duration-fast ease-out hover:text-[var(--accent-2)]"
           title="查看完整子会话 (只读)"
         >
           <FileText className="h-3 w-3" />
@@ -814,7 +817,7 @@ function StepCard({
       {/* R2 嵌套不塌陷: step 再 fanout 时递归渲染 children, 左缘竖线引导层级缩进。
           children step 无 currentStep 指针, active 一律 false (活动态由 state 灯显示) */}
       {step.children.length > 0 && (
-        <div className="mt-2 ml-3 space-y-1 border-l-2 border-[var(--border-subtle)] pl-3">
+        <div className="mt-2 ml-3 space-y-1 border-l-2 border-[var(--line)] pl-3">
           {step.children.map((c, ci) => (
             <StepCard
               key={ci}
@@ -831,16 +834,19 @@ function StepCard({
   );
 }
 
-// --- subsession 态: 只读渲染子 agent 完整子会话 (复用会话渲染管线, 无输入框) ---
+// --- subsession 态: 只读渲染子 agent 完整子会话 (复用时间线组件, 无输入框) ---
 
 function SubSessionView({ sessionFile }: { sessionFile: string }) {
   const [entries, setEntries] = useState<ChatEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 面板内就地展开的步骤 id (子会话只读, 选中态不进全局 ui store)
+  const [openStepId, setOpenStepId] = useState<string | null>(null);
   // sessionFile 变化 (切不同 step 的子会话) 重拉; cancelled 守卫防串台
   useEffect(() => {
     let cancelled = false;
     setEntries(null);
     setError(null);
+    setOpenStepId(null); // 切子会话时收起上一份详情, 避免 entry id 残留
     invoke<unknown[]>("read_session_entries_public", { sessionPath: sessionFile })
       .then((raw) => {
         if (!cancelled) setEntries(mapHistoryEntries(raw));
@@ -851,12 +857,17 @@ function SubSessionView({ sessionFile }: { sessionFile: string }) {
     return () => { cancelled = true; };
   }, [sessionFile]);
 
+  // 同一步再次点击 = 收起; useCallback 保持引用稳定, 不打破 TurnView 的 memo 比较
+  const handleStepClick = useCallback((entry: ChatEntry) => {
+    setOpenStepId((cur) => (cur === entry.id ? null : entry.id));
+  }, []);
+
   if (error) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-12 text-center">
-        <AlertCircle className="h-6 w-6 text-[var(--danger)]" />
-        <p className="text-body text-[var(--danger)]">{error}</p>
-        <p className="text-mini text-[var(--faint)]">子会话文件可能已被清理</p>
+        <AlertCircle className="h-6 w-6 text-[var(--err)]" />
+        <p className="text-body text-[var(--err)]">{error}</p>
+        <p className="text-mini text-[var(--fg-3)]">子会话文件可能已被清理</p>
       </div>
     );
   }
@@ -867,18 +878,54 @@ function SubSessionView({ sessionFile }: { sessionFile: string }) {
     return <Hint text="子会话无消息" />;
   }
   return (
-    <div className="px-4 py-3">
-      <div className="space-y-3">
-        {entries.map((e) =>
-          e.kind === "message" ? (
-            <MessageItem key={e.id} entry={e} />
-          ) : e.kind === "notification" ? (
-            <NotificationItem key={e.id} entry={e} />
-          ) : (
-            <ToolCallCard key={e.id} entry={e} />
-          ),
-        )}
-      </div>
+    <div className="fs-session">
+      <SubSessionTimeline
+        entries={entries}
+        openStepId={openStepId}
+        onStepClick={handleStepClick}
+        onCollapse={() => setOpenStepId(null)}
+      />
+    </div>
+  );
+}
+
+/**
+ * 子会话时间线: 复用阶段 3 的 buildTimeline + TurnView (紧凑变体 .fs-timeline)。
+ * 步骤点击走面板内就地展开 (详情挂在时间线尾部), 不触碰全局选中 —— 子会话条目不在
+ * 当前会话 entries 里, 全局 openStep 会让检查器的选中回落成概览, 找不到这条 step。
+ */
+function SubSessionTimeline({
+  entries, openStepId, onStepClick, onCollapse,
+}: {
+  entries: ChatEntry[];
+  openStepId: string | null;
+  onStepClick: (entry: ChatEntry) => void;
+  onCollapse: () => void;
+}) {
+  const turns = useMemo(() => buildTimeline(entries), [entries]);
+  // 详情目标从 entries 反查 (kind 校验防御); 找不到时详情区不渲染
+  const openEntry = useMemo(
+    () => (openStepId ? entries.find((e) => e.id === openStepId && e.kind === "tool") ?? null : null),
+    [entries, openStepId],
+  );
+  return (
+    <div className="tl-timeline fs-timeline">
+      {turns.map((turn) => (
+        <TurnView
+          key={turn.id}
+          turn={turn}
+          live={false}
+          streamingReplyId={null}
+          selectedId={openStepId}
+          revealSeq={0}
+          onStepClick={onStepClick}
+        />
+      ))}
+      {openEntry && (
+        <div className="fs-detail">
+          <StepDetail key={openEntry.id} entry={openEntry} onBack={onCollapse} hideLocate />
+        </div>
+      )}
     </div>
   );
 }
@@ -886,7 +933,7 @@ function SubSessionView({ sessionFile }: { sessionFile: string }) {
 // 列表空态与加载提示
 function Hint({ icon, text }: { icon?: ReactNode; text: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 px-4 py-10 text-body text-[var(--faint)]">
+    <div className="flex items-center justify-center gap-2 px-4 py-10 text-body text-[var(--fg-3)]">
       {icon}
       {text}
     </div>

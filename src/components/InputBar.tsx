@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/session";
+import { useProjectsStore } from "../store/projects";
 import type { ModelInfo } from "../store/session";
 import {
   Send, Square, Paperclip, X, ChevronDown, Cpu, Brain, Loader2,
-  ArrowUp, ArrowDown, Clock, DollarSign, Gauge, Database,
+  ArrowUp, ArrowDown, Clock, DollarSign, Gauge, Database, FolderGit2, Slash,
 } from "lucide-react";
+import { QueueIndicator } from "./QueueIndicator";
 import { buildRefsParts, refIcon, refMetaText, type Ref } from "../lib/refs";
+import { cacheHitRate as cacheHit } from "../lib/cacheHit";
 import type { PaletteCommand } from "../lib/commands";
 import type { PathRef } from "../lib/refs";
 import { RefsPopup } from "./refs/RefsPopup";
@@ -35,28 +38,28 @@ function MiniSelect({ label, icon: Icon, value, options, onChange, disabled, ope
       <button
         onClick={() => setOpenSel(!openSel)}
         disabled={disabled}
-        className="flex items-center gap-1 rounded-md px-2 py-2 text-label text-[var(--muted)] transition duration-fast ease-out hover:bg-[var(--surface-2)] disabled:opacity-40"
+        className="flex items-center gap-1 rounded-md px-2 py-2 text-label text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg disabled:opacity-40"
         title={label}
       >
-        <Icon className="h-3 w-3 text-[var(--faint)]" />
-        <span className="max-w-[90px] truncate">{value}</span>
-        <ChevronDown className="h-2 w-2 text-[var(--faint)]" />
+        <Icon className="h-3 w-3 shrink-0 text-fg-4" />
+        <span className="composer-meta-label max-w-[90px] truncate">{value}</span>
+        <ChevronDown className="h-2 w-2 shrink-0 text-fg-4" />
       </button>
       {openSel && (
-        <div className="absolute bottom-full right-0 z-50 mb-1 max-h-56 overflow-auto rounded-md border border-[var(--border-soft)] bg-[var(--panel)] py-1 shadow-lg">
+        <div className="absolute bottom-full right-0 z-50 mb-1 max-h-56 overflow-auto rounded-lg border border-line bg-popover py-1 shadow-[var(--shadow)]">
           {options.map((opt) => (
             <button
               key={opt}
               onClick={() => { onChange(opt); setOpenSel(false); }}
-              className={`block w-full whitespace-nowrap px-3 py-2 text-left text-label transition duration-fast ease-out hover:bg-[var(--surface-2)] ${
-                opt === value ? "text-[var(--accent)]" : "text-[var(--muted)]"
+              className={`block w-full whitespace-nowrap px-3 py-2 text-left text-label transition duration-fast ease-out hover:bg-hover ${
+                opt === value ? "text-accent" : "text-fg-2"
               }`}
             >
               {opt}
             </button>
           ))}
           {options.length === 0 && (
-            <div className="px-3 py-2 text-label text-[var(--faint)]">无选项</div>
+            <div className="px-3 py-2 text-label text-fg-4">无选项</div>
           )}
         </div>
       )}
@@ -105,24 +108,24 @@ function ModelPicker({
       <button
         onClick={() => setOpenSel(!openSel)}
         disabled={disabled}
-        className="flex items-center gap-1 rounded-md px-2 py-2 text-label text-[var(--muted)] transition duration-fast ease-out hover:bg-[var(--surface-2)] disabled:opacity-40"
+        className="flex items-center gap-1 rounded-md px-2 py-2 text-label text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg disabled:opacity-40"
         title="切换模型与供应商"
       >
-        <Cpu className="h-3 w-3 text-[var(--faint)]" />
+        <Cpu className="h-3 w-3 shrink-0 text-fg-4" />
         {model ? (
-          <span className="max-w-[150px] truncate font-mono text-mini text-[var(--fg)]">
+          <span className="composer-meta-label max-w-[150px] truncate font-mono text-mini text-fg">
             {model.name}
           </span>
         ) : (
-          <span className="text-[var(--faint)]">选择模型</span>
+          <span className="composer-meta-label text-fg-4">选择模型</span>
         )}
-        <ChevronDown className="h-2 w-2 text-[var(--faint)]" />
+        <ChevronDown className="h-2 w-2 shrink-0 text-fg-4" />
       </button>
       {openSel && (
-        <div className="absolute bottom-full right-0 z-50 mb-1 w-80 overflow-hidden rounded-md border border-[var(--border-soft)] bg-[var(--panel)] shadow-lg">
+        <div className="absolute bottom-full right-0 z-50 mb-1 w-80 overflow-hidden rounded-lg border border-line bg-popover shadow-[var(--shadow)]">
           {/* provider chips 横排 (多时区内滚动, 不撑爆弹层) */}
           {providerList.length > 0 && (
-            <div className="flex flex-wrap gap-1 border-b border-[var(--border-soft)] px-2 py-2">
+            <div className="flex flex-wrap gap-1 border-b border-line px-2 py-2">
               {providerList.map((p) => (
                 <button
                   key={p}
@@ -132,8 +135,8 @@ function ModelPicker({
                   }}
                   className={`rounded-full border px-2 py-[2px] text-mini transition duration-fast ease-out ${
                     p === provider
-                      ? "border-[color-mix(in_oklch,var(--accent)_45%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                      : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--border)] hover:text-[var(--fg)]"
+                      ? "border-[color-mix(in_oklch,var(--accent)_45%,transparent)] bg-accent-soft text-accent"
+                      : "border-line text-fg-2 hover:border-line-2 hover:text-fg"
                   }`}
                 >
                   {p}
@@ -147,15 +150,15 @@ function ModelPicker({
               <button
                 key={m.id}
                 onClick={() => { onPick(provider, m.id); setOpenSel(false); }}
-                className={`block w-full truncate px-3 py-2 text-left text-label transition duration-fast ease-out hover:bg-[var(--surface-2)] ${
-                  model?.id === m.id ? "text-[var(--accent)]" : "text-[var(--muted)]"
+                className={`block w-full truncate px-3 py-2 text-left text-label transition duration-fast ease-out hover:bg-hover ${
+                  model?.id === m.id ? "text-accent" : "text-fg-2"
                 }`}
               >
                 {m.name}
               </button>
             ))}
             {(groups.find(([p]) => p === provider)?.[1] ?? []).length === 0 && (
-              <div className="px-3 py-2 text-label text-[var(--faint)]">无可用模型</div>
+              <div className="px-3 py-2 text-label text-fg-4">无可用模型</div>
             )}
           </div>
         </div>
@@ -169,21 +172,23 @@ const TEXTAREA_MAX_HEIGHT = 12 * 20 + 16;
 
 export function InputBar({
   emptyProject,
+  onEmptyProjectChange,
   onHeightChange,
   onOpenPanel,
-  bottomLayer,
 }: {
   emptyProject: string;
+  // 空状态项目 chip 的切换回调 (仅无活跃会话时显示该 chip)
+  onEmptyProjectChange?: (p: string) => void;
   // 卡片实际高度变化时回调 (App 据此调整消息区底部留白, 避免高输入框遮挡消息)
   onHeightChange?: (h: number) => void;
   // /skills /packages 本地命令: 打开 App 级右侧面板
   onOpenPanel?: (kind: "skills" | "packages") => void;
-  // 输入卡底层插槽: 项目选择卡片等被输入卡压住、顶部露出一点的下层元素
-  bottomLayer?: ReactNode;
 }) {
   const [text, setText] = useState("");
   const [refs, setRefs] = useState<Ref[]>([]);
   const [ctxOpen, setCtxOpen] = useState(false);
+  // 空状态项目 chip 的弹层开合 (切项目后自动收起)
+  const [projectOpen, setProjectOpen] = useState(false);
   const [preview, setPreview] = useState<{ ref: Ref; content: string | null; loading: boolean } | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -237,6 +242,11 @@ export function InputBar({
   }, [onHeightChange]);
 
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
+
+  // 进入会话后收起空状态项目弹层 (避免关闭会话回到空状态时弹层复位重开)
+  useEffect(() => {
+    if (activeSessionId) setProjectOpen(false);
+  }, [activeSessionId]);
   const sessions = useSessionStore((s) => s.sessions);
   const active = activeSessionId ? sessions[activeSessionId] : null;
   const isStreaming = active?.isStreaming ?? false;
@@ -254,6 +264,14 @@ export function InputBar({
   const sendFollowUp = useSessionStore((s) => s.sendFollowUp);
   const abort = useSessionStore((s) => s.abort);
   const startSession = useSessionStore((s) => s.startSession);
+  const projects = useProjectsStore((s) => s.projects);
+
+  // 空状态项目 chip 的展示名: 项目列表 display_name 优先, 回退路径最后一段
+  const emptyProjectDisplay = emptyProject
+    ? projects.find((p) => p.path === emptyProject)?.display_name ??
+      emptyProject.split(/[\\/]/).filter(Boolean).pop() ??
+      emptyProject
+    : "选择项目";
 
   const providers = useMemo(
     () => [...new Set(availableModels.map((m) => m.provider))],
@@ -455,6 +473,27 @@ export function InputBar({
     }
   };
 
+  // 「命令」chip: 在光标处插入 "/" 并聚焦, 手动进入命令面板态。
+  // setText 不触发 textarea onChange, 这里等价位启动触发状态机:
+  // 光标前不是行首/空白时补一个空格 (与 handleChange 的触发条件一致), 插入后光标停在 "/" 之后
+  const insertSlashCommand = () => {
+    const el = textareaRef.current;
+    const pos = el?.selectionStart ?? text.length;
+    const before = text.slice(0, pos);
+    const prefix = before.length === 0 || /\s$/.test(before) ? "" : " ";
+    setText(before + prefix + "/" + text.slice(pos));
+    triggerPosRef.current = before.length + prefix.length;
+    dismissedRef.current = null;
+    setPopup({ kind: "command", query: "" });
+    requestAnimationFrame(() => {
+      const node = textareaRef.current;
+      if (!node) return;
+      node.focus({ preventScroll: true });
+      const caret = before.length + prefix.length + 1;
+      node.setSelectionRange(caret, caret);
+    });
+  };
+
   const handleKey = (e: React.KeyboardEvent) => {
     // 弹层打开: 键盘全部路由给弹层 (Enter 确认 / ↑↓ 导航 / Esc 关闭), 不进入发送逻辑
     if (popup) {
@@ -517,34 +556,16 @@ export function InputBar({
   const speedTokPerSec = isStreaming
     ? (activeSessionId ? sampleSpeed(activeSessionId) : null)
     : turnStats?.speed ?? null;
-  // 缓存命中率 (最近一次调用口径): cacheRead ÷ (input + cacheRead + cacheWrite),
-  // 缓存写入按未命中计。与 TUI footer 同口径, 详见 pi-kitsune-ui/src/footer.ts 的 cacheHitRate。
-  // 显示条件沿用 pi 官方 footer 的双重判定:
-  //   ① 会话出现过缓存活动 —— 过滤「provider 根本不支持缓存」的情况, 那种场景显示 0%
-  //      会被误读成「缓存失效了」, 而事实是从未有过缓存；
-  //      本轮 cacheSeen 是同一个信号的提前量 (会话累计到 agent_settled 才刷新, 首轮靠它兜底)
-  //   ② 最近一次有 prompt 量 —— 保证分母非 0, 不产生 NaN
-  const lastCache = turnStats?.lastCache ?? null;
-  const cacheActive =
-    (turnStats?.cacheSeen ?? false) ||
-    (active?.tokenStats?.tokens.cacheRead ?? 0) > 0 ||
-    (active?.tokenStats?.tokens.cacheWrite ?? 0) > 0;
-  const cachePromptTokens = lastCache ? lastCache.input + lastCache.cacheRead + lastCache.cacheWrite : 0;
-  const cacheHitRate =
-    lastCache && cacheActive && cachePromptTokens > 0
-      ? (lastCache.cacheRead / cachePromptTokens) * 100
-      : null;
+  // 缓存命中率的计算与双重判定整体抽入 lib/cacheHit.ts (检查器概览与这里共用一份),
+  // 口径说明见该文件头部注释
+  const cacheHitRate = cacheHit(turnStats, active?.tokenStats ?? null);
 
   return (
-    // 悬浮输入卡: 底部居中, 宽度与消息列表一致 (max-w-[min(75%,52rem)]), 与消息区分离成浮动层
-    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 mx-auto w-full max-w-[min(75%,52rem)]">
-      {bottomLayer}
-      <div
-        ref={cardRef}
-        // 半透明悬浮卡: 消息从卡片后方滑过时可见 (不挡内容), 轻模糊防文字混叠;
-        // 圆角 16px (设计稿 .input-card) — 圆润不与系统直角冲突
-        className="pointer-events-auto rounded-[16px] border border-[var(--border-soft)] bg-[color-mix(in_oklch,var(--surface-raised)_calc(var(--raised-alpha)_*_100%),transparent)] shadow-[0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-[2px] transition duration-fast ease-out focus-within:shadow-[0_0_24px_color-mix(in_oklch,var(--accent)_14%,transparent),0_-2px_20px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.10)]"
-      >
+    // 悬浮输入卡容器: 定位与渐隐 (工坊居中 / 舞台贴文字列) 由 .composer-wrap 按风格分支承担
+    <div className="composer-wrap">
+      <div ref={cardRef} className="composer">
+        {/* 排队条: 队列非空时贴卡片上沿显示 (原 StageHead 头部徽标迁入) */}
+        <QueueIndicator steering={active?.steeringQueue ?? []} followUp={active?.followUpQueue ?? []} />
         <div className="px-4 pt-3">
           {/* @引用 / /命令 浮层: 悬浮在输入卡上方 (与 RefsPopup 同模式), 不占卡片布局 */}
           <div className="relative">
@@ -577,7 +598,7 @@ export function InputBar({
                 return (
                   <span
                     key={i}
-                    className="flex items-center gap-2 rounded-md border border-[color-mix(in_oklch,var(--accent)_35%,transparent)] bg-[color-mix(in_oklch,var(--accent)_10%,transparent)] px-2 py-1 text-label text-[var(--accent-strong)]"
+                    className="flex items-center gap-2 rounded-md border border-[color-mix(in_oklch,var(--accent)_35%,transparent)] bg-[color-mix(in_oklch,var(--accent)_10%,transparent)] px-2 py-1 text-label text-accent"
                   >
                     <Icon className="h-3 w-3" />
                     <button
@@ -587,7 +608,7 @@ export function InputBar({
                     >
                       {r.title}
                     </button>
-                    {meta && <span className="text-label text-[var(--faint)]">{meta}</span>}
+                    {meta && <span className="text-label text-fg-4">{meta}</span>}
                     <button
                       onClick={() => setRefs((prev) => prev.filter((_, j) => j !== i))}
                       className="rounded-sm p-1 transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--accent)_15%,transparent)]"
@@ -602,25 +623,25 @@ export function InputBar({
           {/* 引用预览 popover */}
           {preview && (
             <div className="relative">
-              <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-md border border-[var(--border-soft)] bg-[var(--panel)] shadow-lg">
-                <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-2">
-                  <span className="flex items-center gap-2 text-label font-medium text-[var(--fg)]">
+              <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-lg border border-line bg-popover shadow-[var(--shadow)]">
+                <div className="flex items-center justify-between border-b border-line px-3 py-2">
+                  <span className="flex items-center gap-2 text-label font-medium text-fg">
                     {(() => {
                       const Icon = refIcon(preview.ref);
-                      return <Icon className="h-4 w-4 text-[var(--accent)]" />;
+                      return <Icon className="h-4 w-4 text-accent" />;
                     })()}
                     {preview.ref.title}
                   </span>
                   <button
                     onClick={() => setPreview(null)}
-                    className="rounded-sm p-1 text-[var(--faint)] transition duration-fast ease-out hover:bg-[var(--surface-2)]"
+                    className="rounded-sm p-1 text-fg-4 transition duration-fast ease-out hover:bg-hover"
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
                 <div className="max-h-64 overflow-auto p-3">
                   {preview.loading ? (
-                    <div className="flex items-center gap-2 text-label text-[var(--faint)]">
+                    <div className="flex items-center gap-2 text-label text-fg-4">
                       <Loader2 className="h-4 w-4 animate-spin" /> 加载预览…
                     </div>
                   ) : preview.ref.kind === "image" ||
@@ -629,10 +650,10 @@ export function InputBar({
                     <img
                       src={`data:${preview.ref.mimeType};base64,${preview.ref.data}`}
                       alt={preview.ref.title}
-                      className="max-h-56 rounded-md border border-[var(--border-soft)]"
+                      className="max-h-56 rounded-md border border-line"
                     />
                   ) : (
-                    <pre className="whitespace-pre-wrap text-label leading-relaxed text-[var(--muted)]">
+                    <pre className="whitespace-pre-wrap text-label leading-relaxed text-fg-2">
                       {preview.content ?? ""}
                     </pre>
                   )}
@@ -640,6 +661,7 @@ export function InputBar({
               </div>
             </div>
           )}
+        </div>
 
         <textarea
           ref={textareaRef}
@@ -650,47 +672,96 @@ export function InputBar({
           onMouseUp={handleCursorMove}
           placeholder={isStreaming ? "运行中: Enter 发 steer 指导, Alt+Enter 排队后续" : "输入消息, Enter 发送 (@ 引用文件/技能, / 命令)"}
           rows={2}
-          className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-ui text-[var(--fg)] outline-none placeholder:text-[var(--faint)]"
+          className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-ui text-fg outline-none placeholder:text-fg-4"
         />
 
-        {/* 输入框内底部工具行: 左上下文 / 右 context window + 选择器 + 发送 */}
-        {hint && <p className="px-4 text-right text-label text-[var(--accent-strong)]">{hint}</p>}
-        <div className="flex items-center justify-between px-2 pb-2">
-          {/* 左下: 上下文添加 */}
-          <div className="relative">
-            <button
-              onClick={() => setCtxOpen(!ctxOpen)}
-              className="flex items-center gap-2 rounded-md px-2 py-2 text-label text-[var(--muted)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
-              title="添加上下文"
-            >
-              <Paperclip className="h-4 w-4" />
-              上下文
-            </button>
-            {ctxOpen && (
-              <RefsPopup
-                root={active?.cwd || emptyProject}
-                onPick={(rs) => setRefs((prev) => [...prev, ...rs])}
-                onClose={() => setCtxOpen(false)}
-              />
+        {/* 工具行: 左 = 项目 chip (仅空状态) / 引用 / 命令; 右 = 上下文用量 / 模型 / 思考 / 发送。
+            状态区 shrink-0 不折行, 窄宽下由 @container 收窄次要标签 (见 index.css) */}
+        {hint && <p className="px-4 text-right text-label text-accent">{hint}</p>}
+        <div className="flex items-center justify-between gap-2 px-2 pb-2">
+          {/* 左下: 项目 / 引用 / 命令入口 */}
+          <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+            {!activeSessionId && (
+              <div className="relative">
+                {/* 空状态项目 chip: 取代原 ProjectCard 露头卡片, 选中值用于发送时自动建会话 */}
+                <button
+                  onClick={() => setProjectOpen(!projectOpen)}
+                  className="flex h-[30px] max-w-[180px] items-center gap-[6px] rounded-md px-2 text-label text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg"
+                  title="切换项目"
+                >
+                  <FolderGit2 className="h-[14px] w-[14px] shrink-0 text-fg-4" />
+                  <span className="composer-project-label truncate">{emptyProjectDisplay}</span>
+                  <ChevronDown className="h-3 w-3 shrink-0 text-fg-4" />
+                </button>
+                {projectOpen && (
+                  <div className="absolute bottom-full left-0 z-50 mb-1 max-h-56 w-56 overflow-auto rounded-lg border border-line bg-popover py-1 shadow-[var(--shadow)]">
+                    {projects.length === 0 ? (
+                      <div className="px-3 py-2 text-label text-fg-4">暂无项目</div>
+                    ) : (
+                      projects.map((p) => (
+                        <button
+                          key={p.path}
+                          onClick={() => {
+                            onEmptyProjectChange?.(p.path);
+                            setProjectOpen(false);
+                          }}
+                          className={`block w-full truncate px-3 py-2 text-left text-label transition duration-fast ease-out hover:bg-hover ${
+                            p.path === emptyProject ? "text-accent" : "text-fg-2"
+                          }`}
+                          title={p.path}
+                        >
+                          {p.display_name}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
             )}
+            <div className="relative">
+              <button
+                onClick={() => setCtxOpen(!ctxOpen)}
+                className="composer-opt-chip flex h-[30px] items-center gap-[6px] rounded-md px-2 text-label text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg"
+                title="添加引用 (@ 也可触发)"
+              >
+                <Paperclip className="h-[14px] w-[14px] shrink-0 text-fg-4" />
+                <span className="composer-opt-label">引用</span>
+              </button>
+              {ctxOpen && (
+                <RefsPopup
+                  root={active?.cwd || emptyProject}
+                  onPick={(rs) => setRefs((prev) => [...prev, ...rs])}
+                  onClose={() => setCtxOpen(false)}
+                />
+              )}
+            </div>
+            <button
+              onClick={insertSlashCommand}
+              className="composer-opt-chip flex h-[30px] items-center gap-[6px] rounded-md px-2 text-label text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg"
+              title="/ 命令"
+            >
+              <Slash className="h-[14px] w-[14px] shrink-0 text-fg-4" />
+              <span className="composer-opt-label">命令</span>
+            </button>
           </div>
 
-          {/* 右下: context window + provider/model/thinking + 发送 */}
-          <div className="flex items-center gap-2">
-            {/* context window 使用情况 */}
+          {/* 右下: 上下文用量 / 模型 / 思考 / 发送 */}
+          <div className="flex shrink-0 items-center gap-1">
+            {/* 上下文用量: 文字标签 + 进度条 + 百分比 (P5: 用量不再是裸色点) */}
             <div
-              className="flex items-center gap-2 rounded-md px-2 py-2 text-label transition duration-fast ease-out hover:bg-[var(--surface-2)]"
+              className="flex h-[30px] items-center gap-2 px-2 text-label"
               title={cuText ? `上下文 ${cuText} tokens` : "暂无上下文统计"}
             >
-              <div className="h-2 w-16 overflow-hidden rounded-full bg-[var(--surface-2)]">
+              <span className="composer-ctx-label whitespace-nowrap text-fg-3">上下文</span>
+              <div className="h-1 w-10 shrink-0 overflow-hidden rounded-full bg-well">
                 <div
                   className={`h-full rounded-full transition-[width,background-color] duration-base ease-out ${
-                    percent === null ? "bg-[var(--faint)]" : percent > 85 ? "bg-[var(--danger)]" : "bg-[var(--accent)]"
+                    percent === null ? "bg-fg-4" : percent > 85 ? "bg-err" : "bg-accent"
                   }`}
                   style={{ width: percent === null ? "0%" : `${Math.min(100, percent)}%` }}
                 />
               </div>
-              <span className="text-label tabular-nums text-[var(--faint)]">
+              <span className="tabular-nums text-fg-3">
                 {percent === null ? "--" : `${Math.round(percent)}%`}
               </span>
             </div>
@@ -719,16 +790,17 @@ export function InputBar({
             {isStreaming ? (
               <button
                 onClick={() => activeSessionId && abort(activeSessionId)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--danger)_15%,transparent)] text-[var(--danger)] transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--danger)_25%,transparent)]"
+                className="composer-send"
+                data-stop="true"
                 title="中止 (Enter 发 steer 指导)"
               >
-                <Square className="h-4 w-4" />
+                <Square className="h-[14px] w-[14px]" />
               </button>
             ) : (
               <button
                 onClick={() => handleSend("prompt")}
                 disabled={!text.trim()}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--on-accent)] shadow-sm shadow-[color-mix(in_oklch,var(--accent)_30%,transparent)] transition duration-fast ease-out hover:bg-[var(--accent-strong)] active:scale-95 disabled:opacity-40"
+                className="composer-send"
                 title="发送"
               >
                 <Send className="h-4 w-4" />
@@ -741,8 +813,8 @@ export function InputBar({
             store 的 notify 分支被过滤)。运行中实时跳动, settled 后定格, 下一轮 agent_start 重置 */}
         {turnStats && (
           <div
-            className={`flex items-center gap-4 border-t border-[var(--border-soft)] px-4 py-2 text-label tabular-nums transition-colors duration-fast ease-out ${
-              isStreaming ? "text-[var(--muted)]" : "text-[var(--faint)]"
+            className={`flex items-center gap-4 border-t border-line px-4 py-2 text-label tabular-nums transition-colors duration-fast ease-out ${
+              isStreaming ? "text-fg-2" : "text-fg-4"
             }`}
           >
             <span className="flex items-center gap-1" title="本轮输入 token">
@@ -776,7 +848,6 @@ export function InputBar({
             </span>
           </div>
         )}
-        </div>
       </div>
     </div>
   );

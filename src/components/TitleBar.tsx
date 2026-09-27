@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
-import { Minus, Square, X, Flame } from "lucide-react";
+import { Minus, Square, X } from "lucide-react";
 
-// 自绘标题栏 (无边框窗口): 整窗顶部拖拽区 + 品牌 + 窗口控制三键。
-// - 布局: App 外层纵向 flex 的第一行, 全窗宽固定 32px (尽量矮, 桌面工具不喧宾夺主)
+// logo 用 new URL 走 Vite 资产解析: 本项目没有 vite/client 类型声明文件,
+// import "*.svg" 的写法会被 tsc (noUnusedLocals / 缺模块声明) 拒绝
+const logoUrl = new URL("../assets/logo.svg", import.meta.url).href;
+
+// 自绘标题栏 (无边框窗口): 品牌 (logo + 衬线字标 + 版本) | 拖拽区 | 窗口控制三键。
+// - 布局: App 外层纵向 flex 的第一行, 全窗宽固定 36px
 // - 拖拽: 容器整体 data-tauri-drag-region (Tauri 原生拖动), 按钮天然排除
 // - 窗口控制: capability 已放行 core:window:allow-{minimize,toggle-maximize,close,start-dragging}
 // - 关闭走系统窗口销毁路径 → lib.rs on_window_event(Destroyed) → stop_all, 与原生一致
@@ -22,14 +26,15 @@ export function TitleBar() {
   return (
     <header
       data-tauri-drag-region
-      className="flex h-8 shrink-0 select-none items-center border-b border-[var(--border-soft)] bg-[color-mix(in_oklch,var(--surface)_86%,transparent)] pl-3"
+      className="flex h-9 shrink-0 select-none items-center gap-3 border-b border-[var(--line)] bg-[var(--rail)] pl-3"
     >
-      {/* 品牌 mark (无路径 — 会话信息在侧栏/工具条, 标题栏只承担系统壳职责) */}
-      <span className="flex items-center gap-2 text-label font-semibold tracking-wide text-[var(--fg)]">
-        <Flame className="h-[15px] w-[15px] text-[var(--accent)]" aria-hidden />
-        <span>Pi Kitsune</span>
+      <span className="flex items-center gap-2">
+        <img src={logoUrl} alt="" className="h-4 w-4" aria-hidden />
+        <span className="text-body font-semibold leading-none text-fg">
+          Pi Kitsune
+        </span>
         {version && (
-          <span className="text-micro font-normal text-[var(--faint)]">v{version}</span>
+          <span className="font-mono text-micro font-normal text-fg-4">v{version}</span>
         )}
       </span>
 
@@ -37,7 +42,7 @@ export function TitleBar() {
       <span className="ml-auto flex h-full items-center">
         <button
           onClick={() => getCurrentWindow().minimize()}
-          className="grid h-full w-11 place-items-center text-[var(--muted)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
+          className="grid h-full w-11 place-items-center text-fg-3 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
           aria-label="最小化"
           title="最小化"
         >
@@ -45,7 +50,7 @@ export function TitleBar() {
         </button>
         <button
           onClick={() => getCurrentWindow().toggleMaximize()}
-          className="grid h-full w-11 place-items-center text-[var(--muted)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
+          className="grid h-full w-11 place-items-center text-fg-3 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
           aria-label="最大化 / 还原"
           title="最大化 / 还原"
         >
@@ -53,7 +58,7 @@ export function TitleBar() {
         </button>
         <button
           onClick={() => getCurrentWindow().close()}
-          className="grid h-full w-11 place-items-center text-[var(--muted)] transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--danger)_78%,black)] hover:text-white"
+          className="grid h-full w-11 place-items-center text-fg-3 transition-colors duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--err)_78%,black)] hover:text-white"
           aria-label="关闭"
           title="关闭"
         >
