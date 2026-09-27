@@ -1,10 +1,11 @@
 import type { Config } from "tailwindcss";
 
-// 主题色: primary 色阶由 index.css 的 CSS 变量驱动, 换主题只需改 :root 里一组变量
+// 颜色 token: 语义色阶 (bg / fg / accent / popover ...) 在 index.css 四组风格块里定义,
+// 换主题只需改那四组变量
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
-    // 字号 9 档 (语义名 + 同值旧别名): 语义名供改版新 UI 使用, 旧别名保 364 处存量 class 零改动。
+    // 字号 10 档 (语义名 + 同值旧别名): 语义名供改版新 UI 使用, 旧别名保 364 处存量 class 零改动。
     // 非 extend 覆盖: 未列出的档位 (如已删除的 lg=18px) 不再生成, 越界 class 构建即失效
     fontSize: {
       micro: ["10px", { lineHeight: "1.4", letterSpacing: "0.01em" }],
@@ -16,6 +17,7 @@ export default {
       head: ["17px", { lineHeight: "1.45", letterSpacing: "-0.01em" }],
       num: ["20px", { lineHeight: "1.2", letterSpacing: "-0.014em" }],
       hero: ["24px", { lineHeight: "1.25", letterSpacing: "-0.018em" }],
+      display: ["28px", { lineHeight: "1.2", letterSpacing: "-0.02em" }],
       // 旧别名 (与语义档同值, 引用同组配置): xs=mini / sm=body / base=title / 2xl=hero
       xs: ["11px", { lineHeight: "1.45", letterSpacing: "0.005em" }],
       sm: ["13px", { lineHeight: "1.55", letterSpacing: "0" }],
@@ -55,41 +57,44 @@ export default {
       80: "320px",
       96: "384px",
     },
+    // 字体只有两套, 值在 index.css 的 --f-ui / --f-mono (系统字体栈);
+    // 这里映射过去, 让 font-sans / font-mono class 与手写 CSS 用同一份定义
+    fontFamily: {
+      sans: ["var(--f-ui)"],
+      mono: ["var(--f-mono)"],
+    },
     borderRadius: {
       sm: "4px",
       md: "8px",
+      lg: "12px",
+      xl: "16px",
+      "2xl": "20px",
       full: "9999px",
     },
     extend: {
       colors: {
-        primary: {
-          50: "color-mix(in oklch, var(--primary-50) calc(<alpha-value> * 100%), transparent)",
-          100: "color-mix(in oklch, var(--primary-100) calc(<alpha-value> * 100%), transparent)",
-          200: "color-mix(in oklch, var(--primary-200) calc(<alpha-value> * 100%), transparent)",
-          300: "color-mix(in oklch, var(--primary-300) calc(<alpha-value> * 100%), transparent)",
-          400: "color-mix(in oklch, var(--primary-400) calc(<alpha-value> * 100%), transparent)",
-          500: "color-mix(in oklch, var(--primary-500) calc(<alpha-value> * 100%), transparent)",
-          600: "color-mix(in oklch, var(--primary-600) calc(<alpha-value> * 100%), transparent)",
-          700: "color-mix(in oklch, var(--primary-700) calc(<alpha-value> * 100%), transparent)",
-          800: "color-mix(in oklch, var(--primary-800) calc(<alpha-value> * 100%), transparent)",
-          900: "color-mix(in oklch, var(--primary-900) calc(<alpha-value> * 100%), transparent)",
-        },
-        // 中性色阶变量化: 类名不用改, 底层值随主题方向切换 (浅色值 = 原 Tailwind 默认值)
-        neutral: {
-          50: "color-mix(in oklch, var(--neutral-50) calc(<alpha-value> * 100%), transparent)",
-          100: "color-mix(in oklch, var(--neutral-100) calc(<alpha-value> * 100%), transparent)",
-          200: "color-mix(in oklch, var(--neutral-200) calc(<alpha-value> * 100%), transparent)",
-          300: "color-mix(in oklch, var(--neutral-300) calc(<alpha-value> * 100%), transparent)",
-          400: "color-mix(in oklch, var(--neutral-400) calc(<alpha-value> * 100%), transparent)",
-          500: "color-mix(in oklch, var(--neutral-500) calc(<alpha-value> * 100%), transparent)",
-          600: "color-mix(in oklch, var(--neutral-600) calc(<alpha-value> * 100%), transparent)",
-          700: "color-mix(in oklch, var(--neutral-700) calc(<alpha-value> * 100%), transparent)",
-          800: "color-mix(in oklch, var(--neutral-800) calc(<alpha-value> * 100%), transparent)",
-          900: "color-mix(in oklch, var(--neutral-900) calc(<alpha-value> * 100%), transparent)",
-          950: "color-mix(in oklch, var(--neutral-950) calc(<alpha-value> * 100%), transparent)",
-        },
-        // 浮层/卡片实心底 (popup/弹窗/设置窗口), 皮肤可覆盖 --panel
-        panel: "color-mix(in oklch, var(--panel) calc(<alpha-value> * 100%), transparent)",
+        // 语义 token 映射 (design §2.2): 颜色只走 var, 组件用 bg-pane / text-fg-2 / border-line 这类 class;
+        // 用 color-mix 包一层是为了让 /50 等透明度修饰符继续可用
+        bg: "color-mix(in oklch, var(--bg) calc(<alpha-value> * 100%), transparent)",
+        rail: "color-mix(in oklch, var(--rail) calc(<alpha-value> * 100%), transparent)",
+        pane: "color-mix(in oklch, var(--pane) calc(<alpha-value> * 100%), transparent)",
+        raise: "color-mix(in oklch, var(--raise) calc(<alpha-value> * 100%), transparent)",
+        // 弹层实底 (design §2.2): 与 --raise 同色去 alpha, 浮层叠在正文上不透字
+        popover: "color-mix(in oklch, var(--popover) calc(<alpha-value> * 100%), transparent)",
+        well: "color-mix(in oklch, var(--well) calc(<alpha-value> * 100%), transparent)",
+        hover: "color-mix(in oklch, var(--hover) calc(<alpha-value> * 100%), transparent)",
+        line: "color-mix(in oklch, var(--line) calc(<alpha-value> * 100%), transparent)",
+        "line-2": "color-mix(in oklch, var(--line-2) calc(<alpha-value> * 100%), transparent)",
+        fg: "color-mix(in oklch, var(--fg) calc(<alpha-value> * 100%), transparent)",
+        "fg-2": "color-mix(in oklch, var(--fg-2) calc(<alpha-value> * 100%), transparent)",
+        "fg-3": "color-mix(in oklch, var(--fg-3) calc(<alpha-value> * 100%), transparent)",
+        "fg-4": "color-mix(in oklch, var(--fg-4) calc(<alpha-value> * 100%), transparent)",
+        accent: "color-mix(in oklch, var(--accent) calc(<alpha-value> * 100%), transparent)",
+        "accent-2": "color-mix(in oklch, var(--accent-2) calc(<alpha-value> * 100%), transparent)",
+        "accent-soft": "color-mix(in oklch, var(--accent-soft) calc(<alpha-value> * 100%), transparent)",
+        "on-accent": "color-mix(in oklch, var(--on-accent) calc(<alpha-value> * 100%), transparent)",
+        ok: "color-mix(in oklch, var(--ok) calc(<alpha-value> * 100%), transparent)",
+        err: "color-mix(in oklch, var(--err) calc(<alpha-value> * 100%), transparent)",
       },
       // 动效阶: 显式时长 + 曲线 (裸 transition 必须补全, 见 design 表四)
       transitionDuration: {

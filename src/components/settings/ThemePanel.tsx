@@ -3,14 +3,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { useThemeStore, type SkinMeta } from "../../store/theme";
 import { Check, FolderOpen, RefreshCw, Info, Moon, Sun } from "lucide-react";
 
-// 不透明率 slider: 拖动实时写 CSS 变量 + 持久化 (store 内完成)
+// 浓度 slider: 拖动实时写 CSS 变量 + 持久化 (store 内完成)
 function OpacitySlider({
   label,
   value,
   min,
   max,
   onChange,
-  unit = "pct",
   disabled = false,
 }: {
   label: string;
@@ -18,18 +17,14 @@ function OpacitySlider({
   min: number;
   max: number;
   onChange: (n: number) => void;
-  /** 显示单位: pct = 百分比 (不透明率), px = 像素 (模糊度) */
-  unit?: "pct" | "px";
-  /** 禁用: 无背景图皮肤下不透明率是视觉空操作 */
+  /** 禁用: 纯色皮肤下暗幕是视觉空操作 */
   disabled?: boolean;
 }) {
   return (
     <label className={`block ${disabled ? "opacity-50" : ""}`}>
-      <div className="mb-1 flex items-center justify-between text-label text-[var(--muted)]">
+      <div className="mb-1 flex items-center justify-between text-label text-fg-2">
         <span>{label}</span>
-        <span className="tabular-nums text-[var(--fg)]">
-          {unit === "pct" ? `${Math.round(value * 100)}%` : `${Math.round(value)}px`}
-        </span>
+        <span className="tabular-nums text-fg">{Math.round(value * 100)}%</span>
       </div>
       <input
         type="range"
@@ -39,40 +34,30 @@ function OpacitySlider({
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
-        className={`w-full accent-[var(--accent)] ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+        className={`w-full ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
       />
     </label>
   );
 }
 
-// 设置分区标题: mini 档 + mono + 大写 + faint (对齐改版稿 .set-sec > h3)
+// 设置分区标题: label 档 + 半粗 + 三级文字色 (与检查器 .ov-title 同一口径)
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="mb-3 font-mono text-mini font-semibold uppercase tracking-[0.09em] text-[var(--faint)]">
+    <h3 className="mb-3 text-label font-semibold text-fg-3">
       {children}
     </h3>
   );
 }
 
-// 皮肤列表 + 容器不透明率 + 气泡框开关 (设置页「主题」tab)
+// 皮肤列表 + 暗幕浓度 (设置页「主题」tab)
 export function ThemePanel() {
   const skins = useThemeStore((s) => s.skins);
   const activeSkinId = useThemeStore((s) => s.activeSkinId);
-  const chatOpacity = useThemeStore((s) => s.chatOpacity);
-  const sidebarOpacity = useThemeStore((s) => s.sidebarOpacity);
-  const bubbleEnabled = useThemeStore((s) => s.bubbleEnabled);
-  const bubbleOpacity = useThemeStore((s) => s.bubbleOpacity);
-  const bubbleColor = useThemeStore((s) => s.bubbleColor);
-  const bgBlur = useThemeStore((s) => s.bgBlur);
+  const scrim = useThemeStore((s) => s.scrim);
   const applyTheme = useThemeStore((s) => s.applyTheme);
-  const setChatOpacity = useThemeStore((s) => s.setChatOpacity);
-  const setSidebarOpacity = useThemeStore((s) => s.setSidebarOpacity);
-  const setBubbleEnabled = useThemeStore((s) => s.setBubbleEnabled);
-  const setBubbleOpacity = useThemeStore((s) => s.setBubbleOpacity);
-  const setBubbleColor = useThemeStore((s) => s.setBubbleColor);
-  const setBgBlur = useThemeStore((s) => s.setBgBlur);
+  const setScrim = useThemeStore((s) => s.setScrim);
   const reloadSkins = useThemeStore((s) => s.reloadSkins);
-  // 当前激活皮肤: 判断是否有背景图 (无则模糊度禁用)
+  // 当前激活皮肤: 判断是壁纸(舞台)还是纯色(工坊)皮肤, 决定暗幕滑杆可用性
   const activeSkin = skins.find((s) => s.id === activeSkinId);
   // 切换中皮肤 id: 异步取背景图期间防连点
   const [busy, setBusy] = useState<string | null>(null);
@@ -99,11 +84,11 @@ export function ThemePanel() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* 皮肤 · 背景 */}
+      {/* 皮肤 · 风格 */}
       <section>
-        <SectionTitle>皮肤 · 背景</SectionTitle>
-        <p className="-mt-1 mb-3 text-body text-[var(--muted)]">
-          皮肤即主题：背景图 + 强调色 + 界面基调。切换即时生效。
+        <SectionTitle>皮肤 · 风格</SectionTitle>
+        <p className="-mt-1 mb-3 text-body text-fg-2">
+          皮肤即主题：壁纸皮肤走「壁纸舞台」风格，纯色皮肤走「狐火工坊」风格。切换即时生效。
         </p>
         <div className="grid grid-cols-2 gap-3">
           {skins.map((skin) => {
@@ -114,14 +99,14 @@ export function ThemePanel() {
                 onClick={() => onPick(skin)}
                 disabled={busy !== null}
                 aria-pressed={isActive}
-                className={`group overflow-hidden rounded-md border text-left transition duration-fast ease-out ${
+                className={`group overflow-hidden rounded-lg border text-left transition duration-fast ease-out ${
                   isActive
-                    ? "border-[var(--accent)] ring-2 ring-[color-mix(in_oklch,var(--accent)_25%,transparent)]"
-                    : "border-[var(--border-soft)] hover:border-[var(--border)]"
+                    ? "border-[var(--accent)] ring-2 ring-[var(--accent-soft)]"
+                    : "border-[var(--line)] hover:border-[var(--line-2)]"
                 } ${busy === skin.id ? "opacity-60" : ""}`}
                 title={`${skin.name}${skin.author ? ` · ${skin.author}` : ""} v${skin.version}`}
               >
-                <div className="h-24 w-full bg-[var(--surface-2)]">
+                <div className="h-24 w-full bg-[var(--well)]">
                   {skin.preview_data_uri ? (
                     <img
                       src={skin.preview_data_uri}
@@ -129,21 +114,23 @@ export function ThemePanel() {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="flex h-full items-center justify-center text-mini text-[var(--faint)]">
+                    <div className="flex h-full items-center justify-center text-mini text-fg-4">
                       无预览
                     </div>
                   )}
                 </div>
-                <div className="flex items-center justify-between gap-2 bg-[var(--surface)] px-3 py-2">
+                <div className="flex items-center justify-between gap-2 border-t border-[var(--line)] bg-[var(--raise)] px-3 py-2">
                   <div className="min-w-0">
-                    <div className="truncate text-label font-medium text-[var(--fg)]">{skin.name}</div>
-                    <div className="flex items-center gap-1 text-mini text-[var(--faint)]">
+                    <div className="truncate text-label font-medium text-fg">{skin.name}</div>
+                    <div className="flex items-center gap-1 text-mini text-fg-4">
                       {skin.base === "dark" ? (
                         <Moon className="h-3 w-3" />
                       ) : (
                         <Sun className="h-3 w-3" />
                       )}
-                      <span>{skin.base === "dark" ? "暗色" : "浅色"}</span>
+                      <span>
+                        {skin.has_bg ? "舞台" : "工坊"} · {skin.base === "dark" ? "暗" : "亮"}
+                      </span>
                       {skin.author ? ` · ${skin.author}` : ""}
                     </div>
                   </div>
@@ -157,7 +144,7 @@ export function ThemePanel() {
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             onClick={() => void invoke("open_skins_dir")}
-            className="inline-flex items-center gap-2 rounded-md border border-[var(--border-soft)] px-3 py-2 text-mini text-[var(--muted)] transition duration-fast ease-out hover:border-[var(--border)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
+            className="inline-flex items-center gap-2 rounded-md border border-[var(--line)] px-3 py-2 text-mini text-fg-2 transition duration-fast ease-out hover:border-[var(--line-2)] hover:bg-[var(--hover)] hover:text-fg"
           >
             <FolderOpen className="h-4 w-4" />
             打开皮肤目录
@@ -165,122 +152,34 @@ export function ThemePanel() {
           <button
             onClick={() => void onRefresh()}
             disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-md border border-[var(--border-soft)] px-3 py-2 text-mini text-[var(--muted)] transition duration-fast ease-out hover:border-[var(--border)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)] disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-md border border-[var(--line)] px-3 py-2 text-mini text-fg-2 transition duration-fast ease-out hover:border-[var(--line-2)] hover:bg-[var(--hover)] hover:text-fg disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             刷新皮肤列表
           </button>
-          <span className="inline-flex items-center gap-1 text-mini text-[var(--faint)]">
+          <span className="inline-flex items-center gap-1 text-mini text-fg-4">
             <Info className="h-3 w-3" />
             自定义皮肤放入皮肤目录，刷新后即可切换
           </span>
         </div>
       </section>
 
-      {/* 透明度 */}
-      <section className="space-y-3 border-t border-[var(--border-soft)] pt-5">
-        <SectionTitle>透明度</SectionTitle>
-        <p className="-mt-1 mb-2 text-body text-[var(--muted)]">
-          控制壁纸透过面板的可见程度。
+      {/* 暗幕浓度: 合并旧「会话区/侧栏不透明率 + 背景模糊」三滑杆, 仅壁纸舞台生效 */}
+      <section className="space-y-3 border-t border-[var(--line)] pt-5">
+        <SectionTitle>暗幕浓度</SectionTitle>
+        <p className="-mt-1 mb-2 text-body text-fg-2">
+          控制舞台暗幕（浅色皮肤为白幕）的浓度，面板与文字的可读性靠它拉开。
         </p>
         <OpacitySlider
-          label="会话区"
-          value={chatOpacity}
-          min={0.4}
+          label="浓度"
+          value={scrim}
+          min={0.5}
           max={0.95}
-          onChange={setChatOpacity}
-          disabled={!activeSkin?.has_bg}
-        />
-        <OpacitySlider
-          label="侧边栏"
-          value={sidebarOpacity}
-          min={0.2}
-          max={0.9}
-          onChange={setSidebarOpacity}
+          onChange={setScrim}
           disabled={!activeSkin?.has_bg}
         />
         {!activeSkin?.has_bg && (
-          <p className="text-mini text-[var(--faint)]">当前皮肤无背景图，不透明率不生效</p>
-        )}
-      </section>
-
-      {/* 背景模糊度: 无背景图的皮肤无意义, 禁用 */}
-      <section className="space-y-3 border-t border-[var(--border-soft)] pt-5">
-        <SectionTitle>背景模糊度</SectionTitle>
-        <OpacitySlider
-          label="模糊半径"
-          value={bgBlur}
-          min={0}
-          max={30}
-          unit="px"
-          onChange={setBgBlur}
-        />
-        {!activeSkin?.has_bg && (
-          <p className="text-mini text-[var(--faint)]">当前皮肤无背景图，模糊度不生效</p>
-        )}
-      </section>
-
-      {/* 对话气泡 */}
-      <section className="space-y-3 border-t border-[var(--border-soft)] pt-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <SectionTitle>对话气泡</SectionTitle>
-            <p className="-mt-1 text-mini text-[var(--faint)]">
-              消息显示为毛玻璃气泡块；这组设置按皮肤分别保存，切换皮肤会切到对应皮肤的记忆
-            </p>
-          </div>
-          <button
-            onClick={() => setBubbleEnabled(!bubbleEnabled)}
-            aria-pressed={bubbleEnabled}
-            className={`relative h-5 w-9 shrink-0 rounded-full transition duration-fast ease-out ${
-              bubbleEnabled ? "bg-[var(--accent)]" : "bg-[var(--surface-2)] ring-1 ring-inset ring-[var(--border-soft)]"
-            }`}
-          >
-            <span
-              className="absolute top-1 h-4 w-4 rounded-full bg-[var(--panel)] shadow-sm transition-[left] duration-base ease-swift"
-              style={{ left: bubbleEnabled ? 18 : 2 }}
-            />
-          </button>
-        </div>
-        {bubbleEnabled && (
-          <>
-            <OpacitySlider
-              label="气泡不透明率"
-              value={bubbleOpacity}
-              min={0}
-              max={1}
-              onChange={setBubbleOpacity}
-            />
-            {/* 气泡底色: 选色器覆盖皮肤 --bubble-bg; null = 跟随皮肤默认 */}
-            <div className="flex items-center justify-between text-label text-[var(--muted)]">
-              <span>气泡底色</span>
-              <div className="flex items-center gap-2">
-                {bubbleColor && (
-                  <button
-                    onClick={() => setBubbleColor(null)}
-                    className="rounded-md border border-[var(--border-soft)] px-2 py-1 text-mini text-[var(--muted)] transition duration-fast ease-out hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
-                  >
-                    跟随皮肤
-                  </button>
-                )}
-                <label className="relative inline-flex h-6 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-[var(--border-soft)]">
-                  <span
-                    className="absolute inset-0"
-                    style={{ background: bubbleColor ?? "var(--bubble-bg)" }}
-                  />
-                  <input
-                    type="color"
-                    value={bubbleColor ?? "#ffffff"}
-                    onChange={(e) => setBubbleColor(e.target.value)}
-                    className="absolute inset-0 cursor-pointer opacity-0"
-                  />
-                </label>
-                <span className="tabular-nums text-mini text-[var(--faint)]">
-                  {bubbleColor ?? "皮肤默认"}
-                </span>
-              </div>
-            </div>
-          </>
+          <p className="text-mini text-fg-4">仅壁纸皮肤生效</p>
         )}
       </section>
     </div>

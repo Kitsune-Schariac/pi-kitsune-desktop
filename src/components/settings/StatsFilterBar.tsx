@@ -23,10 +23,10 @@ export function StatsFilterBar({
   const setProject = useStatsFilterStore((s) => s.setProject);
 
   return (
-    <div className="space-y-2 rounded-md border border-neutral-200 bg-neutral-50/60 p-3">
+    <div className="space-y-2 rounded-lg border border-[var(--line)] bg-[var(--well)] p-3">
       <div className="flex flex-wrap items-center gap-2">
         {/* 时间快捷 */}
-        <div className="flex overflow-hidden rounded-md border border-neutral-200 bg-panel text-xs">
+        <div className="flex overflow-hidden rounded-md border border-[var(--line)] bg-[var(--raise)] text-xs">
           {(
             [
               ["today", "今天"],
@@ -40,8 +40,8 @@ export function StatsFilterBar({
               onClick={() => setRange(r)}
               className={`px-3 py-2 transition duration-fast ease-out ${
                 range === r && !customStart && !customEnd
-                  ? "bg-[var(--sel-bg)] font-medium text-[var(--fg)]"
-                  : "text-neutral-600 hover:bg-neutral-100"
+                  ? "bg-[var(--accent-soft)] font-medium text-[var(--fg)]"
+                  : "text-[var(--fg-3)] hover:bg-[var(--hover)] hover:text-[var(--fg-2)]"
               }`}
             >
               {label}
@@ -49,12 +49,12 @@ export function StatsFilterBar({
           ))}
         </div>
         {/* 自定义起止 */}
-        <div className="flex items-center gap-2 text-xs text-neutral-500">
+        <div className="flex items-center gap-2 text-xs text-[var(--fg-3)]">
           <input
             type="date"
             value={customStart}
             onChange={(e) => setCustomStart(e.target.value)}
-            className="rounded-md border border-neutral-200 bg-panel px-2 py-2 text-neutral-700 outline-none focus:border-primary-400"
+            className="rounded-md border border-[var(--line)] bg-[var(--raise)] px-2 py-2 text-[var(--fg-2)] outline-none transition duration-fast ease-out focus:border-[var(--accent)]"
             title="自定义开始日期"
           />
           <span>至</span>
@@ -62,7 +62,7 @@ export function StatsFilterBar({
             type="date"
             value={customEnd}
             onChange={(e) => setCustomEnd(e.target.value)}
-            className="rounded-md border border-neutral-200 bg-panel px-2 py-2 text-neutral-700 outline-none focus:border-primary-400"
+            className="rounded-md border border-[var(--line)] bg-[var(--raise)] px-2 py-2 text-[var(--fg-2)] outline-none transition duration-fast ease-out focus:border-[var(--accent)]"
             title="自定义结束日期"
           />
         </div>
@@ -72,7 +72,7 @@ export function StatsFilterBar({
         <select
           value={project}
           onChange={(e) => setProject(e.target.value)}
-          className="max-w-[220px] rounded-md border border-neutral-200 bg-panel px-2 py-2 text-neutral-700 outline-none focus:border-primary-400"
+          className="max-w-[220px] rounded-md border border-[var(--line)] bg-[var(--raise)] px-2 py-2 text-[var(--fg-2)] outline-none transition duration-fast ease-out focus:border-[var(--accent)]"
           title="按项目筛选"
         >
           <option value="">全部项目</option>

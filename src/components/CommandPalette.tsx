@@ -103,12 +103,12 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
   }), [filtered, active, onExecute]);
 
   return (
-    <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-md border border-neutral-200 bg-panel p-2 shadow-lg">
+    <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-lg border border-line bg-popover p-2 shadow-[var(--shadow)]">
       <div className="flex items-center justify-between px-2 pb-1">
-        <span className="text-mini text-neutral-400">命令 · ↑↓ 选择, Enter 执行</span>
+        <span className="text-mini text-fg-4">命令 · ↑↓ 选择, Enter 执行</span>
         <button
           onClick={onClose}
-          className="rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-100"
+          className="rounded-sm p-1 text-fg-4 transition duration-fast ease-out hover:bg-hover hover:text-fg-2"
           title="关闭 (Esc)"
         >
           <X className="h-4 w-4" />
@@ -116,20 +116,20 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
       </div>
 
       {remoteError && (
-        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-red-50 px-2 py-2 text-mini text-red-500">
+        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-[color-mix(in_oklch,var(--err)_10%,transparent)] px-2 py-2 text-mini text-err">
           <AlertCircle className="h-3 w-3 shrink-0" />
           pi 命令加载失败, 仅显示本地命令
         </p>
       )}
       {!sessionId && !remoteError && (
-        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-neutral-50 px-2 py-2 text-mini text-neutral-400">
+        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-well px-2 py-2 text-mini text-fg-4">
           打开会话后可用 pi 扩展/技能/模板命令
         </p>
       )}
 
       <div className="max-h-72 overflow-auto">
         {filtered.length === 0 ? (
-          <div className="flex h-24 items-center justify-center gap-2 text-mini text-neutral-300">
+          <div className="flex h-24 items-center justify-center gap-2 text-mini text-fg-4">
             {remote === null && sessionId ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" /> 加载 pi 命令…
@@ -152,23 +152,23 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
                   it.disabled
                     ? "opacity-40"
                     : sel
-                      ? "bg-primary-50"
-                      : "hover:bg-neutral-100"
+                      ? "bg-accent-soft"
+                      : "hover:bg-hover"
                 }`}
                 title={it.description}
               >
-                <Icon className={`h-4 w-4 shrink-0 ${it.source === "local" ? "text-neutral-400" : "text-primary-400"}`} />
+                <Icon className={`h-4 w-4 shrink-0 ${it.source === "local" ? "text-fg-4" : "text-accent"}`} />
                 <span className="min-w-0 flex-1">
-                  <span className={`block truncate font-medium ${sel ? "text-primary-700" : "text-neutral-700"}`}>
+                  <span className={`block truncate font-medium ${sel ? "text-fg" : "text-fg-2"}`}>
                     /{it.name}
                   </span>
-                  <span className="block truncate text-mini text-neutral-400">{it.description}</span>
+                  <span className="block truncate text-mini text-fg-4">{it.description}</span>
                 </span>
                 <span
                   className={`shrink-0 rounded-sm px-2 py-1 text-mini ${
                     it.source === "local"
-                      ? "bg-neutral-100 text-neutral-500"
-                      : "bg-blue-50 text-blue-500"
+                      ? "bg-well text-fg-3"
+                      : "bg-accent-soft text-accent"
                   }`}
                   title={it.source === "local" ? "本地命令" : `pi ${SOURCE_LABEL[it.source] ?? it.source} 命令`}
                 >

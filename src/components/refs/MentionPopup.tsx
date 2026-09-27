@@ -207,12 +207,12 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
   const fileCount = firstSkill === -1 ? candidates.length : firstSkill;
 
   return (
-    <div className="absolute bottom-full left-0 z-50 mb-1 w-[460px] rounded-md border border-neutral-200 bg-panel p-2 shadow-lg">
+    <div className="absolute bottom-full left-0 z-50 mb-1 w-[460px] rounded-lg border border-line bg-popover p-2 shadow-[var(--shadow)]">
       <div className="flex items-center justify-between px-2 pb-1">
-        <span className="text-xs text-neutral-400">引用文件或技能 · ↑↓ 选择, Enter 确认</span>
+        <span className="text-xs text-fg-4">引用文件或技能 · ↑↓ 选择, Enter 确认</span>
         <button
           onClick={onClose}
-          className="rounded-sm p-1 text-neutral-400 transition duration-fast ease-out hover:bg-neutral-100"
+          className="rounded-sm p-1 text-fg-4 transition duration-fast ease-out hover:bg-hover hover:text-fg-2"
           title="关闭 (Esc)"
         >
           <X className="h-4 w-4" />
@@ -220,20 +220,20 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
       </div>
 
       {error && (
-        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-red-50 px-2 py-2 text-xs text-red-500">
+        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-[color-mix(in_oklch,var(--err)_10%,transparent)] px-2 py-2 text-xs text-err">
           <AlertCircle className="h-3 w-3 shrink-0" />
           {error}
         </p>
       )}
 
       {loading ? (
-        <div className="flex h-28 items-center justify-center gap-2 text-xs text-neutral-400">
+        <div className="flex h-28 items-center justify-center gap-2 text-xs text-fg-4">
           <Loader2 className="h-4 w-4 animate-spin" /> {searching ? "搜索中…" : "扫描项目文件…"}
         </div>
       ) : (
         <div className="max-h-72 overflow-auto">
           {candidates.length === 0 ? (
-            <div className="flex h-28 items-center justify-center text-xs text-neutral-300">
+            <div className="flex h-28 items-center justify-center text-xs text-fg-4">
               {!root ? "无项目可扫描, 请先在上方选择项目" : "没有匹配的文件或技能"}
             </div>
           ) : (
@@ -243,7 +243,7 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
               return (
                 <div key={c.path}>
                   {(i === 0 || i === firstSkill) && (
-                    <div className="px-2 pb-1 pt-2 text-xs font-medium text-neutral-400">
+                    <div className="px-2 pb-1 pt-2 text-xs font-medium text-fg-4">
                       {isFile ? `文件 · ${fileCount}` : "技能"}
                     </div>
                   )}
@@ -251,20 +251,20 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
                     onClick={() => { setActive(i); pick(c); }}
                     onMouseEnter={() => setActive(i)}
                     className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs transition duration-fast ease-out ${
-                      sel ? "bg-primary-50" : "hover:bg-neutral-100"
+                      sel ? "bg-accent-soft" : "hover:bg-hover"
                     }`}
                     title={c.path}
                   >
                     {isFile ? (
-                      <FileText className="h-4 w-4 shrink-0 text-neutral-400" />
+                      <FileText className="h-4 w-4 shrink-0 text-fg-4" />
                     ) : (
-                      <Sparkles className="h-4 w-4 shrink-0 text-primary-400" />
+                      <Sparkles className="h-4 w-4 shrink-0 text-accent" />
                     )}
                     <span className="min-w-0 flex-1">
-                      <span className={`block truncate font-medium ${sel ? "text-primary-700" : "text-neutral-700"}`}>
+                      <span className={`block truncate font-medium ${sel ? "text-fg" : "text-fg-2"}`}>
                         {c.title}
                       </span>
-                      <span className="block truncate text-xs text-neutral-400">{c.sub}</span>
+                      <span className="block truncate text-xs text-fg-4">{c.sub}</span>
                     </span>
                   </button>
                 </div>

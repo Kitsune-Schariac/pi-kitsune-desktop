@@ -34,10 +34,10 @@ export function SkillsPanel() {
     }
   };
 
-  if (error) return <p className="p-5 text-sm text-red-500">{error}</p>;
+  if (error) return <p className="p-5 text-sm text-[var(--err)]">{error}</p>;
   if (!skills) {
     return (
-      <div className="flex items-center justify-center gap-2 p-10 text-sm text-neutral-400">
+      <div className="flex items-center justify-center gap-2 p-10 text-sm text-[var(--fg-4)]">
         <Loader2 className="h-4 w-4 animate-spin" /> 加载中…
       </div>
     );
@@ -46,7 +46,7 @@ export function SkillsPanel() {
   return (
     <div className="p-5">
       {skills.length === 0 ? (
-        <p className="rounded-md bg-neutral-50 px-3 py-6 text-center text-sm text-neutral-400">
+        <p className="rounded-md bg-[var(--well)] px-3 py-6 text-center text-sm text-[var(--fg-4)]">
           未发现已安装的 skill
         </p>
       ) : (
@@ -57,30 +57,30 @@ export function SkillsPanel() {
                 onClick={() => openSkill(s)}
                 className={`w-full rounded-md border p-3 text-left transition duration-fast ease-out ${
                   selected?.path === s.path
-                    ? "border-primary-300 bg-primary-50"
-                    : "border-neutral-200 bg-panel hover:border-neutral-300 hover:bg-neutral-50"
+                    ? "border-[color-mix(in_oklch,var(--accent)_45%,transparent)] bg-[var(--accent-soft)]"
+                    : "border-[var(--line)] bg-[var(--raise)] hover:border-[var(--line-2)] hover:bg-[var(--hover)]"
                 }`}
               >
                 <span className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 shrink-0 text-neutral-500" />
-                  <span className="font-medium text-neutral-800">{s.name}</span>
+                  <Sparkles className="h-4 w-4 shrink-0 text-[var(--fg-3)]" />
+                  <span className="font-medium text-[var(--fg)]">{s.name}</span>
                   {selected?.path === s.path ? (
-                    <ChevronDown className="ml-auto h-4 w-4 text-neutral-400" />
+                    <ChevronDown className="ml-auto h-4 w-4 text-[var(--fg-4)]" />
                   ) : (
-                    <ChevronRight className="ml-auto h-4 w-4 text-neutral-400" />
+                    <ChevronRight className="ml-auto h-4 w-4 text-[var(--fg-4)]" />
                   )}
                 </span>
                 {s.description && (
-                  <span className="mt-1 block text-xs text-neutral-500">{s.description}</span>
+                  <span className="mt-1 block text-xs text-[var(--fg-3)]">{s.description}</span>
                 )}
               </button>
               {selected?.path === s.path && (
-                <div className="mt-1 rounded-md border border-neutral-200 bg-neutral-50 p-3">
-                  <p className="mb-2 flex items-center gap-1 text-xs uppercase tracking-wide text-neutral-400">
+                <div className="mt-1 rounded-md border border-[var(--line)] bg-[var(--well)] p-3">
+                  <p className="mb-2 flex items-center gap-1 text-xs uppercase tracking-wide text-[var(--fg-4)]">
                     <FileText className="h-3 w-3" />
                     SKILL.md
                   </p>
-                  <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-neutral-600">
+                  <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-[var(--fg-2)]">
                     {content ?? "加载中…"}
                   </pre>
                 </div>
