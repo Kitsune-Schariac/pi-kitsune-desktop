@@ -40,10 +40,10 @@ function OpacitySlider({
   );
 }
 
-// 设置分区标题: mini 档 + mono + 大写 + faint (对齐改版稿 .set-sec > h3)
+// 设置分区标题: label 档 + 半粗 + 三级文字色 (与检查器 .ov-title 同一口径)
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="mb-3 font-mono text-mini font-semibold uppercase tracking-[0.09em] text-fg-4">
+    <h3 className="mb-3 text-label font-semibold text-fg-3">
       {children}
     </h3>
   );

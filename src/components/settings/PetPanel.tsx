@@ -3,10 +3,10 @@ import { usePetStore } from "../../store/pet";
 import { Cat, FolderOpen, RefreshCw } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 
-// 设置分区标题: 与 ThemePanel 同款 (mini 档 + mono + 大写 + faint)
+// 设置分区标题: 与 ThemePanel 同款 (label 档 + 半粗 + 三级文字色, 与检查器 .ov-title 同一口径)
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="mb-3 font-mono text-mini font-semibold uppercase tracking-[0.09em] text-[var(--fg-4)]">
+    <h3 className="mb-3 text-label font-semibold text-fg-3">
       {children}
     </h3>
   );

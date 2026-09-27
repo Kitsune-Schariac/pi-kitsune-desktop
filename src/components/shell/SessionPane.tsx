@@ -13,7 +13,7 @@ const LIST_MODES: { key: SessionListMode; label: string }[] = [
 
 /**
  * 会话列表 (框架 C 第二列): 搜索 + 新建入口 + 「最近 / 项目」分段 + 列表体 + 会话库路径小字。
- * 收起与拖拽调宽由 paneOpen / 右缘手柄控制; 宽度同时写 :root 的 --list-w 供舞台暗幕列端点计算。
+ * 收起与拖拽调宽由 paneOpen / 右缘手柄控制。
  * 列表体 (最近 / 项目两视图) 都走 ProjectList, 打开 / 删除 / 菜单逻辑单源。
  */
 export function SessionPane() {
@@ -31,12 +31,6 @@ export function SessionPane() {
   // 搜索关键词: 非空时项目树切为全局拍平过滤视图 (Sidebar 持有的旧行为原样保留)
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
-
-  // 会话列表宽度同时是舞台暗幕列端点 (--col-end) 的输入, 那个消费点在 fixed 背景层、
-  // 不在本组件子树内, 只能写 :root; 每帧一次 setProperty, 不触发 React 重渲染
-  useEffect(() => {
-    document.documentElement.style.setProperty("--list-w", paneOpen ? `${width}px` : "0px");
-  }, [paneOpen, width]);
 
   // 全局 "/" 聚焦搜索: 输入框/弹窗/覆盖层打开时让位, 不抢焦点
   useEffect(() => {

@@ -5,7 +5,7 @@ import type { Config } from "tailwindcss";
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
-    // 字号 9 档 (语义名 + 同值旧别名): 语义名供改版新 UI 使用, 旧别名保 364 处存量 class 零改动。
+    // 字号 10 档 (语义名 + 同值旧别名): 语义名供改版新 UI 使用, 旧别名保 364 处存量 class 零改动。
     // 非 extend 覆盖: 未列出的档位 (如已删除的 lg=18px) 不再生成, 越界 class 构建即失效
     fontSize: {
       micro: ["10px", { lineHeight: "1.4", letterSpacing: "0.01em" }],
@@ -17,6 +17,7 @@ export default {
       head: ["17px", { lineHeight: "1.45", letterSpacing: "-0.01em" }],
       num: ["20px", { lineHeight: "1.2", letterSpacing: "-0.014em" }],
       hero: ["24px", { lineHeight: "1.25", letterSpacing: "-0.018em" }],
+      display: ["28px", { lineHeight: "1.2", letterSpacing: "-0.02em" }],
       // 旧别名 (与语义档同值, 引用同组配置): xs=mini / sm=body / base=title / 2xl=hero
       xs: ["11px", { lineHeight: "1.45", letterSpacing: "0.005em" }],
       sm: ["13px", { lineHeight: "1.55", letterSpacing: "0" }],
@@ -55,6 +56,12 @@ export default {
       72: "288px",
       80: "320px",
       96: "384px",
+    },
+    // 字体只有两套, 值在 index.css 的 --f-ui / --f-mono (系统字体栈);
+    // 这里映射过去, 让 font-sans / font-mono class 与手写 CSS 用同一份定义
+    fontFamily: {
+      sans: ["var(--f-ui)"],
+      mono: ["var(--f-mono)"],
     },
     borderRadius: {
       sm: "4px",

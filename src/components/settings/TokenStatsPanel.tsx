@@ -208,7 +208,7 @@ export function TokenStatsPanel() {
                 <Icon className="h-4 w-4 text-[var(--accent)]" />
                 {label}
               </div>
-              <div className="[font-family:var(--f-display)] text-num font-semibold tabular-nums text-[var(--fg)]">{value}</div>
+              <div className="text-num font-light tabular-nums text-[var(--fg)]">{value}</div>
               {sub && <div className="mt-1 text-mini tabular-nums text-[var(--fg-4)]">{sub}</div>}
             </div>
           ))}
