@@ -213,7 +213,7 @@ function SummaryCard({
         <Icon className="h-4 w-4 text-[var(--accent)]" />
         {label}
       </div>
-      <div className="[font-family:var(--f-display)] text-num font-semibold tabular-nums text-[var(--fg)]">{format(display)}</div>
+      <div className="text-num font-light tabular-nums text-[var(--fg)]">{format(display)}</div>
       {foot && <div className="mt-1 text-xs text-[var(--fg-4)]">{foot}</div>}
     </div>
   );

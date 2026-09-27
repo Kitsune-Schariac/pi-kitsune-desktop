@@ -28,10 +28,9 @@ export function TitleBar() {
       data-tauri-drag-region
       className="flex h-9 shrink-0 select-none items-center gap-3 border-b border-[var(--line)] bg-[var(--rail)] pl-3"
     >
-      {/* 品牌: logo 用 --f-display 衬线字标 (纯拉丁, 中文禁套衬线斜体) */}
       <span className="flex items-center gap-2">
         <img src={logoUrl} alt="" className="h-4 w-4" aria-hidden />
-        <span className="[font-family:var(--f-display)] text-head italic leading-none tracking-tight text-fg">
+        <span className="text-body font-semibold leading-none text-fg">
           Pi Kitsune
         </span>
         {version && (

@@ -81,7 +81,7 @@ export function ChaosLoader({ label = "加载中" }: { label?: string }) {
           ))}
         </svg>
       </div>
-      <span className="text-mini tracking-[0.3em] text-[var(--fg-3)]">{label}</span>
+      <span className="text-label text-[var(--fg-3)]">{label}</span>
     </div>
   );
 }
