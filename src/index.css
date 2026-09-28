@@ -20,8 +20,9 @@
   /* 字号 10 档 (与 tailwind.config fontSize 语义档同值): 全局只许用这 10 档整数像素,
      index.css 里一律写 var(--fs-*), 组件一律用 text-* 语义 class, 两套必须同值。
      层级靠字号 + 字重 + 四级文字色拉开, 不靠换字体:
-     micro/mini 角标与元信息 · label 标签与步骤行 · body 界面主力 · title 对话正文 ·
-     head 面板标题 · num 提问标题与统计数 · hero 页面大标题 · display 空状态问候与花费 */
+     micro 角标与会话元信息 · mini 元信息与步骤行 · label 标签与推理正文 · body 界面主力与输入框 ·
+     ui 对话正文 · title 面板标题 · head 设置大标题与提问标题 · num 统计数 · hero 页面大标题 ·
+     display 空状态问候与花费 */
   --fs-micro: 10px;
   --fs-mini: 11px;
   --fs-label: 12px;
@@ -690,14 +691,14 @@ html:has([data-pet]) #root {
   box-shadow: 0 0 0 4px var(--bg);
 }
 [data-style="atelier"] .tl-prompt-meta {
-  font-size: var(--fs-mini);
+  font-size: var(--fs-micro);
   color: var(--fg-4);
 }
-/* 提问是一轮的章节标题: 只靠字号 (num 20 对正文 title 15) 拉层级, 字重保持常规 ——
-   雅黑没有中等字重, 500 会落回常规、600 直接跳粗体, 20px 粗体中文压过正文太多 */
+/* 提问是一轮的章节标题: 只靠字号 (head 17 对正文 ui 14) 拉层级, 字重保持常规 ——
+   雅黑没有中等字重, 500 会落回常规、600 直接跳粗体, 大号粗体中文压过正文太多 */
 [data-style="atelier"] .tl-prompt-text {
   margin: 4px 0 0;
-  font-size: var(--fs-num);
+  font-size: var(--fs-head);
   font-weight: 400;
   line-height: 1.5;
   color: var(--fg);
@@ -712,14 +713,14 @@ html:has([data-pet]) #root {
 }
 [data-style="stage"] .tl-prompt-meta {
   margin: 0 6px 4px;
-  font-size: var(--fs-mini);
+  font-size: var(--fs-micro);
   color: var(--fg-4);
 }
 [data-style="stage"] .tl-prompt-text {
   margin: 0;
   max-width: 80%;
   padding: 10px 16px;
-  font-size: var(--fs-title);
+  font-size: var(--fs-ui);
   line-height: 1.65;
   color: var(--fg);
   white-space: pre-wrap;
@@ -734,9 +735,10 @@ html:has([data-pet]) #root {
 .tl-reply-wrap {
   margin: 14px 0;
 }
-/* AI 回复 = 对话正文档 (title 15), 两风格同字号同行高; 中文长段落行高给到 1.8 才透气 */
+/* AI 回复 = 对话正文档 (ui 14), 两风格同字号同行高; 中文长段落行高给到 1.8 才透气。
+   原用 title 15 实机嫌大, 会话区各元素整体沿档位表降一档, token 值与其他区域不动 */
 .tl-reply {
-  font-size: var(--fs-title);
+  font-size: var(--fs-ui);
   line-height: 1.8;
   color: var(--fg);
 }
@@ -803,21 +805,21 @@ html:has([data-pet]) #root {
   color: var(--fg-3);
 }
 [data-style="atelier"] .tl-think-head {
-  font-size: var(--fs-label);
+  font-size: var(--fs-mini);
 }
 [data-style="stage"] .tl-think-head {
   padding: 3px 10px 3px 8px;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--raise);
-  font-size: var(--fs-label);
+  font-size: var(--fs-mini);
   color: var(--fg-3);
 }
 [data-style="stage"] .tl-think-head:hover {
   color: var(--fg);
 }
 .tl-think-len {
-  font-size: var(--fs-mini);
+  font-size: var(--fs-micro);
   color: var(--fg-4);
 }
 .tl-chev {
@@ -833,7 +835,7 @@ html:has([data-pet]) #root {
   margin: 6px 0 10px;
   padding: 2px 0 2px 14px;
   border-left: 1px solid var(--line-2);
-  font-size: var(--fs-body);
+  font-size: var(--fs-label);
   line-height: 1.8;
   color: var(--fg-3);
   white-space: pre-wrap;
@@ -868,7 +870,7 @@ html:has([data-pet]) #root {
   height: 30px;
   padding: 0 10px 0 0;
   border-radius: 7px;
-  font-size: var(--fs-label);
+  font-size: var(--fs-mini);
   color: var(--fg-3);
   text-align: left;
   transition: color 0.15s var(--ease);
@@ -882,7 +884,7 @@ html:has([data-pet]) #root {
 /* 工具名是代码标识符, 组头里只有这一段切等宽 */
 .tl-steps-tools {
   font-family: var(--f-mono);
-  font-size: var(--fs-mini);
+  font-size: var(--fs-micro);
   color: var(--fg-4);
 }
 .tl-steps-err {
@@ -1012,7 +1014,7 @@ html:has([data-pet]) #root {
   height: 29px;
   padding: 0 4px 0 8px;
   font-family: var(--f-mono);
-  font-size: var(--fs-label);
+  font-size: var(--fs-mini);
   color: var(--fg-3);
   text-align: left;
 }
@@ -1036,7 +1038,7 @@ html:has([data-pet]) #root {
 }
 .tl-step-name {
   color: var(--fg-2);
-  font-size: var(--fs-mini);
+  font-size: var(--fs-micro);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1050,7 +1052,7 @@ html:has([data-pet]) #root {
   white-space: nowrap;
 }
 .tl-step-extra {
-  font-size: var(--fs-mini);
+  font-size: var(--fs-micro);
 }
 .tl-plus {
   font-weight: 400;
@@ -1063,7 +1065,7 @@ html:has([data-pet]) #root {
   color: var(--err);
 }
 .tl-step-dur {
-  font-size: var(--fs-mini);
+  font-size: var(--fs-micro);
   color: var(--fg-4);
   text-align: right;
 }
@@ -1154,7 +1156,7 @@ html:has([data-pet]) #root {
   border-left-width: 3px;
   border-radius: 9px;
   background: var(--raise);
-  font-size: var(--fs-body);
+  font-size: var(--fs-label);
   line-height: 1.6;
   color: var(--fg-2);
   overflow-wrap: break-word;
@@ -1756,7 +1758,7 @@ html:has([data-pet]) #root {
   display: none;
 }
 [data-style="atelier"] .fs-timeline .tl-prompt-text {
-  font-size: var(--fs-title);
+  font-size: var(--fs-ui);
 }
 .fs-timeline .tl-turn + .tl-turn {
   margin-top: 28px;
@@ -1796,12 +1798,15 @@ html:has([data-pet]) #root {
   line-height: 1.35;
   color: var(--fg);
 }
-.markdown-body h1 { font-size: 1.4em; }
-.markdown-body h2 { font-size: 1.2em; }
-.markdown-body h3 { font-size: 1.1em; }
-.markdown-body h4 { font-size: 1em; }
+/* 字号绑档位而不用 em: em 乘出来是 16.8 / 12.32 这类碎字号, 雅黑发虚。
+   标题封顶 title 15 —— 回复里的标题是粗体, 再大就压过工坊提问 (head 17 常规) 这个章节标题;
+   h3/h4 与回复正文同档, 只靠粗体拉开 */
+.markdown-body h1,
+.markdown-body h2 { font-size: var(--fs-title); }
+.markdown-body h3,
+.markdown-body h4 { font-size: var(--fs-ui); }
 .markdown-body h5,
-.markdown-body h6 { font-size: 0.95em; }
+.markdown-body h6 { font-size: var(--fs-body); }
 .markdown-body h1:first-child,
 .markdown-body h2:first-child,
 .markdown-body h3:first-child { margin-top: 0; }
@@ -1844,7 +1849,7 @@ html:has([data-pet]) #root {
   border-radius: 8px;
   background: var(--well);
   overflow-x: auto;
-  font-size: 0.88em;
+  font-size: var(--fs-label);
   line-height: 1.5;
 }
 .markdown-body pre code {
@@ -1869,8 +1874,15 @@ html:has([data-pet]) #root {
   border-radius: 5px;
   background: var(--well);
   border: 1px solid var(--line);
-  font-size: 0.88em;
+  font-size: var(--fs-label);
   color: var(--accent-2);
+}
+/* 标题里的行内代码跟标题走、比标题低一档; 固定 label 12 会在 15px 标题里缩成一截 */
+.markdown-body :is(h1, h2) code {
+  font-size: var(--fs-ui);
+}
+.markdown-body :is(h3, h4) code {
+  font-size: var(--fs-body);
 }
 
 /* 引用 */
@@ -1888,7 +1900,7 @@ html:has([data-pet]) #root {
 .markdown-body table {
   margin: 0.6em 0;
   border-collapse: collapse;
-  font-size: 0.9em;
+  font-size: var(--fs-body);
   width: 100%;
 }
 .markdown-body th,
