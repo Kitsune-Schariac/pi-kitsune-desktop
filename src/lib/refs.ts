@@ -54,6 +54,32 @@ export function buildRefsParts(refs: Ref[]): SendParts {
   };
 }
 
+/** 粘贴/拖入的文件条目 (Rust attach.rs 返回), 字段与 json! 键一一对应 */
+export type Attachment =
+  | { kind: "image"; fileName: string; path: string; data: string; mimeType: string }
+  | { kind: "file"; fileName: string; path: string; size: number }
+  | { kind: "dir"; fileName: string; path: string }
+  | { kind: "error"; fileName: string; path: string; message: string };
+
+/** 附件条目 → 引用: 图片内联 base64, 其余文件走路径模式 (与引用弹层「文件」tab 同构);
+ *  文件夹和读取失败的条目收进 skipped, 由调用方提示, 不静默丢 */
+export function attachmentsToRefs(list: Attachment[]): { refs: Ref[]; skipped: string[] } {
+  const refs: Ref[] = [];
+  const skipped: string[] = [];
+  for (const a of list) {
+    if (a.kind === "image") {
+      refs.push({ kind: "image", title: a.fileName, data: a.data, mimeType: a.mimeType });
+    } else if (a.kind === "file") {
+      refs.push({ kind: "file", title: a.fileName, path: a.path, meta: { size: a.size } });
+    } else if (a.kind === "dir") {
+      skipped.push(`${a.fileName} (文件夹)`);
+    } else {
+      skipped.push(`${a.fileName} (${a.message})`);
+    }
+  }
+  return { refs, skipped };
+}
+
 /** chips 类型图标映射 (lucide 组件) */
 import { FileText, MessageSquare, Clipboard, Camera, Sparkles, Image as ImageIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";

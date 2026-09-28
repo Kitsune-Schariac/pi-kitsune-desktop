@@ -1258,6 +1258,7 @@ html:has([data-pet]) #root {
   mask-image: linear-gradient(to bottom, transparent 0, black 24px, black calc(100% - 150px), transparent calc(100% - 60px));
 }
 .composer {
+  position: relative;
   pointer-events: auto;
   margin: 0 auto;
   border: 1px solid var(--line-2);
@@ -1268,9 +1269,28 @@ html:has([data-pet]) #root {
   /* 工具行窄宽适配的容器查询基准 (见下方 @container) */
   container-type: inline-size;
 }
-.composer:focus-within {
+.composer:focus-within,
+.composer[data-drop="true"] {
   border-color: color-mix(in oklch, var(--accent) 38%, transparent);
   box-shadow: var(--shadow), 0 0 0 4px var(--accent-soft);
+}
+/* 拖入文件的放置提示: 盖满输入卡 (圆角跟随卡片), 虚线框 + 近不透明的 accent 染色底把卡内文字压下去,
+   让「松开会落到这里」一眼可辨。不接事件: 放置由 Tauri 原生拖放事件接收 */
+.composer-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1.5px dashed color-mix(in oklch, var(--accent) 60%, transparent);
+  border-radius: inherit;
+  background: color-mix(in oklch, var(--accent) 9%, var(--popover));
+  color: var(--accent);
+  font-size: var(--fs-ui);
+  pointer-events: none;
+  animation: viewInSoft 160ms ease-out;
 }
 [data-style="atelier"] .composer {
   /* 比净文字列宽 56px (两侧各探出 28px), 原型既定观感 (原 664 文字列配 720 卡片) */

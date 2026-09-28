@@ -424,6 +424,20 @@ pub fn delete_session_file(session_path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// 按扩展名判定图片并给出 mimeType; 非图片返回 None。
+/// 引用选择器与粘贴/拖入附件 (attach.rs) 共用, 保证两条入口对「什么算图片」口径一致
+pub(crate) fn image_mime(path: &std::path::Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_lowercase();
+    match ext.as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "bmp" => Some("image/bmp"),
+        _ => None,
+    }
+}
+
 /// 读取文件用于上下文引用: 图片 → base64, 文本 → 内容 (100KB 截断)
 /// 返回 { kind: "image", data, mimeType, fileName } 或 { kind: "text", content, fileName }
 #[tauri::command]
@@ -437,23 +451,9 @@ pub fn read_file_for_context(file_path: String) -> Result<serde_json::Value, Str
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|s| s.to_lowercase())
-        .unwrap_or_default();
     // 图片: base64 + mimeType (走 pi prompt 的 images 字段)
-    let is_image = matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp");
-    if is_image {
+    if let Some(mime) = image_mime(&path) {
         let data = std::fs::read(&path).map_err(|e| format!("读取失败: {e}"))?;
-        let mime = match ext.as_str() {
-            "png" => "image/png",
-            "jpg" | "jpeg" => "image/jpeg",
-            "gif" => "image/gif",
-            "webp" => "image/webp",
-            "bmp" => "image/bmp",
-            _ => "application/octet-stream",
-        };
         return Ok(serde_json::json!({
             "kind": "image",
             "data": base64::engine::general_purpose::STANDARD.encode(&data),
