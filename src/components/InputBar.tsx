@@ -672,7 +672,7 @@ export function InputBar({
           onMouseUp={handleCursorMove}
           placeholder={isStreaming ? "运行中: Enter 发 steer 指导, Alt+Enter 排队后续" : "输入消息, Enter 发送 (@ 引用文件/技能, / 命令)"}
           rows={2}
-          className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-ui text-fg outline-none placeholder:text-fg-4"
+          className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-body text-fg outline-none placeholder:text-fg-4"
         />
 
         {/* 工具行: 左 = 项目 chip (仅空状态) / 引用 / 命令; 右 = 上下文用量 / 模型 / 思考 / 发送。
