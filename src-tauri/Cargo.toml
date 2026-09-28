@@ -20,6 +20,8 @@ base64 = "0.22"
 tokio = { version = "1", features = ["full"] }
 tauri-plugin-dialog = "2.7.2"
 tauri-plugin-clipboard-manager = "2"
+# 直接用 clipboard-manager 插件底层的 arboard 读 CF_HDROP 文件列表 (插件未暴露该能力), 不引入新 crate
+arboard = { version = "3", default-features = false }
 xcap = "0.9"
 image = "0.25"
 encoding_rs = "0.8"

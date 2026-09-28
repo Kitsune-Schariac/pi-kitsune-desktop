@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useSessionStore } from "../store/session";
 import { useProjectsStore } from "../store/projects";
 import type { ModelInfo } from "../store/session";
 import {
   Send, Square, Paperclip, X, ChevronDown, Cpu, Brain, Loader2,
-  ArrowUp, ArrowDown, Clock, DollarSign, Gauge, Database, FolderGit2, Slash,
+  ArrowUp, ArrowDown, Clock, DollarSign, Gauge, Database, FolderGit2, Slash, FilePlus2,
 } from "lucide-react";
 import { QueueIndicator } from "./QueueIndicator";
-import { buildRefsParts, refIcon, refMetaText, type Ref } from "../lib/refs";
+import {
+  attachmentsToRefs, buildRefsParts, refIcon, refMetaText, type Attachment, type Ref,
+} from "../lib/refs";
 import { cacheHitRate as cacheHit } from "../lib/cacheHit";
 import type { PaletteCommand } from "../lib/commands";
 import type { PathRef } from "../lib/refs";
@@ -191,6 +194,9 @@ export function InputBar({
   const [projectOpen, setProjectOpen] = useState(false);
   const [preview, setPreview] = useState<{ ref: Ref; content: string | null; loading: boolean } | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+  const showHint = (msg: string) => { setHint(msg); setTimeout(() => setHint(null), 2500); };
+  // 系统文件拖进窗口时为 true: 输入卡盖上放置提示层 (拖放落在窗口任意位置都并入引用)
+  const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -297,19 +303,113 @@ export function InputBar({
     }
   };
 
+  // 粘贴/拖入的文件并入引用; 文件夹与读取失败的条目给提示, 不静默丢。
+  // 只用稳定的 setter, 拖放监听里拿到的旧闭包照样可用
+  const addAttachments = (list: Attachment[]) => {
+    const { refs: added, skipped } = attachmentsToRefs(list);
+    if (added.length) setRefs((prev) => [...prev, ...added]);
+    if (skipped.length) showHint(`已跳过: ${skipped.join("、")}`);
+  };
+
+  // 粘贴: 有纯文本就走浏览器默认的文本粘贴 —— Excel/Word 复制会同时带文本和位图, 用户要的是文本;
+  // 否则接管: 资源管理器复制的文件由 Rust 读出真实路径, 截图/网页「复制图片」这类位图从事件里取
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const dt = e.clipboardData;
+    if (dt.getData("text/plain")) return;
+    // DataTransfer 只在事件回调的同步阶段可读, 位图必须先取出 File 再进异步流程
+    const bitmaps: File[] = [];
+    for (const item of Array.from(dt.items)) {
+      if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
+      const f = item.getAsFile();
+      if (f) bitmaps.push(f);
+    }
+    e.preventDefault();
+    void pasteAttachments(bitmaps);
+  };
+
+  const pasteAttachments = async (bitmaps: File[]) => {
+    try {
+      const list = await invoke<Attachment[]>("read_clipboard_attachments");
+      // 有文件列表就以它为准: 事件里的位图只是同一批文件的副本, 且拿不到路径
+      if (list.length) {
+        addAttachments(list);
+        return;
+      }
+    } catch (e) {
+      // 剪贴板被别的进程占着等情况: 还有位图就继续用位图, 没有才报错
+      if (!bitmaps.length) {
+        showHint(String(e));
+        return;
+      }
+    }
+    if (!bitmaps.length) return;
+    try {
+      const images = await Promise.all(
+        bitmaps.map((f) => new Promise<{ data: string; mimeType: string }>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve({ data: String(reader.result).split(",")[1] ?? "", mimeType: f.type });
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(f);
+        })),
+      );
+      setRefs((prev) => {
+        // 连续粘贴多张时标题带序号, chips 才分得清
+        let n = prev.filter((r) => r.kind === "clipboard-image").length;
+        return [
+          ...prev,
+          ...images.map((img) => ({ kind: "clipboard-image" as const, title: `粘贴图片 ${++n}`, ...img })),
+        ];
+      });
+    } catch (e) {
+      showHint(`读取粘贴的图片失败: ${e}`);
+    }
+  };
+
+  // 拖入文件走 Tauri 原生拖放事件: wry 在 Windows 上接管了 WebView2 的放置目标, HTML5 drop 收不到
+  // 外部文件, 而原生事件直接带真实路径 (路径模式需要)。wry 只对带 CF_HDROP 的拖拽发事件,
+  // 页面内的 HTML5 拖拽 (项目排序) 不会误触发。
+  // 回调要改组件内的 refs, 只能挂在组件里; disposed 标志兜住 StrictMode 双跑下的异步注册
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    getCurrentWebview()
+      .onDragDropEvent((ev) => {
+        const p = ev.payload;
+        if (p.type === "enter" || p.type === "over") {
+          setDragOver(true);
+        } else if (p.type === "leave") {
+          setDragOver(false);
+        } else {
+          setDragOver(false);
+          if (!p.paths.length) return;
+          invoke<Attachment[]>("resolve_attachment_paths", { paths: p.paths })
+            .then(addAttachments)
+            .catch((e) => showHint(`读取拖入的文件失败: ${e}`));
+        }
+      })
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      })
+      .catch((e) => console.error("注册拖放监听失败", e));
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
   // 三种发送模式共用组装逻辑: prompt (普通对话) / steer (运行中指导) / followUp (排队后续)
   // steer/followUp 必须已有活跃会话 (队列是会话级状态), 只有 prompt 支持空状态自动建会话
   const handleSend = async (mode: "prompt" | "steer" | "followUp" = "prompt") => {
-    if (!text.trim()) return;
+    // 只带引用不打字也能发 (贴张截图直接回车是粘贴图片最常见的用法)
+    if (!text.trim() && refs.length === 0) return;
     if (!activeSessionId) {
       if (mode !== "prompt") {
-        setHint("请先打开一个会话再发送");
-        setTimeout(() => setHint(null), 2500);
+        showHint("请先打开一个会话再发送");
         return;
       }
       if (!emptyProject) {
-        setHint("请先在上方选择项目");
-        setTimeout(() => setHint(null), 2500);
+        showHint("请先在上方选择项目");
         return;
       }
       try {
@@ -320,8 +420,10 @@ export function InputBar({
       }
     }
     // 组装发送载荷: 路径类引用 → [引用文件: path] 标记段; 内联类 → 标记+内容; 图像 → images 字段
+    // 没打字时标记段本身就是正文; 纯图片则补占位文本 —— pi 固定组装成 [text, ...images],
+    // openai-completions 适配层不滤空 text 块, 空串会原样发给上游, 部分中转会直接拒掉
     const parts = buildRefsParts(refs);
-    const full = text.trim() + parts.textRefs;
+    const full = (text.trim() + parts.textRefs).trim() || "[图片]";
     const images = parts.images.length ? parts.images : undefined;
     if (mode === "steer") await sendSteer(activeSessionId!, full, images);
     else if (mode === "followUp") await sendFollowUp(activeSessionId!, full, images);
@@ -429,8 +531,7 @@ export function InputBar({
     } else {
       // 透传: 原样发给 pi 解析执行 (扩展命令立即执行; 技能/模板按 pi 语义展开)
       if (!activeSessionId) {
-        setHint("请先打开一个会话再执行命令");
-        setTimeout(() => setHint(null), 2500);
+        showHint("请先打开一个会话再执行命令");
         return;
       }
       await sendPrompt(activeSessionId, "/" + cmd.name + (args ? " " + args : ""));
@@ -441,7 +542,6 @@ export function InputBar({
 
   // 本地白名单执行器: 返回 false = 执行失败 (hint 已提示, 输入框内容保留)
   const runLocalCommand = async (name: string): Promise<boolean> => {
-    const showHint = (msg: string) => { setHint(msg); setTimeout(() => setHint(null), 2500); };
     switch (name) {
       case "new": {
         // 新建会话: 当前项目 (活跃会话 cwd 优先, 空状态用选择器值); 无项目给提示
@@ -563,7 +663,14 @@ export function InputBar({
   return (
     // 悬浮输入卡容器: 定位与渐隐 (工坊居中 / 舞台贴文字列) 由 .composer-wrap 按风格分支承担
     <div className="composer-wrap">
-      <div ref={cardRef} className="composer">
+      <div ref={cardRef} className="composer" data-drop={dragOver || undefined}>
+        {/* 拖入文件的放置提示: 盖满输入卡, 不拦截事件 (放置由 Tauri 原生事件接收, 与 DOM 无关) */}
+        {dragOver && (
+          <div className="composer-drop">
+            <FilePlus2 className="h-5 w-5" />
+            <span>松开以添加为引用</span>
+          </div>
+        )}
         {/* 排队条: 队列非空时贴卡片上沿显示 (原 StageHead 头部徽标迁入) */}
         <QueueIndicator steering={active?.steeringQueue ?? []} followUp={active?.followUpQueue ?? []} />
         <div className="px-4 pt-3">
@@ -670,6 +777,7 @@ export function InputBar({
           onKeyDown={handleKey}
           onKeyUp={handleKeyUp}
           onMouseUp={handleCursorMove}
+          onPaste={handlePaste}
           placeholder={isStreaming ? "运行中: Enter 发 steer 指导, Alt+Enter 排队后续" : "输入消息, Enter 发送 (@ 引用文件/技能, / 命令)"}
           rows={2}
           className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-body text-fg outline-none placeholder:text-fg-4"
@@ -722,7 +830,7 @@ export function InputBar({
               <button
                 onClick={() => setCtxOpen(!ctxOpen)}
                 className="composer-opt-chip flex h-[30px] items-center gap-[6px] rounded-md px-2 text-label text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg"
-                title="添加引用 (@ 也可触发)"
+                title="添加引用 (@ 也可触发, 图片和文件可直接粘贴或拖入)"
               >
                 <Paperclip className="h-[14px] w-[14px] shrink-0 text-fg-4" />
                 <span className="composer-opt-label">引用</span>
@@ -799,7 +907,7 @@ export function InputBar({
             ) : (
               <button
                 onClick={() => handleSend("prompt")}
-                disabled={!text.trim()}
+                disabled={!text.trim() && refs.length === 0}
                 className="composer-send"
                 title="发送"
               >

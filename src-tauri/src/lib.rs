@@ -1,3 +1,4 @@
+mod attach;
 mod capture;
 mod behavior_stats;
 mod pi_runtime;
@@ -506,6 +507,7 @@ pub fn run() {
             git::git_status, git::git_diff, git::git_branches, git::git_log, git::git_show,
             git::git_stage, git::git_unstage, git::git_commit, git::git_checkout,
             capture::capture_screenshot,
+            attach::read_clipboard_attachments, attach::resolve_attachment_paths,
             token_stats::get_token_stats,
             behavior_stats::get_behavior_stats, behavior_stats::get_session_behavior,
             skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
