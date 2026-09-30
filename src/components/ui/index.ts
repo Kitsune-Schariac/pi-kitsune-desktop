@@ -8,3 +8,5 @@ export { Input, Textarea, FieldLabel } from "./Input";
 export type { FieldSurface, FieldSize } from "./Input";
 export { Select } from "./Select";
 export type { SelectDensity } from "./Select";
+export { Segmented } from "./Segmented";
+export type { SegmentedSize, SegmentedOption } from "./Segmented";

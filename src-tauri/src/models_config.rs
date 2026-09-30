@@ -7,8 +7,8 @@
 //! 损坏而非边缘情况。因此全链路以 `serde_json::Value` 承载文档: 读 = 解析成 Value 交给
 //! 前端; 写 = 收 Value → 结构校验 → 原子写回。仅命令的返回值定义 struct
 //! (Snapshot / WriteResult), 文档内容本身绝不进强类型。
-//! (注: serde_json 默认 Map 是键序 BTreeMap, 写回时键会按字典序归一 —— 但键与值一个
-//! 不少, pi 不依赖键序, 字段保真才是契约)
+//! (注: serde_json 开了 preserve_order, 写回按前端对象的键序; pi 不依赖键序, 字段保真
+//! 才是契约)
 //!
 //! ## 为什么只暴露读/写两个数据命令
 //! 保真约束要求整份文档来回传, 细粒度命令 (add_provider / update_model / ...) 只会把
@@ -205,6 +205,14 @@ fn validate_models_doc(v: &Value) -> Result<(), String> {
                 return Err(format!("provider {pid:?} 的 api 值非法: {api}"));
             }
         }
+        // pi schema 是 Type.Boolean() (开 = 额外发 Authorization: Bearer <key>)。旧版面板把它当
+        // 字符串输入框写, 写进字符串会让 pi 加载 models.json 整体失败, 这里挡住
+        if let Some(ah) = pobj.get("authHeader") {
+            if !ah.is_boolean() {
+                return Err(format!("provider {pid:?} 的 authHeader 必须是布尔值 (true / 删除该键): {ah}"));
+            }
+        }
+        validate_headers(pobj.get("headers"), &format!("provider {pid:?}"))?;
         if let Some(models) = pobj.get("models") {
             let Some(arr) = models.as_array() else {
                 return Err(format!("provider {pid:?} 的 models 必须是数组"));
@@ -228,6 +236,7 @@ fn validate_models_doc(v: &Value) -> Result<(), String> {
                     }
                 }
                 validate_model_numbers(pid, mid, mobj)?;
+                validate_headers(mobj.get("headers"), &format!("provider {pid:?} 下模型 {mid:?}"))?;
             }
         }
         // 只覆盖内置模型个别字段, 不替换模型列表; 值必须是对象 (与 models[] 语义不同)
@@ -236,11 +245,12 @@ fn validate_models_doc(v: &Value) -> Result<(), String> {
                 return Err(format!("provider {pid:?} 的 modelOverrides 必须是对象"));
             };
             for (mid, mv) in ovobj {
-                if !mv.is_object() {
+                let Some(mvobj) = mv.as_object() else {
                     return Err(format!(
                         "provider {pid:?} 的 modelOverrides[{mid:?}] 必须是对象"
                     ));
-                }
+                };
+                validate_headers(mvobj.get("headers"), &format!("provider {pid:?} 的 modelOverrides[{mid:?}]"))?;
             }
         }
     }
@@ -312,6 +322,20 @@ fn validate_model_numbers(
                     ));
                 }
             }
+        }
+    }
+    Ok(())
+}
+
+/// headers 在 pi schema 里是 Record<string, string>: 值写成数字 / 对象同样让 pi 加载失败
+fn validate_headers(headers: Option<&Value>, at: &str) -> Result<(), String> {
+    let Some(h) = headers else { return Ok(()) };
+    let Some(hobj) = h.as_object() else {
+        return Err(format!("{at} 的 headers 必须是对象: {h}"));
+    };
+    for (k, v) in hobj {
+        if !v.is_string() {
+            return Err(format!("{at} 的 headers[{k:?}] 必须是字符串: {v}"));
         }
     }
     Ok(())
@@ -482,6 +506,46 @@ mod tests {
         let bad = json!({ "providers": { "p": { "models": [{ "id": "m",
             "cost": { "tiers": {} } }] } } });
         assert!(validate_models_doc(&bad).unwrap_err().contains("tiers"));
+    }
+
+    /// authHeader 只接受布尔 (旧面板写字符串会让 pi 起不来); headers 三处 (provider / 模型 /
+    /// modelOverrides) 都必须是字符串映射。错误要带定位, 用户才知道去改哪一项
+    #[test]
+    fn validation_checks_auth_header_and_headers() {
+        let cases: Vec<(Value, &str)> = vec![
+            (json!({ "providers": { "p": { "authHeader": "Bearer x" } } }), "authHeader 必须是布尔"),
+            (json!({ "providers": { "p": { "authHeader": 1 } } }), "authHeader"),
+            (json!({ "providers": { "p": { "headers": ["x"] } } }), "provider \"p\" 的 headers 必须是对象"),
+            (json!({ "providers": { "p": { "headers": { "X-A": 1 } } } }), "headers[\"X-A\"] 必须是字符串"),
+            (json!({ "providers": { "p": { "models": [{ "id": "m", "headers": { "X-B": true } }] } } }), "模型 \"m\" 的 headers[\"X-B\"]"),
+            (json!({ "providers": { "p": { "modelOverrides": { "m": { "headers": "x" } } } } }), "modelOverrides[\"m\"] 的 headers"),
+        ];
+        for (doc, frag) in cases {
+            let err = validate_models_doc(&doc).unwrap_err();
+            assert!(err.contains(frag), "期望错误含 {frag:?}, 实际: {err}");
+        }
+        let healthy = json!({ "providers": { "p": {
+            "authHeader": true,
+            "headers": { "X-A": "$TOKEN", "X-B": "literal" },
+            "models": [{ "id": "m", "headers": { "X-C": "c" } }],
+            "modelOverrides": { "m2": { "headers": {} } }
+        }, "q": { "authHeader": false } } });
+        validate_models_doc(&healthy).unwrap();
+    }
+
+    /// preserve_order: 写回保持文档键序 (不是字母序), 用户手工排的 provider 顺序不被打乱
+    #[test]
+    fn write_preserves_key_order() {
+        let dir = temp_dir("key_order");
+        let path = dir.join("models.json");
+        let text = r#"{"providers":{"zeta":{"baseUrl":"http://z","api":"openai-completions"},"alpha":{"api":"openai-completions"}}}"#;
+        std::fs::write(&path, text).unwrap();
+        let snap = read_snapshot(&path).unwrap();
+        write_document(&path, snap.raw.as_ref().unwrap(), snap.mtime_ms).unwrap();
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert!(saved.find("zeta").unwrap() < saved.find("alpha").unwrap(), "provider 顺序被重排: {saved}");
+        assert!(saved.find("baseUrl").unwrap() < saved.find("\"api\"").unwrap(), "字段顺序被重排: {saved}");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// 备份 + 原子写: .bak 等于写前内容, 新文件可重新解析且等于写后内容, 无临时文件残留

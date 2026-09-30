@@ -18,7 +18,7 @@ const NAV_ITEMS: { key: TabKey; icon: LucideIcon; title: string; desc: string }[
   { key: "pet", icon: Cat, title: "桌宠", desc: "桌面宠物开关 / 角色 / 大小" },
   { key: "stats", icon: BarChart3, title: "Token 统计", desc: "用量与成本分布" },
   { key: "behavior", icon: Activity, title: "行为统计", desc: "轮次 / 工具 / 思考占比" },
-  { key: "models", icon: Boxes, title: "模型与供应商", desc: "models.json 的 provider 与模型" },
+  { key: "models", icon: Boxes, title: "模型与供应商", desc: "供应商 / 模型 / 新会话默认" },
 ];
 
 // 设置视图: 覆盖整个窗口的全屏界面 (不是浮在会话上的弹窗)
@@ -48,10 +48,12 @@ export function SettingsWindow({
 
   return (
     <div data-overlay className="setwin absolute inset-0 z-50 flex view-in">
-      {/* 侧栏: 工坊 = 贴边列 (pane 底); 舞台 = 左上浮卡 (index.css 按 data-style 分支) */}
-      <aside className="setwin-nav flex w-60 shrink-0 flex-col">
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--line)] px-5">
-          <span className="text-title font-semibold text-[var(--fg)]">设置</span>
+      {/* 侧栏: 工坊 = 贴边列 (pane 底); 舞台 = 左上浮卡 (index.css 按 data-style 分支)。
+          窗口 < 1280 (xl 断点) 收成 64px 图标栏: 默认 1200 宽窗口里 240px 导航会把各页内容区
+          挤到放不下三栏 (模型页) / 双列 (统计页), 说明文字靠 title 提示 */}
+      <aside className="setwin-nav flex w-16 shrink-0 flex-col xl:w-60">
+        <div className="flex h-14 shrink-0 items-center justify-center border-b border-[var(--line)] xl:justify-between xl:px-5">
+          <span className="hidden text-title font-semibold text-[var(--fg)] xl:inline">设置</span>
           <button
             onClick={onClose}
             className="grid h-7 w-7 place-items-center rounded-md text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
@@ -68,17 +70,17 @@ export function SettingsWindow({
                 key={key}
                 onClick={() => setTab(key)}
                 aria-current={active ? "page" : undefined}
-                className={`setwin-navitem flex w-full items-start gap-2 rounded-md px-3 py-2 text-left transition duration-fast ease-out ${
+                className={`setwin-navitem flex w-full items-start justify-center gap-2 rounded-md px-3 py-2 text-left transition duration-fast ease-out xl:justify-start ${
                   active ? "on" : ""
                 }`}
-                title={desc}
+                title={`${title} · ${desc}`}
               >
                 <Icon
                   className={`mt-1 h-4 w-4 shrink-0 ${
                     active ? "text-[var(--accent)]" : "text-[var(--fg-4)]"
                   }`}
                 />
-                <span className="min-w-0">
+                <span className="hidden min-w-0 xl:block">
                   <span
                     className={`block truncate text-title ${
                       active ? "font-semibold text-[var(--fg)]" : "text-[var(--fg-2)]"
@@ -99,7 +101,7 @@ export function SettingsWindow({
           })}
         </nav>
         {/* 底部版本行 (改版稿 setwin-ver) */}
-        <div className="shrink-0 border-t border-[var(--line)] px-5 py-3 font-mono text-micro text-[var(--fg-4)]">
+        <div className="hidden shrink-0 border-t border-[var(--line)] px-5 py-3 font-mono text-micro text-[var(--fg-4)] xl:block">
           Pi Kitsune · 设置
         </div>
       </aside>

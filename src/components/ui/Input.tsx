@@ -1,6 +1,7 @@
 import type {
   InputHTMLAttributes,
   ReactNode,
+  Ref,
   TextareaHTMLAttributes,
 } from "react";
 
@@ -45,6 +46,8 @@ export function Input({
   className = "",
   ...rest
 }: InputHTMLAttributes<HTMLInputElement> & {
+  /** React 19 起 ref 是普通 prop, 随 rest 透传到 input (需要程序化聚焦的调用方用) */
+  ref?: Ref<HTMLInputElement>;
   surface?: FieldSurface;
   /** 控件密度 (避开原生 input 的 size 属性名): md = 常规, sm = 行内紧凑 */
   density?: FieldSize;

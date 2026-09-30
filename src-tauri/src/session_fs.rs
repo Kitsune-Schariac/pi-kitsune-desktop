@@ -22,11 +22,26 @@ pub struct SessionInfo {
     pub mtime_ms: Option<u64>, // 文件最后修改时间 (毫秒); 元数据不可得时为 None
 }
 
+/// pi 配置目录。必须与 spawn 出来的 pi 同源: pi 认 `PI_CODING_AGENT_DIR` 覆盖默认目录
+/// (pi config.js getAgentDir), 桌面端写死 `~/.pi/agent` 的话, 设了这个变量时面板改的
+/// models.json 与会话实际加载的不是同一份。
 pub(crate) fn agent_dir() -> Result<PathBuf, String> {
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .map_err(|_| "无法确定用户主目录".to_string())?;
-    Ok(PathBuf::from(home).join(".pi").join("agent"))
+    Ok(resolve_agent_dir(std::env::var("PI_CODING_AGENT_DIR").ok(), &home))
+}
+
+/// 对齐 pi: 变量为空串等同未设置 (JS 里空串为假); 前导 `~` 展开为主目录
+fn resolve_agent_dir(env_dir: Option<String>, home: &str) -> PathBuf {
+    match env_dir.as_deref() {
+        Some("") | None => PathBuf::from(home).join(".pi").join("agent"),
+        Some("~") => PathBuf::from(home),
+        Some(dir) => match dir.strip_prefix("~/").or_else(|| dir.strip_prefix("~\\")) {
+            Some(rest) => PathBuf::from(home).join(rest),
+            None => PathBuf::from(dir),
+        },
+    }
 }
 
 /// sessions 根目录 (canonicalize 失败时回退原始路径, 供路径越界校验用)
@@ -632,6 +647,19 @@ mod tests {
         let err = ensure_within_sessions(&outside).unwrap_err();
         assert!(err.contains("拒绝"), "错误信息应说明拒绝读取: {err}");
         std::fs::remove_file(&outside).ok();
+    }
+
+    /// 配置目录解析: 未设置 / 空串回退默认, 绝对路径原样, 前导 ~ 展开 (直接传值, 不改进程环境)
+    #[test]
+    fn resolves_agent_dir_like_pi() {
+        let home = r"C:\Users\u";
+        let default = PathBuf::from(home).join(".pi").join("agent");
+        assert_eq!(resolve_agent_dir(None, home), default);
+        assert_eq!(resolve_agent_dir(Some(String::new()), home), default);
+        assert_eq!(resolve_agent_dir(Some(r"D:\sandbox\agent".into()), home), PathBuf::from(r"D:\sandbox\agent"));
+        assert_eq!(resolve_agent_dir(Some("~".into()), home), PathBuf::from(home));
+        assert_eq!(resolve_agent_dir(Some("~/pi-alt".into()), home), PathBuf::from(home).join("pi-alt"));
+        assert_eq!(resolve_agent_dir(Some(r"~\pi-alt".into()), home), PathBuf::from(home).join("pi-alt"));
     }
 
     /// 文件不存在 → 明确错误
