@@ -6,7 +6,9 @@ mod search;
 mod git;
 mod models_config;
 mod pets;
+mod provider_probe;
 mod session_fs;
+mod settings_config;
 mod skins;
 mod subagent_fleet;
 mod token_stats;
@@ -201,7 +203,7 @@ async fn close_pet_window(app: tauri::AppHandle) -> Result<(), String> {
 
 // --- 模型配置保存后的预热槽废弃 ---
 
-/// 废弃 warm 预热槽: pi 只在启动时读 models.json, 已就绪的预热槽里是旧配置的进程,
+/// 废弃 warm 预热槽: pi 只在启动时读 models.json / settings.json, 已就绪的预热槽里是旧配置的进程,
 /// 直接弃掉让下一个新建会话重新 spawn。已运行会话不受影响 (UI 侧提示重启)
 #[tauri::command]
 async fn discard_warm_runtime(state: State<'_, SharedRuntime>) -> Result<(), String> {
@@ -516,6 +518,8 @@ pub fn run() {
             subagent_fleet::list_fleet_runs, subagent_fleet::read_fleet_run_detail,
             trellis_tasks::list_trellis_tasks, trellis_tasks::read_trellis_task_doc,
             models_config::read_models_config, models_config::write_models_config,
+            settings_config::read_session_defaults, settings_config::write_session_defaults,
+            provider_probe::probe_provider_models,
             discard_warm_runtime, app_version,
         ])
         .on_window_event(|window, event| {
