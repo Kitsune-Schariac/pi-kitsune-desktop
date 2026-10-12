@@ -667,6 +667,54 @@ html:has([data-pet]) #root {
   animation: tl-spine 1.8s linear infinite;
   box-shadow: 0 0 10px color-mix(in oklch, var(--accent) 50%, transparent);
 }
+
+/* ---- 一键复制 (回复 / 提问 / 代码块共用 .copy-btn) ----
+   平时隐藏, hover 所在块才显: 用 opacity 不用 display, 显隐不引起布局跳动 */
+.copy-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--fg-4);
+  cursor: pointer;
+  transition: color 0.15s var(--ease), background-color 0.15s var(--ease), opacity 0.15s var(--ease);
+}
+.copy-btn:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+.copy-btn.done {
+  color: var(--ok);
+}
+.tl-copy {
+  opacity: 0;
+}
+.tl-prompt:hover .tl-copy,
+.tl-reply-wrap:hover .tl-copy,
+.tl-copy:focus-visible,
+.tl-copy.done {
+  opacity: 1;
+}
+/* 「你」与复制钮同一行; 舞台下 meta 在气泡右上方, 钮跟在「你」左侧 */
+.tl-prompt-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+}
+[data-style="stage"] .tl-prompt-meta {
+  flex-direction: row-reverse;
+}
+.tl-prompt-meta .copy-btn {
+  width: 20px;
+  height: 20px;
+}
+.tl-actions {
+  display: flex;
+  margin-top: 4px;
+  margin-left: -4px;
+}
 @keyframes tl-spine {
   from { background-position: 0 100%; }
   to { background-position: 0 -140%; }
@@ -1888,6 +1936,49 @@ html:has([data-pet]) #root {
   color: inherit;
 }
 
+/* 代码块复制钮: 右上角浮出, 底色垫一层 --well 防止压在代码上看不清 */
+.markdown-body .md-code {
+  position: relative;
+}
+.markdown-body .md-code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  background: var(--well);
+}
+.markdown-body .md-code:hover .md-code-copy,
+.markdown-body .md-code-copy:focus-visible,
+.markdown-body .md-code-copy.done {
+  opacity: 1;
+}
+
+/* 可点击的本地路径: 正文路径走链接色; 行内代码路径保持代码外观, hover 加虚下划线提示可点 */
+.markdown-body .md-path {
+  color: var(--accent);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.markdown-body .md-path:hover {
+  text-decoration: underline;
+}
+.markdown-body .md-path-code {
+  color: inherit;
+}
+.markdown-body .md-path-code:hover {
+  text-decoration: none;
+}
+.markdown-body .md-path-code code {
+  cursor: pointer;
+  text-decoration: underline dotted color-mix(in oklch, var(--accent-2) 55%, transparent);
+  text-underline-offset: 3px;
+  transition: border-color 0.15s var(--ease), background-color 0.15s var(--ease);
+}
+.markdown-body .md-path-code:hover code {
+  border-color: var(--accent-2);
+  text-decoration-style: solid;
+}
+
 /* 行内代码 */
 .markdown-body code {
   padding: 0.15em 0.4em;
@@ -2105,4 +2196,215 @@ input[type="range"]:disabled::-webkit-slider-thumb {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---- 程序内文件查看器 (FileViewer) ----
+   行号列 sticky 贴左: 横向滚长行时行号不跟着滚走; 底色与卡片同为 --popover 盖住代码 */
+.fv-code {
+  display: table;
+  min-width: 100%;
+  padding: 8px 0;
+  font-family: var(--f-mono);
+  font-size: var(--fs-label);
+  line-height: 20px;
+  color: var(--fg);
+}
+.fv-line {
+  display: table-row;
+}
+.fv-line.hit {
+  background: var(--accent-soft);
+}
+.fv-ln {
+  display: table-cell;
+  position: sticky;
+  left: 0;
+  min-width: 56px;
+  padding: 0 12px 0 16px;
+  text-align: right;
+  color: var(--fg-4);
+  background: var(--popover);
+  user-select: none;
+}
+.fv-line.hit .fv-ln {
+  color: var(--accent);
+  /* accent-soft 半透明, sticky 列必须不透明才盖得住横滚的代码: 叠在 --popover 上 */
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--popover);
+}
+.fv-text {
+  display: table-cell;
+  /* 代码列吃满剩余宽度: 否则 table 把多余宽度平摊, 行号列被撑出一大片空白 */
+  width: 100%;
+  padding-right: 24px;
+  white-space: pre;
+}
+
+/* ---- 皮肤骨架预览 (设置 · 主题, ThemePanel SkinSkeleton) ----
+   .sk 自带 data-style / data-base, 内部颜色全走 token, 由皮肤 colors 覆盖;
+   只用色块不出文字。class 全部 sk- 前缀, 不被 [data-style] .xxx 的全局分支误伤;
+   反过来, 本块的风格分支必须写成 .sk[data-style] —— 裸 [data-style="atelier"] .sk-x 会匹配到
+   <html> 祖先, 当前皮肤是工坊时舞台预览也会长出工坊菱形 */
+.sk {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+[data-style="stage"].sk {
+  background: var(--scrim-color);
+}
+.sk-wall,
+.sk-scrim {
+  position: absolute;
+  inset: 0;
+}
+.sk-wall {
+  background-position: center;
+  background-size: cover;
+}
+.sk-scrim {
+  background: color-mix(in oklch, var(--scrim-color) 72%, transparent);
+}
+.sk[data-base="light"] > .sk-scrim {
+  background: color-mix(in oklch, var(--scrim-color) 36%, transparent);
+}
+.sk > :not(.sk-wall, .sk-scrim) {
+  position: relative;
+}
+.sk i {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fg-4);
+  opacity: 0.55;
+}
+.sk .w-50 { width: 50%; }
+.sk .w-60 { width: 60%; }
+.sk .w-70 { width: 70%; }
+.sk .w-75 { width: 75%; }
+.sk .w-85 { width: 85%; }
+.sk .w-90 { width: 90%; }
+
+.sk-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 20px;
+  padding-top: 10px;
+  background: var(--rail);
+  border-right: 1px solid var(--line);
+}
+.sk-rail i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.sk-rail i.on {
+  background: var(--accent);
+  opacity: 1;
+}
+
+.sk-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 26%;
+  padding: 10px 8px;
+  background: var(--pane);
+  border-right: 1px solid var(--line);
+}
+.sk-pane i.on {
+  position: relative;
+  background: var(--fg-2);
+  opacity: 0.9;
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.sk-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px 0 22px;
+}
+/* 工坊: 左侧脊线 + 菱形, 提问是一条粗标题线 */
+.sk[data-style="atelier"] > .sk-main::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 12px;
+  bottom: 30px;
+  width: 1px;
+  background: var(--line-2);
+}
+.sk[data-style="atelier"] .sk-prompt {
+  position: relative;
+  width: 62%;
+  height: 7px;
+  margin-bottom: 4px;
+  border-radius: 2px;
+  background: var(--fg);
+  opacity: 0.85;
+}
+.sk[data-style="atelier"] .sk-prompt::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  transform: rotate(45deg);
+}
+/* 舞台: 提问是右对齐 accent 气泡 */
+.sk[data-style="stage"] > .sk-main {
+  padding-left: 14px;
+}
+.sk[data-style="stage"] .sk-prompt {
+  align-self: flex-end;
+  width: 46%;
+  height: 14px;
+  margin-bottom: 4px;
+  border-radius: 7px 7px 2px 7px;
+  background: color-mix(in oklch, var(--accent) 26%, var(--raise));
+  border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
+}
+.sk-main i {
+  background: var(--fg-2);
+  opacity: 0.5;
+}
+.sk-codeblock {
+  height: 16px;
+  margin-top: 2px;
+  border-radius: 3px;
+  background: var(--well);
+  border: 1px solid var(--line);
+}
+.sk-input {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 18px;
+  margin-top: auto;
+  margin-bottom: 8px;
+  padding: 0 3px;
+  border-radius: 5px;
+  background: var(--raise);
+  border: 1px solid var(--line-2);
+}
+.sk[data-style="stage"] .sk-input {
+  border-radius: 9px;
+}
+.sk-input span {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+.sk[data-style="stage"] .sk-input span {
+  border-radius: 6px;
 }

@@ -14,7 +14,6 @@ export interface SkinMeta {
   colors: Record<string, string>;
   has_bg: boolean;
   has_override: boolean;
-  preview_data_uri?: string;
 }
 
 // localStorage 键: 与现有 kitsune.projectOrder 同前缀, 不冲突

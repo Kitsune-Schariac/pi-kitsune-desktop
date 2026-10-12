@@ -1,5 +1,6 @@
 // 皮肤注册器: 扫描内置 resources/skins/ (只读, 随应用分发) + 用户 ~/.pi-kitsune/skins/ (可写)
-// 皮肤包 = 一个目录: skin.json (元数据 + 色阶 + 背景图引用) + 可选 bg.png / preview.png / override.css
+// 皮肤包 = 一个目录: skin.json (元数据 + 色阶 + 背景图引用) + 可选 bg.png / override.css
+// 预览不再读 preview 图 (内置截图含真实会话数据): 前端按 colors 画骨架, 壁纸皮肤另取 thumb 缩略图垫底
 // 契约与前端 ThemeStore 对齐, 见 .trellis/tasks/08-10-theme-skin-system/design.md
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde::{Deserialize, Serialize};
@@ -9,7 +10,7 @@ use std::sync::{Mutex, OnceLock};
 use tauri::Manager;
 use tauri_plugin_opener::OpenerExt;
 
-/// 皮肤元数据 (list_skins 返回给前端; preview 小图随列表走, 背景大图走 get_skin_asset)
+/// 皮肤元数据 (list_skins 返回给前端; 背景大图与缩略图走 get_skin_asset)
 #[derive(Serialize, Clone)]
 pub struct SkinMeta {
     pub id: String,
@@ -23,8 +24,6 @@ pub struct SkinMeta {
     pub colors: HashMap<String, String>,
     pub has_bg: bool,
     pub has_override: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub preview_data_uri: Option<String>,
     pub bubble: bool,
 }
 
@@ -42,8 +41,6 @@ struct SkinConfig {
     colors: HashMap<String, String>,
     #[serde(default)]
     background: Option<String>,
-    #[serde(default)]
-    preview: Option<String>,
     #[serde(default, rename = "override")]
     override_css: Option<String>,
     /// 皮肤推荐的气泡框开关 (用户未手动改过时生效)
@@ -106,10 +103,6 @@ fn parse_skin(dir: &Path) -> Option<SkinMeta> {
         .into_iter()
         .map(|(k, v)| (k, normalize_color(&v)))
         .collect();
-    let preview_data_uri = cfg.preview.as_ref().and_then(|name| {
-        let data = std::fs::read(dir.join(name)).ok()?;
-        Some(format!("data:{};base64,{}", mime_for(name), BASE64.encode(data)))
-    });
     Some(SkinMeta {
         id: cfg.id,
         name: cfg.name,
@@ -119,7 +112,6 @@ fn parse_skin(dir: &Path) -> Option<SkinMeta> {
         colors,
         has_bg: cfg.background.as_ref().is_some_and(|n| dir.join(n).exists()),
         has_override: cfg.override_css.as_ref().is_some_and(|n| dir.join(n).exists()),
-        preview_data_uri,
         bubble: cfg.bubble,
     })
 }
@@ -161,7 +153,7 @@ fn asset_cache() -> &'static Mutex<HashMap<(String, String), String>> {
     ASSET_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// 取皮肤资源: asset_name = "bg" (→ data URI) | "override" (→ css 原文)
+/// 取皮肤资源: asset_name = "bg" (→ data URI) | "thumb" (→ 480x300 内 JPEG 缩略图 data URI) | "override" (→ css 原文)
 #[tauri::command]
 pub fn get_skin_asset(app: tauri::AppHandle, skin_id: String, asset_name: String) -> Result<String, String> {
     let key = (skin_id.clone(), asset_name.clone());
@@ -176,6 +168,18 @@ pub fn get_skin_asset(app: tauri::AppHandle, skin_id: String, asset_name: String
             let data =
                 std::fs::read(dir.join(&file)).map_err(|e| format!("读取背景图失败: {e}"))?;
             format!("data:{};base64,{}", mime_for(&file), BASE64.encode(data))
+        }
+        // 主题页骨架预览的壁纸底: 不放进 list_skins —— 那里启动即调用, 解码几张大图会拖慢启动
+        "thumb" => {
+            let file = cfg.background.ok_or("皮肤未定义背景图")?;
+            let img = image::open(dir.join(&file)).map_err(|e| format!("解码背景图失败: {e}"))?;
+            // JPEG 不支持 alpha, 透明 PNG 壁纸先转 RGB
+            let thumb = image::DynamicImage::ImageRgb8(img.thumbnail(480, 300).to_rgb8());
+            let mut jpg = Vec::new();
+            thumb
+                .write_with_encoder(image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpg, 80))
+                .map_err(|e| format!("缩略图编码失败: {e}"))?;
+            format!("data:image/jpeg;base64,{}", BASE64.encode(jpg))
         }
         "override" => {
             let file = cfg.override_css.ok_or("皮肤未定义 override.css")?;

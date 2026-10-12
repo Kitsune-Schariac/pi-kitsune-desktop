@@ -15,6 +15,7 @@ import { SettingsWindow, type SettingsSection } from "./components/settings/Sett
 import { SkillsPanel } from "./components/panels/SkillsPanel";
 import { PackagesPanel } from "./components/panels/PackagesPanel";
 import { NotificationToasts, UiRequestModal } from "./components/UiRequestModal";
+import { FileViewer } from "./components/FileViewer";
 import { useThemeStore } from "./store/theme";
 import { usePetStore } from "./store/pet";
 import { useGitStore } from "./store/git";
@@ -164,6 +165,9 @@ export default function App() {
             onCancel={(id) => resolveUiRequest(activeSessionId!, id, { cancelled: true })}
           />
         )}
+
+        {/* 程序内文件查看器: 会话里点开的文本文件, 由 ui.viewer 驱动 */}
+        <FileViewer />
 
         {/* 设置: 独立模态窗口 (与抽屉并存, 不冲突); initialSection 供 Rail 快捷入口定位 */}
         {panel === "settings" && (
