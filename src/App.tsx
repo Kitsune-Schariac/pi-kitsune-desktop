@@ -10,7 +10,6 @@ import { Rail } from "./components/shell/Rail";
 import { SessionPane } from "./components/shell/SessionPane";
 import { StageHead } from "./components/shell/StageHead";
 import { Inspector } from "./components/shell/Inspector";
-import { StageBackdrop } from "./components/shell/StageBackdrop";
 import { SettingsWindow, type SettingsSection } from "./components/settings/SettingsWindow";
 import { SkillsPanel } from "./components/panels/SkillsPanel";
 import { PackagesPanel } from "./components/panels/PackagesPanel";
@@ -46,9 +45,6 @@ export default function App() {
   });
   const loadGitStatus = useGitStore((s) => s.loadStatus);
   const loadTrellisTasks = useTrellisTasksStore((s) => s.load);
-  // 风格 (壁纸皮肤 = 舞台) 是检查器初值的依据; 主题未就绪前不动 (避免启动时闪一下再收起)
-  const activeHasBg = useThemeStore((s) => s.activeHasBg);
-  const themeReady = useThemeStore((s) => s.skins.length > 0);
 
   // 浮层路由: 抽屉 (Skill/Package) 与设置窗共用单一 state; 设置窗记目标分区 (Rail 快捷入口)
   const [panel, setPanel] = useState<PanelKind>(null);
@@ -71,11 +67,6 @@ export default function App() {
   useEffect(() => {
     void useFleetStore.getState().refresh();
   }, []);
-
-  // 检查器开合随风格初始化 (不持久化): 工坊展开常驻一列, 舞台收起把右侧让给角色
-  useEffect(() => {
-    if (themeReady) setInspectorOpen(!activeHasBg);
-  }, [themeReady, activeHasBg, setInspectorOpen]);
 
   // 切会话清空检查器选中步 (选中 id 是 ChatEntry.id, 跨会话无意义)
   useEffect(() => {
@@ -111,17 +102,14 @@ export default function App() {
 
   return (
     <>
-      {/* 舞台背景层: 仅壁纸皮肤渲染, fixed 铺满, 由 #app-root 的 z-10 压在上层之下 */}
-      <StageBackdrop />
       <div id="app-root" className="fixed inset-0 z-10 flex flex-col overflow-hidden text-fg">
         {/* 自绘标题栏: 拖拽区 + 品牌 + 窗口控制 */}
         <TitleBar />
-        {/* 内容行 (框架 C): 图标轨 | 会话列表 | 舞台 | 检查器。
-            relative: 供舞台风格下检查器浮卡定位 */}
+        {/* 内容行 (框架 C): 图标轨 | 会话列表 | 主区 | 检查器 */}
         <div className="relative flex min-h-0 flex-1">
           <Rail onOpenPanel={setPanel} onOpenSettings={openSettings} />
           <SessionPane />
-          {/* 舞台: 主区底用 --bg (舞台下 transparent, 由背景层提供壁纸) */}
+          {/* 主区: 底色用 --bg */}
           <main className="relative flex min-w-0 flex-1 flex-col bg-[var(--bg)]">
             {isSwitching ? (
               <div className="flex flex-1 items-center justify-center">

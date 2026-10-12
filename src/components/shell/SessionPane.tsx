@@ -102,7 +102,7 @@ export function SessionPane() {
           </button>
         </div>
 
-        {/* 最近 / 项目分段: 形态由 index.css 按 data-style 分支 (工坊下划线页签 / 舞台胶囊) */}
+        {/* 最近 / 项目分段: 下划线页签 (index.css .sess-seg) */}
         <div className="sess-seg" role="tablist">
           {LIST_MODES.map(({ key, label }) => (
             <button

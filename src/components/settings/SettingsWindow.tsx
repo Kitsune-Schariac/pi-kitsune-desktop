@@ -14,7 +14,7 @@ export type SettingsSection = TabKey;
 // 导航项结构一致, 用数组 map 渲染; 描述文案同时用于侧栏第二行与内容区 header
 // 图标与文案对齐改版稿设置导航 (setwin-nav-item); 页签大标题走 --fs-head 17px 档
 const NAV_ITEMS: { key: TabKey; icon: LucideIcon; title: string; desc: string }[] = [
-  { key: "theme", icon: Palette, title: "主题", desc: "皮肤 / 风格 / 暗幕浓度" },
+  { key: "theme", icon: Palette, title: "主题", desc: "配色 / 亮暗 / 自定义皮肤" },
   { key: "pet", icon: Cat, title: "桌宠", desc: "桌面宠物开关 / 角色 / 大小" },
   { key: "stats", icon: BarChart3, title: "Token 统计", desc: "用量与成本分布" },
   { key: "behavior", icon: Activity, title: "行为统计", desc: "轮次 / 工具 / 思考占比" },
@@ -48,7 +48,7 @@ export function SettingsWindow({
 
   return (
     <div data-overlay className="setwin absolute inset-0 z-50 flex view-in">
-      {/* 侧栏: 工坊 = 贴边列 (pane 底); 舞台 = 左上浮卡 (index.css 按 data-style 分支)。
+      {/* 侧栏: 贴边列 (pane 底)。
           窗口 < 1280 (xl 断点) 收成 64px 图标栏: 默认 1200 宽窗口里 240px 导航会把各页内容区
           挤到放不下三栏 (模型页) / 双列 (统计页), 说明文字靠 title 提示 */}
       <aside className="setwin-nav flex w-16 shrink-0 flex-col xl:w-60">
@@ -106,8 +106,7 @@ export function SettingsWindow({
         </div>
       </aside>
 
-      {/* 内容区: 工坊 = --bg; 舞台 = --raise 实底卡 —— 舞台 --bg 透明, 表单与长文本
-          必须靠实底托住可读性 (index.css .setwin-main 按 data-style 分支) */}
+      {/* 内容区: --bg 底 */}
       <div className="setwin-main flex min-w-0 flex-1 flex-col">
         {/* 页头: 大标题 head 档 + desc; 唯一大标题 (面板内不再自带 h2) */}
         <header className="flex h-16 shrink-0 flex-col justify-center gap-1 border-b border-[var(--line)] px-6">

@@ -151,7 +151,7 @@ function SessionRow({
       {/* 右侧状态位: 常驻占位保布局稳定, hover 时淡出让位给删除钮 */}
       <span className="flex shrink-0 items-center justify-center pl-1 transition-opacity duration-fast ease-out group-hover:opacity-0">
         {right === "spinner" ? (
-          // 运行中符号: 工坊狐火 / 舞台刻印环 (index.css 按 data-style 分支, 替代转圈图标)
+          // 运行中符号: 狐火 (替代转圈图标)
           <span className="flame" aria-hidden />
         ) : right === "dot" ? (
           <span className="h-[5.5px] w-[5.5px] rounded-full bg-[var(--accent)] shadow-[0_0_5px_color-mix(in_oklch,var(--accent)_55%,transparent)]" />

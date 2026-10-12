@@ -661,7 +661,7 @@ export function InputBar({
   const cacheHitRate = cacheHit(turnStats, active?.tokenStats ?? null);
 
   return (
-    // 悬浮输入卡容器: 定位与渐隐 (工坊居中 / 舞台贴文字列) 由 .composer-wrap 按风格分支承担
+    // 悬浮输入卡容器: 居中定位与渐隐由 .composer-wrap 承担
     <div className="composer-wrap">
       <div ref={cardRef} className="composer" data-drop={dragOver || undefined}>
         {/* 拖入文件的放置提示: 盖满输入卡, 不拦截事件 (放置由 Tauri 原生事件接收, 与 DOM 无关) */}

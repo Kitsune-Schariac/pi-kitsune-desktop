@@ -46,7 +46,7 @@
   --warn: oklch(75% 0.15 75);
 
   /* 旧阴影三档: tailwind shadow-sm/md/lg 映射到它们, 存量组件 (StageHead 菜单 /
-     设置窗各分区 / Git 面板) 仍在使用; 新组件浮起用各风格的 --shadow (见下方四组 token) */
+     设置窗各分区 / Git 面板) 仍在使用; 新组件浮起用 --shadow (见下方亮 / 暗两组 token) */
   --shadow-hue: oklch(27.950% 0.0368 260);
   --shadow-sm: 0 1px 2px color-mix(in oklch, var(--shadow-hue) 6%, transparent),
                0 1px 1px color-mix(in oklch, var(--shadow-hue) 4%, transparent);
@@ -57,22 +57,21 @@
 }
 
 /* ============================================================
-   新语义 token · 四组风格 (design §2)
-   data-style 由皮肤 has_bg 派生 (壁纸 = stage), data-base 来自皮肤 base;
-   皮肤 colors 透传的同名变量写 inline style, 优先级高于这里 → 逐套皮肤
+   新语义 token · 亮 / 暗两组 (design §2)
+   data-base 来自皮肤 base; 皮肤 colors 透传的同名变量写 inline style, 优先级高于这里 → 逐套皮肤
    只覆盖自己声明的项, 未声明的回落本块默认值
    ============================================================ */
 
-/* 工坊 × 暗 = 原型 foxfire.html night 块 (逐项照抄) */
-[data-style="atelier"][data-base="dark"] {
+/* 暗 = 原型 foxfire.html night 块 (逐项照抄) */
+[data-base="dark"] {
   color-scheme: dark;
   --bg: oklch(15.2% 0.011 55);
   --rail: oklch(12.6% 0.01 55);
   --pane: oklch(16.8% 0.012 55);
   --well: oklch(12.8% 0.01 55);
   --raise: oklch(20.5% 0.014 55);
-  /* 弹层实底: 与 --raise 同色相/明度, 只去掉 alpha — 舞台下 --raise 半透明,
-     浮层 (命令面板/下拉/菜单/模态卡) 叠在时间线正文上会透字, 这类元素一律用 --popover */
+  /* 弹层实底: 浮层 (命令面板/下拉/菜单/模态卡) 一律用 --popover, 不用 --raise ——
+     皮肤可能把 --raise 定成半透明, 叠在时间线正文上会透字 */
   --popover: oklch(20.5% 0.014 55);
   --hover: oklch(100% 0 0 / 0.045);
   --line: oklch(100% 0 0 / 0.07);
@@ -91,11 +90,18 @@
   --add-bg: color-mix(in oklch, var(--ok) 13%, transparent);
   --del-bg: color-mix(in oklch, var(--err) 14%, transparent);
   --shadow: 0 18px 50px -12px oklch(0% 0 0 / 0.65), 0 2px 8px oklch(0% 0 0 / 0.4);
-  --scrim: 0.8;
+  /* 暗色阴影: 色相归零 (暗色下阴影靠暗度而非色相), alpha 整体提高一档 */
+  --shadow-hue: oklch(0% 0 0);
+  --shadow-sm: 0 1px 2px color-mix(in oklch, var(--shadow-hue) 50%, transparent),
+               0 1px 1px color-mix(in oklch, var(--shadow-hue) 35%, transparent);
+  --shadow-md: 0 2px 8px color-mix(in oklch, var(--shadow-hue) 55%, transparent),
+               0 1px 2px color-mix(in oklch, var(--shadow-hue) 40%, transparent);
+  --shadow-lg: 0 8px 24px color-mix(in oklch, var(--shadow-hue) 60%, transparent),
+               0 2px 6px color-mix(in oklch, var(--shadow-hue) 45%, transparent);
 }
 
-/* 工坊 × 亮 = 原型 foxfire.html paper 块 */
-[data-style="atelier"][data-base="light"] {
+/* 亮 = 原型 foxfire.html paper 块 */
+[data-base="light"] {
   color-scheme: light;
   --bg: oklch(97% 0.011 85);
   --rail: oklch(92.5% 0.016 80);
@@ -120,96 +126,12 @@
   --add-bg: color-mix(in oklch, var(--ok) 13%, transparent);
   --del-bg: color-mix(in oklch, var(--err) 14%, transparent);
   --shadow: 0 18px 44px -14px oklch(30% 0.04 50 / 0.28), 0 1px 3px oklch(30% 0.04 50 / 0.12);
-  --scrim: 0.8;
 }
 
-/* 舞台 × 暗 = 原型 wallpaper.html :root + rin 块。
-   面板不走 backdrop-filter 的玻璃感, 靠高不透明度半透明填充 (α 0.72–0.88) + 暗幕实现;
-   tint 取 --stage-tint, 皮肤声明后整套面板色相跟随。--bg 必须透明 (壁纸由 .stage-wall 提供) */
-[data-style="stage"][data-base="dark"] {
-  color-scheme: dark;
-  --bg: transparent;
-  --rail: oklch(13% 0.03 var(--stage-tint, 285) / 0.82);
-  --pane: oklch(15% 0.035 var(--stage-tint, 285) / 0.8);
-  --raise: oklch(19% 0.04 var(--stage-tint, 285) / 0.88);
-  --popover: oklch(19% 0.04 var(--stage-tint, 285));
-  --well: oklch(10% 0.03 var(--stage-tint, 285) / 0.72);
-  --hover: oklch(100% 0 0 / 0.07);
-  --line: oklch(100% 0 0 / 0.1);
-  --line-2: oklch(100% 0 0 / 0.17);
-  --fg: oklch(97% 0.008 280);
-  --fg-2: oklch(86% 0.018 280);
-  --fg-3: oklch(72% 0.025 280);
-  --fg-4: oklch(58% 0.028 280);
-  --accent: oklch(62% 0.21 24);
-  --accent-2: oklch(84% 0.12 84);
-  --accent-soft: color-mix(in oklch, var(--accent) 20%, transparent);
-  --on-accent: oklch(98% 0.01 30);
-  --ok: oklch(80% 0.12 160);
-  --err: oklch(70% 0.18 22);
-  --warn: oklch(80% 0.14 85);
-  --add-bg: color-mix(in oklch, var(--ok) 13%, transparent);
-  --del-bg: color-mix(in oklch, var(--err) 14%, transparent);
-  --shadow: 0 30px 80px -24px oklch(0% 0 0 / 0.65), inset 0 1px 0 oklch(100% 0 0 / 0.06);
-  --scrim: 0.8;
-  /* 暗幕底色: 舞台皮肤只声明 stage-tint, 幕色与色相由这里派生 */
-  --scrim-color: oklch(8% 0.03 var(--stage-tint, 285));
-}
-
-/* 舞台 × 亮 = 原型没有, 为 sakura-light 新设计: 暗幕换白色半透明幕,
-   面板用接近白的高不透明填充, 四级文字转深色, 层次关系照 stage×dark 镜像 */
-[data-style="stage"][data-base="light"] {
-  color-scheme: light;
-  --bg: transparent;
-  --rail: oklch(99% 0.006 var(--stage-tint, 350) / 0.8);
-  --pane: oklch(99.4% 0.005 var(--stage-tint, 350) / 0.84);
-  --raise: oklch(100% 0.002 var(--stage-tint, 350) / 0.9);
-  --popover: oklch(100% 0.002 var(--stage-tint, 350));
-  --well: oklch(96.5% 0.012 var(--stage-tint, 350) / 0.72);
-  --hover: oklch(25% 0.04 350 / 0.06);
-  --line: oklch(25% 0.04 350 / 0.12);
-  --line-2: oklch(25% 0.04 350 / 0.2);
-  --fg: oklch(26% 0.03 350);
-  --fg-2: oklch(38% 0.028 350);
-  --fg-3: oklch(54% 0.024 352);
-  --fg-4: oklch(67% 0.02 352);
-  --accent: oklch(65% 0.15 355);
-  --accent-2: oklch(55% 0.12 350);
-  --accent-soft: color-mix(in oklch, var(--accent) 16%, transparent);
-  --on-accent: oklch(99% 0.003 350);
-  --ok: oklch(55% 0.13 150);
-  --err: oklch(56% 0.19 27);
-  --warn: oklch(60% 0.14 70);
-  --add-bg: color-mix(in oklch, var(--ok) 13%, transparent);
-  --del-bg: color-mix(in oklch, var(--err) 14%, transparent);
-  --shadow: 0 24px 60px -20px oklch(40% 0.06 340 / 0.35), 0 2px 8px oklch(40% 0.06 340 / 0.12);
-  --scrim: 0.8;
-  --scrim-color: oklch(99.6% 0.004 var(--stage-tint, 350));
-}
-
-/* 暗色方向: 皮肤 base=dark 时挂在 <html data-base="dark"> 上;
-   语义色由四组 token 承担, 这里只放暗色阴影 */
-[data-base="dark"] {
-  color-scheme: dark;
-  /* 暗色阴影: 色相归零 (暗色下阴影靠暗度而非色相), alpha 整体提高一档 */
-  --shadow-hue: oklch(0% 0 0);
-  --shadow-sm: 0 1px 2px color-mix(in oklch, var(--shadow-hue) 50%, transparent),
-               0 1px 1px color-mix(in oklch, var(--shadow-hue) 35%, transparent);
-  --shadow-md: 0 2px 8px color-mix(in oklch, var(--shadow-hue) 55%, transparent),
-               0 1px 2px color-mix(in oklch, var(--shadow-hue) 40%, transparent);
-  --shadow-lg: 0 8px 24px color-mix(in oklch, var(--shadow-hue) 60%, transparent),
-               0 2px 6px color-mix(in oklch, var(--shadow-hue) 45%, transparent);
-}
-
-/* 页面底色: 工坊用 --bg; 舞台下 --bg 透明 (主区透出舞台层), 页面底改由暗幕底色承担,
-   壁纸加载失败/首帧也不露白 */
+/* 页面底色 */
 html,
 body {
   background: var(--bg);
-}
-[data-style="stage"],
-[data-style="stage"] body {
-  background: var(--scrim-color);
 }
 
 body {
@@ -225,7 +147,7 @@ body {
 }
 
 /* 锁死页面级滚动: 只允许内部滚动容器滚动, 避免整个窗口像浏览器一样被拖动
-   根治靠 App.tsx: app-root / 舞台层用 fixed inset-0 钉死 viewport → document 无文档流内容,
+   根治靠 App.tsx: app-root 用 fixed inset-0 钉死 viewport → document 无文档流内容,
    聚焦/滚动锚定找不到可滚祖先; InputBar 的 focus() 全部带 { preventScroll: true } 防御。
    此处 overflow: clip 为辅助层 (clip 比 hidden 更彻底: hidden 仍是 scroll container,
    可被编程滚动; clip 连 scroll container 都不是), 双保险兜底。 */
@@ -282,11 +204,9 @@ html:has([data-pet]) #root {
 
 /* ============================================================
    外壳 (框架 C): 图标轨按钮 / 会话列表 / 检查器外壳 / 检查器页签
-   两风格的形态差异只在以下四处, 用 data-style 分支表达
    ============================================================ */
 
-/* 图标轨与会话列表: 工坊 = 贴边列; 舞台 = 浮在壁纸上的玻璃卡
-   (外边距 + 圆角 + 高不透明度填充 + 内高光, 不用 backdrop-filter) */
+/* 图标轨与会话列表: 贴边列 */
 .shell-rail {
   background: var(--rail);
   border-right: 1px solid var(--line);
@@ -294,39 +214,25 @@ html:has([data-pet]) #root {
 .shell-sessions {
   background: var(--pane);
   border-right: 1px solid var(--line);
-  /* 收起动画: 宽度压缩 + 舞台浮卡同步收边距, 内容只被裁切 */
-  transition: width 0.32s var(--ease), margin-right 0.32s var(--ease),
-    opacity 0.24s var(--ease), border-width 0.32s var(--ease);
-}
-[data-style="stage"] .shell-rail {
-  margin: 10px 10px 12px 12px;
-  border-right-width: 0;
-  border-radius: 18px;
-  box-shadow: var(--shadow);
-}
-[data-style="stage"] .shell-sessions {
-  margin: 10px 10px 12px 0;
-  border-right-width: 0;
-  border-radius: 18px;
-  box-shadow: var(--shadow);
-}
-[data-style="stage"] .shell-sessions[data-pane="closed"] {
-  margin-right: 0;
-  opacity: 0;
-  border-width: 0;
+  /* 收起动画: 宽度压缩, 内容只被裁切 */
+  transition: width 0.32s var(--ease), border-width 0.32s var(--ease);
 }
 
-/* 「最近 / 项目」分段: 工坊 = 下划线页签 (原型 .seg); 舞台 = 胶囊分段 (原型 .seg) */
+/* 「最近 / 项目」分段: 下划线页签 (原型 .seg) */
 .sess-seg {
   display: flex;
   flex: none;
+  gap: 18px;
+  padding: 2px 16px 0;
+  border-bottom: 1px solid var(--line);
 }
 .sess-seg button {
   position: relative;
+  padding: 8px 0 9px;
+  font-size: var(--fs-label);
   cursor: pointer;
   color: var(--fg-3);
-  transition: color 0.15s var(--ease), background-color 0.15s var(--ease),
-    box-shadow 0.15s var(--ease);
+  transition: color 0.15s var(--ease);
 }
 .sess-seg button:hover {
   color: var(--fg-2);
@@ -334,16 +240,7 @@ html:has([data-pet]) #root {
 .sess-seg button[aria-selected="true"] {
   color: var(--fg);
 }
-[data-style="atelier"] .sess-seg {
-  gap: 18px;
-  padding: 2px 16px 0;
-  border-bottom: 1px solid var(--line);
-}
-[data-style="atelier"] .sess-seg button {
-  padding: 8px 0 9px;
-  font-size: var(--fs-label);
-}
-[data-style="atelier"] .sess-seg button[aria-selected="true"]::after {
+.sess-seg button[aria-selected="true"]::after {
   content: "";
   position: absolute;
   left: 0;
@@ -353,31 +250,12 @@ html:has([data-pet]) #root {
   border-radius: 2px;
   background: var(--accent);
 }
-[data-style="stage"] .sess-seg {
-  margin: 0 12px 4px;
-  padding: 3px;
-  background: var(--well);
-  border-radius: 11px;
-}
-[data-style="stage"] .sess-seg button {
-  flex: 1;
-  padding: 5px 0;
-  font-size: var(--fs-label);
-  border-radius: 8px;
-}
-[data-style="stage"] .sess-seg button[aria-selected="true"] {
-  background: var(--raise);
-  box-shadow: inset 0 0 0 1px var(--line);
-}
 
 /* 最近视图分组标题 (原型 .grp) */
 .sess-grp {
   padding: 14px 8px 6px;
   font-size: var(--fs-mini);
   color: var(--fg-4);
-}
-[data-style="stage"] .sess-grp {
-  color: var(--fg-3);
 }
 
 /* 项目徽标 (最近视图行): 两字母缩写, 色相由项目名哈希稳定派生 (--h 由 inline style 给) */
@@ -396,38 +274,19 @@ html:has([data-pet]) #root {
   color: oklch(78% 0.08 var(--h));
   background: oklch(78% 0.08 var(--h) / 0.12);
 }
-[data-style="atelier"][data-base="light"] .sess-badge {
+[data-base="light"] .sess-badge {
   color: oklch(45% 0.1 var(--h));
   background: oklch(55% 0.1 var(--h) / 0.12);
 }
-[data-style="stage"] .sess-badge {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  color: oklch(90% 0.06 var(--h));
-  background: oklch(60% 0.12 var(--h) / 0.3);
-  box-shadow: inset 0 0 0 1px oklch(80% 0.1 var(--h) / 0.3);
-}
-[data-style="stage"][data-base="light"] .sess-badge {
-  color: oklch(42% 0.11 var(--h));
-  background: oklch(66% 0.12 var(--h) / 0.22);
-  box-shadow: inset 0 0 0 1px oklch(60% 0.1 var(--h) / 0.24);
-}
 
-/* 会话行选中态: 工坊 = 浮起底 + 1px 内描边; 舞台 = accent 浅底 + accent 内描边 (原型 .row.sel) */
+/* 会话行选中态: 浮起底 + 1px 内描边 (原型 .row.sel) */
 .sess-row.sel {
   color: var(--fg);
-}
-[data-style="atelier"] .sess-row.sel {
   background: var(--raise);
   box-shadow: inset 0 0 0 1px var(--line);
 }
-[data-style="stage"] .sess-row.sel {
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 40%, transparent);
-}
 
-/* 图标轨按钮: 工坊 = 左缘 2px accent 竖条标记激活; 舞台 = accent 实心圆角块 */
+/* 图标轨按钮: 左缘 2px accent 竖条标记激活 */
 .rail-btn {
   position: relative;
   display: grid;
@@ -445,7 +304,7 @@ html:has([data-pet]) #root {
 .rail-btn.on {
   color: var(--fg);
 }
-[data-style="atelier"] .rail-btn.on::before {
+.rail-btn.on::before {
   content: "";
   position: absolute;
   left: -8px;
@@ -455,17 +314,8 @@ html:has([data-pet]) #root {
   border-radius: 2px;
   background: var(--accent);
 }
-[data-style="stage"] .rail-btn {
-  border-radius: 12px;
-  color: var(--fg-3);
-}
-[data-style="stage"] .rail-btn.on {
-  color: var(--on-accent);
-  background: var(--accent);
-  box-shadow: 0 6px 18px -6px var(--accent);
-}
 
-/* 检查器: 工坊 = 常驻 flex 列 (左缘拖拽调宽); 舞台 = 绝对定位浮卡, 从右滑出, 文字列按 --insp-w 让位 */
+/* 检查器: 常驻 flex 列 (左缘拖拽调宽) */
 .inspector {
   display: flex;
   flex-direction: column;
@@ -479,28 +329,8 @@ html:has([data-pet]) #root {
   border-left: 1px solid var(--line);
   transition: width 0.36s var(--ease);
 }
-[data-style="stage"] .inspector {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  bottom: 12px;
-  width: 360px;
-  z-index: 20;
-  border-radius: 18px;
-  background: var(--raise);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow);
-  /* 从右滑出 (原型 .insp-closed .inspector): 常驻挂载 + class 切换开合,
-     卸载/重挂只能播一次性入场动画, 表达不了"滑出" */
-  transition: transform 0.45s var(--ease), opacity 0.35s var(--ease);
-}
-[data-style="stage"] .inspector.insp-closed {
-  transform: translateX(calc(100% + 24px));
-  opacity: 0;
-  pointer-events: none;
-}
 
-/* 检查器页签: 工坊 = 下划线; 舞台 = 圆角药丸 */
+/* 检查器页签: 下划线 */
 .insp-tab {
   position: relative;
   display: inline-flex;
@@ -518,10 +348,10 @@ html:has([data-pet]) #root {
   opacity: 0.45;
   cursor: default;
 }
-[data-style="atelier"] .insp-tab.on {
+.insp-tab.on {
   color: var(--fg);
 }
-[data-style="atelier"] .insp-tab.on::after {
+.insp-tab.on::after {
   content: "";
   position: absolute;
   left: 0;
@@ -531,18 +361,8 @@ html:has([data-pet]) #root {
   border-radius: 2px;
   background: var(--accent);
 }
-[data-style="stage"] .insp-tab {
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-}
-[data-style="stage"] .insp-tab.on {
-  color: var(--fg);
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 40%, transparent);
-}
 
-/* 运行中符号: 工坊 = 狐火 (唯一动效符号), 舞台 = 旋转刻印环 */
+/* 运行中符号: 狐火 (唯一动效符号) */
 .flame {
   display: inline-block;
   width: 8px;
@@ -559,86 +379,29 @@ html:has([data-pet]) #root {
   70% { transform: scale(1.06, 0.94) skewX(4deg); }
   100% { transform: scale(0.95, 1.1) skewX(-2deg); opacity: 0.95; }
 }
-[data-style="stage"] .flame {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: conic-gradient(from 0deg, var(--accent), var(--accent-2), transparent 70%, var(--accent));
-  -webkit-mask: radial-gradient(circle, transparent 3.2px, black 3.6px);
-  mask: radial-gradient(circle, transparent 3.2px, black 3.6px);
-  filter: drop-shadow(0 0 4px var(--accent));
-  animation: seal-spin 1s linear infinite;
-}
-@keyframes seal-spin {
-  to { transform: rotate(360deg); }
-}
-
-/* 舞台背景层: 壁纸铺满 (cover 居中) + 整面均匀暗幕。
-   壁纸只作氛围底, 不给角色留"露出区": 局部留白会把视线从对话上拽走 (用户验收否决了左浓右淡方案)。
-   玻璃感不使用 backdrop-filter (WebView2 大面积 backdrop-filter 有内容消失 bug),
-   由暗幕 + 面板高不透明度填充 + 边框 + 内高光实现 */
-.stage-wall {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  background-image: var(--bg-image, none);
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
-}
-.stage-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background: color-mix(in oklch, var(--scrim-color) calc(var(--scrim) * 100%), transparent);
-}
-
-/* 舞台 × 亮: 白幕比暗幕更"糊"壁纸 (浅粉底看不出粉色), 浓度乘 45%:
-   默认 scrim(0.8) × 45% = 36% 白幕 —— 托住深色正文, 又不盖死壁纸渐变 */
-[data-style="stage"][data-base="light"] .stage-scrim {
-  background: color-mix(in oklch, var(--scrim-color) calc(var(--scrim) * 45%), transparent);
-}
 
 /* ============================================================
-   时间线 (框架 C 第三列主区) 与检查器步骤详情
-   两风格形态差异 (工坊 = 章节脊线 + 一步一行; 舞台 = 右对齐气泡 + 胶囊串)
-   全部用 data-style 分支表达
+   时间线 (框架 C 第三列主区) 与检查器步骤详情: 章节脊线 + 一步一行
    ============================================================ */
 
-.tl-timeline {
-  position: relative;
-}
 /* 滚动条槽固定预留 (8px, 同 ::-webkit-scrollbar): 短会话无滚动条时文字列也不横跳, 与 .composer-wrap 的 right 对齐 */
 .tl-scroll {
   scrollbar-gutter: stable;
 }
-/* 文字列宽 --col-w (两风格): 取可用宽的 --col-ratio, 窄窗下不低于原型像素宽, 且不超出可用宽减两侧留白。
-   固定像素列宽在宽屏上只占主区一半左右 (1920 宽实测舞台 43%); 比例经老大实机试看调整 (75% → 65% → 60%)。
+/* 文字列宽 --col-w: 取可用宽的 --col-ratio, 窄窗下不低于原型像素宽, 且不超出可用宽减两侧留白。
+   固定像素列宽在宽屏上只占主区一半左右; 比例经老大实机试看调整 (75% → 65% → 60%)。
    变量值含 %, 在使用处按各自容器宽解析 (未注册的自定义属性是文本替换);
    .tl-timeline 与 .composer 的容器宽相同 (主区 − 8px 滚动条槽), 同一表达式天然同宽 */
 :root {
   --col-ratio: 0.6;
-}
-[data-style="atelier"] {
   /* 净文字宽; 左 72 为章节脊线槽, 右 44 留白, 共 116 */
   --col-w: min(max(calc(100% * var(--col-ratio)), 664px), calc(100% - 116px));
 }
-[data-style="atelier"] .tl-timeline {
+.tl-timeline {
+  position: relative;
   width: calc(var(--col-w) + 116px);
   margin: 0 auto;
   padding: 40px 44px 0 72px;
-}
-/* 舞台: 可用宽 = 主区 − 检查器浮卡 (--insp-w 由 Inspector 写在 :root, 收起时为 0),
-   时间线 / 输入卡在可用宽里居中, 浮卡开合时整列同步重新居中; 两侧至少各留 24px */
-[data-style="stage"] {
-  --col-w: min(max(calc((100% - var(--insp-w, 0px)) * var(--col-ratio)), 680px), calc(100% - var(--insp-w, 0px) - 48px));
-}
-[data-style="stage"] .tl-timeline {
-  width: var(--col-w);
-  margin-left: calc((100% - var(--insp-w, 0px) - var(--col-w)) / 2);
-  padding: 24px 0 0;
-  transition: width 0.45s var(--ease), margin-left 0.45s var(--ease);
 }
 
 /* ---- 轮 ---- */
@@ -648,10 +411,7 @@ html:has([data-pet]) #root {
 .tl-turn + .tl-turn {
   margin-top: 56px;
 }
-[data-style="stage"] .tl-turn + .tl-turn {
-  margin-top: 40px;
-}
-[data-style="atelier"] .tl-turn::before {
+.tl-turn::before {
   content: "";
   position: absolute;
   left: -32px;
@@ -660,8 +420,8 @@ html:has([data-pet]) #root {
   width: 1px;
   background: linear-gradient(to bottom, var(--line-2), var(--line) 85%, transparent);
 }
-/* 运行中的轮: 脊线流光 (工坊运行态的动效语言) */
-[data-style="atelier"] .tl-turn.live::before {
+/* 运行中的轮: 脊线流光 (运行态的动效语言) */
+.tl-turn.live::before {
   background: linear-gradient(to bottom, transparent 0%, var(--accent) 35%, var(--accent-2) 50%, var(--accent) 65%, transparent 100%);
   background-size: 100% 240%;
   animation: tl-spine 1.8s linear infinite;
@@ -696,15 +456,12 @@ html:has([data-pet]) #root {
 .tl-copy.done {
   opacity: 1;
 }
-/* 「你」与复制钮同一行; 舞台下 meta 在气泡右上方, 钮跟在「你」左侧 */
+/* 「你」与复制钮同一行 */
 .tl-prompt-meta {
   display: flex;
   align-items: center;
   gap: 4px;
   min-height: 24px;
-}
-[data-style="stage"] .tl-prompt-meta {
-  flex-direction: row-reverse;
 }
 .tl-prompt-meta .copy-btn {
   width: 20px;
@@ -721,11 +478,11 @@ html:has([data-pet]) #root {
 }
 
 /* ---- 用户提问 ---- */
-[data-style="atelier"] .tl-prompt {
+.tl-prompt {
   position: relative;
   margin-bottom: 26px;
 }
-[data-style="atelier"] .tl-prompt::before {
+.tl-prompt::before {
   content: "";
   position: absolute;
   left: -36.5px;
@@ -738,13 +495,13 @@ html:has([data-pet]) #root {
   /* 主区底色描边一圈, 模拟菱形与脊线之间的留白 */
   box-shadow: 0 0 0 4px var(--bg);
 }
-[data-style="atelier"] .tl-prompt-meta {
+.tl-prompt-meta {
   font-size: var(--fs-micro);
   color: var(--fg-4);
 }
 /* 提问是一轮的章节标题: 只靠字号 (head 17 对正文 ui 14) 拉层级, 字重保持常规 ——
    雅黑没有中等字重, 500 会落回常规、600 直接跳粗体, 大号粗体中文压过正文太多 */
-[data-style="atelier"] .tl-prompt-text {
+.tl-prompt-text {
   margin: 4px 0 0;
   font-size: var(--fs-head);
   font-weight: 400;
@@ -753,37 +510,12 @@ html:has([data-pet]) #root {
   white-space: pre-wrap;
   overflow-wrap: break-word;
 }
-[data-style="stage"] .tl-prompt {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  margin-bottom: 18px;
-}
-[data-style="stage"] .tl-prompt-meta {
-  margin: 0 6px 4px;
-  font-size: var(--fs-micro);
-  color: var(--fg-4);
-}
-[data-style="stage"] .tl-prompt-text {
-  margin: 0;
-  max-width: 80%;
-  padding: 10px 16px;
-  font-size: var(--fs-ui);
-  line-height: 1.65;
-  color: var(--fg);
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  border-radius: 18px 18px 6px 18px;
-  background: color-mix(in oklch, var(--accent) 26%, var(--raise));
-  border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
-  box-shadow: 0 10px 30px -12px color-mix(in oklch, var(--accent) 60%, transparent);
-}
 
 /* ---- AI 回复 ---- */
 .tl-reply-wrap {
   margin: 14px 0;
 }
-/* AI 回复 = 对话正文档 (ui 14), 两风格同字号同行高; 中文长段落行高给到 1.8 才透气。
+/* AI 回复 = 对话正文档 (ui 14); 中文长段落行高给到 1.8 才透气。
    原用 title 15 实机嫌大, 会话区各元素整体沿档位表降一档, token 值与其他区域不动 */
 .tl-reply {
   font-size: var(--fs-ui);
@@ -798,13 +530,6 @@ html:has([data-pet]) #root {
 .tl-reply pre,
 .tl-reply code {
   font-family: var(--f-mono);
-}
-/* 文字直接落在幕上: 深色幕投黑柔光, 白幕投白柔光托可读性 */
-[data-style="stage"][data-base="dark"] .tl-reply {
-  text-shadow: 0 1px 14px oklch(0% 0 0 / 0.55);
-}
-[data-style="stage"][data-base="light"] .tl-reply {
-  text-shadow: 0 1px 12px oklch(100% 0 0 / 0.65);
 }
 .tl-dots {
   color: var(--fg-3);
@@ -852,19 +577,8 @@ html:has([data-pet]) #root {
 .tl-think-head:hover {
   color: var(--fg-3);
 }
-[data-style="atelier"] .tl-think-head {
+.tl-think-head {
   font-size: var(--fs-mini);
-}
-[data-style="stage"] .tl-think-head {
-  padding: 3px 10px 3px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--raise);
-  font-size: var(--fs-mini);
-  color: var(--fg-3);
-}
-[data-style="stage"] .tl-think-head:hover {
-  color: var(--fg);
 }
 .tl-think-len {
   font-size: var(--fs-micro);
@@ -892,13 +606,6 @@ html:has([data-pet]) #root {
 .tl-think.open .tl-think-body {
   display: block;
   animation: tl-rise 0.3s var(--ease-in);
-}
-[data-style="stage"] .tl-think-body {
-  margin: 8px 0;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: var(--raise);
 }
 @keyframes tl-rise {
   from { opacity: 0; transform: translateY(4px); }
@@ -970,69 +677,6 @@ html:has([data-pet]) #root {
 .tl-steps.open .tl-steps-list {
   display: block;
   animation: tl-rise 0.28s var(--ease-in);
-}
-/* 舞台: 组头仅标签, 胶囊串一直展开 */
-[data-style="stage"] .tl-steps {
-  margin: 10px 0 12px;
-}
-[data-style="stage"] .tl-steps-head {
-  display: inline-flex;
-  gap: 8px;
-  width: auto;
-  height: auto;
-  margin-bottom: 8px;
-  color: var(--fg-3);
-  cursor: default;
-}
-[data-style="stage"] .tl-steps-head:hover {
-  color: var(--fg-3);
-}
-[data-style="stage"] .tl-node {
-  position: static;
-  width: 6px;
-  height: 6px;
-  border: 0;
-  background: var(--fg-4);
-}
-[data-style="stage"] .tl-steps.has-err .tl-node {
-  background: var(--err);
-}
-[data-style="stage"] .tl-steps.running .tl-node {
-  background: var(--accent-2);
-  box-shadow: 0 0 10px var(--accent-2);
-}
-[data-style="stage"] .tl-steps-tools,
-[data-style="stage"] .tl-steps-err {
-  display: none;
-}
-[data-style="stage"] .tl-steps-dur {
-  margin-left: 0;
-}
-[data-style="stage"] .tl-chev {
-  display: none;
-}
-[data-style="stage"] .tl-steps .tl-steps-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  animation: none;
-}
-/* 胶囊是换行 flex 的子项, 默认 min-width:auto 会被长命令撑开冲出文字列 (实机出现横向滚动);
-   允许收缩 + 限宽, 摘要走省略号, 全文在 title 与检查器里看 */
-[data-style="stage"] .tl-steps-list > li {
-  min-width: 0;
-  max-width: 100%;
-}
-[data-style="stage"] .tl-step-main {
-  min-width: 0;
-  overflow: hidden;
-}
-[data-style="stage"] .tl-step-sum {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* ---- 步骤行 ---- */
@@ -1139,59 +783,6 @@ html:has([data-pet]) #root {
 @keyframes tl-flash {
   0%, 30% { background: color-mix(in oklch, var(--accent) 28%, transparent); }
 }
-/* 舞台: 一步一胶囊。宽度随内容, 上限为文字列宽 (列宽已按主区比例走, 再限 320px 会让命令过早截断) */
-[data-style="stage"] .tl-step-row {
-  height: 30px;
-  max-width: 100%;
-  padding: 0 6px 0 9px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--raise);
-  transition: border-color 0.2s var(--ease), color 0.2s var(--ease), transform 0.2s var(--ease);
-}
-[data-style="stage"] .tl-step-row:hover {
-  border-color: var(--line-2);
-  background: var(--raise);
-  transform: translateY(-1px);
-}
-[data-style="stage"] .tl-step-row.sel {
-  border-color: color-mix(in oklch, var(--accent) 70%, transparent);
-  background: var(--accent-soft);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 16%, transparent), 0 8px 22px -8px var(--accent);
-}
-[data-style="stage"] .tl-step-main {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 28px;
-  padding: 0;
-  border-radius: 999px;
-}
-[data-style="stage"] .tl-step-name {
-  display: none;
-}
-[data-style="stage"] .tl-step-sum {
-  color: var(--fg-2);
-}
-[data-style="stage"] .tl-step-row.err .tl-step-sum {
-  color: var(--err);
-}
-[data-style="stage"] .tl-step-status {
-  width: 12px;
-  height: 12px;
-}
-[data-style="stage"] .tl-step-dot {
-  width: 6px;
-  height: 6px;
-  background: var(--ok);
-  box-shadow: 0 0 6px color-mix(in oklch, var(--ok) 70%, transparent);
-}
-[data-style="stage"] .tl-step-extra {
-  color: var(--fg-3);
-}
-[data-style="stage"] .tl-step-fleet {
-  border-radius: 999px;
-}
 
 /* ---- 通知条目 ---- */
 .tl-notice {
@@ -1234,8 +825,7 @@ html:has([data-pet]) #root {
 
 /* ============================================================
    空状态与输入卡 (design §7 / §8)
-   两风格都居中; 工坊输入卡带底部渐隐, 舞台输入卡与文字列同宽同中线
-   (舞台下 --bg 透明, 输入卡靠 --raise 高不透明度填充呈现, 不用 backdrop-filter)
+   都居中; 输入卡带底部渐隐
    ============================================================ */
 
 /* ---- 空状态 ---- */
@@ -1244,18 +834,11 @@ html:has([data-pet]) #root {
   flex: 1;
   min-height: 0;
   flex-direction: column;
-}
-/* 两风格都居中; 底部留白让问候整体上移, 空状态内容不被悬浮输入卡压住。
-   舞台右侧多让出检查器浮卡宽度, 与时间线同一居中基准 */
-.empty-root {
+  /* 居中; 底部留白让问候整体上移, 空状态内容不被悬浮输入卡压住 */
   align-items: center;
   justify-content: center;
   /* 右侧多 8px 与 .composer-wrap 让出的滚动条槽对齐 */
   padding: 0 32px 180px 24px;
-}
-[data-style="stage"] .empty-root {
-  padding-right: calc(32px + var(--insp-w, 0px));
-  transition: padding-right 0.45s var(--ease);
 }
 /* 问候用 display 档 + 细体: 大字号配细字重, 比常规字重的大字安静 */
 .empty-greeting {
@@ -1264,12 +847,6 @@ html:has([data-pet]) #root {
   line-height: 1.45;
   color: var(--fg);
   text-align: center;
-}
-[data-style="stage"][data-base="dark"] .empty-greeting {
-  text-shadow: 0 1px 14px oklch(0% 0 0 / 0.55);
-}
-[data-style="stage"][data-base="light"] .empty-greeting {
-  text-shadow: 0 1px 12px oklch(100% 0 0 / 0.65);
 }
 .empty-recent {
   display: flex;
@@ -1289,25 +866,16 @@ html:has([data-pet]) #root {
   bottom: 0;
   z-index: 20;
   pointer-events: none;
-}
-[data-style="atelier"] .composer-wrap {
   /* 底部渐隐到主区底色: 时间线消息滑到卡片后方时收进底色, 不糊在正文上。
      不设左右 padding: 输入卡宽按 --col-w 算, 容器宽必须与时间线滚动区一致 */
   padding: 28px 0 18px;
   background: linear-gradient(to bottom, transparent, var(--bg) 42%);
 }
-[data-style="stage"] .composer-wrap {
-  padding: 0 0 6px;
-}
-/* 舞台没有工坊那层渐隐底 (会盖住壁纸), 改在滚动容器上做遮罩: 顶部轻淡入, 底部在输入卡区域淡出,
-   否则滚动中的时间线会从输入卡与窗口底边的缝里露出来 (原型 wallpaper.html .scroll 同法) */
-[data-style="stage"] .tl-scroll {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 24px, black calc(100% - 150px), transparent calc(100% - 60px));
-  mask-image: linear-gradient(to bottom, transparent 0, black 24px, black calc(100% - 150px), transparent calc(100% - 60px));
-}
 .composer {
   position: relative;
   pointer-events: auto;
+  /* 比净文字列宽 56px (两侧各探出 28px), 原型既定观感 (原 664 文字列配 720 卡片) */
+  width: calc(var(--col-w) + 56px);
   margin: 0 auto;
   border: 1px solid var(--line-2);
   border-radius: 14px;
@@ -1340,22 +908,6 @@ html:has([data-pet]) #root {
   pointer-events: none;
   animation: viewInSoft 160ms ease-out;
 }
-[data-style="atelier"] .composer {
-  /* 比净文字列宽 56px (两侧各探出 28px), 原型既定观感 (原 664 文字列配 720 卡片) */
-  width: calc(var(--col-w) + 56px);
-}
-[data-style="stage"] .composer {
-  /* 与 .tl-timeline 同一居中公式 (100% 按主区宽算), 检查器浮卡开合时两者同步移动。
-     居中用 margin 而非父级 padding —— padding 会吃掉百分比宽度的基准, 与文字列错位 */
-  width: var(--col-w);
-  margin: 0 0 0 calc((100% - var(--insp-w, 0px) - var(--col-w)) / 2);
-  border-radius: 22px;
-  transition: border-color 0.25s var(--ease), box-shadow 0.25s var(--ease),
-    width 0.45s var(--ease), margin-left 0.45s var(--ease);
-  /* 舞台 --raise 带透明度, 时间线文字滚到输入卡后方会透字 (原型靠 backdrop-filter 糊掉, 这里禁用);
-     实测留 4% 透明时亮色气泡字仍透得出, 故用完全不透明的 --popover, 浮起感交给边框与阴影 */
-  background: var(--popover);
-}
 
 /* 窄宽: 次要 chip 收成纯图标、上下文文字标签让位 (照原型 @container 两档) */
 @container (max-width: 600px) {
@@ -1378,7 +930,7 @@ html:has([data-pet]) #root {
   }
 }
 
-/* 发送 / 中止钮: 工坊 = 方形 accent 块, 运行中转描边方块; 舞台 = 圆形 (原型 .send) */
+/* 发送 / 中止钮: 方形 accent 块, 运行中转描边方块 (原型 .send) */
 .composer-send {
   flex: none;
   display: grid;
@@ -1406,14 +958,6 @@ html:has([data-pet]) #root {
   color: var(--accent);
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
-[data-style="stage"] .composer-send {
-  border-radius: 999px;
-}
-[data-style="stage"] .composer-send[data-stop="true"] {
-  background: var(--well);
-  color: var(--accent-2);
-  box-shadow: inset 0 0 0 1.5px var(--accent-2);
-}
 
 /* 排队条 (QueueIndicator): 贴输入卡上沿的整行计数条, 圆角跟随卡片顶角 */
 .queue-bar {
@@ -1432,9 +976,6 @@ html:has([data-pet]) #root {
 }
 .queue-bar:hover {
   background: color-mix(in oklch, var(--accent) 11%, transparent);
-}
-[data-style="stage"] .queue-bar {
-  border-radius: 21px 21px 0 0;
 }
 
 /* ---- 检查器 · 步骤详情 ---- */
@@ -1594,7 +1135,7 @@ html:has([data-pet]) #root {
   height: 28px;
   padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 7px;
   font-size: var(--fs-label);
   color: var(--fg-2);
   transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
@@ -1607,11 +1148,8 @@ html:has([data-pet]) #root {
   opacity: 0.45;
   cursor: default;
 }
-[data-style="atelier"] .sd-action {
-  border-radius: 7px;
-}
 
-/* ---- 检查器 · 会话概览 (原型 overview: 工坊 = 大数字 + 细网格; 舞台 = accent 渐变卡) ---- */
+/* ---- 检查器 · 会话概览 (原型 overview: 大数字 + 细网格) ---- */
 .ov {
   min-height: 0;
   flex: 1;
@@ -1762,43 +1300,7 @@ html:has([data-pet]) #root {
   margin-top: 3px;
 }
 
-/* 舞台: 花费卡换 accent→accent-2 渐变底 */
-[data-style="stage"] .ov-hero {
-  padding: 18px 18px 16px;
-  margin-bottom: 14px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: linear-gradient(135deg, color-mix(in oklch, var(--accent) 34%, transparent), color-mix(in oklch, var(--accent-2) 18%, transparent));
-}
-[data-style="stage"] .ov-sub {
-  color: var(--fg-2);
-}
-[data-style="stage"] .ov-grid {
-  gap: 8px;
-  margin-bottom: 18px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-[data-style="stage"] .ov-cell {
-  padding: 11px 13px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  background: var(--well);
-}
-[data-style="stage"] .ov-bar > span {
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-}
-[data-style="stage"] .ov-kv {
-  border-bottom-style: solid;
-}
-[data-style="stage"] .ov-hint {
-  border: 0;
-  background: var(--well);
-  color: var(--fg-3);
-}
-
-/* ---- 舰队子会话时间线: 面板宽 ~340px, 去掉工坊脊线与章节菱形并整体收紧 ---- */
+/* ---- 舰队子会话时间线: 面板宽 ~340px, 去掉章节脊线与菱形并整体收紧 ---- */
 .fs-session {
   padding: 14px 14px 20px;
 }
@@ -1812,27 +1314,24 @@ html:has([data-pet]) #root {
   padding: 8px 0 0;
   overflow: visible;
 }
-/* 覆盖 .tl-timeline 的两风格列宽版式 (width/margin/padding 按主区算, 在窄面板里放不下) */
+/* 覆盖 .tl-timeline 的列宽版式 (width/margin/padding 按主区算, 在窄面板里放不下) */
 .tl-timeline.fs-timeline {
   width: auto;
   max-width: none;
   margin: 0;
   padding: 0;
 }
-[data-style="atelier"] .fs-timeline .tl-turn::before {
+.fs-timeline .tl-turn::before {
   display: none;
 }
-[data-style="atelier"] .fs-timeline .tl-prompt::before {
+.fs-timeline .tl-prompt::before {
   display: none;
 }
-[data-style="atelier"] .fs-timeline .tl-prompt-text {
+.fs-timeline .tl-prompt-text {
   font-size: var(--fs-ui);
 }
 .fs-timeline .tl-turn + .tl-turn {
   margin-top: 28px;
-}
-[data-style="stage"] .fs-timeline .tl-turn + .tl-turn {
-  margin-top: 24px;
 }
 /* 步骤行 6 列栅格在窄面板收窄: 工具名 60→48, 耗时 52→40 */
 .fs-timeline .tl-step-main {
@@ -1867,7 +1366,7 @@ html:has([data-pet]) #root {
   color: var(--fg);
 }
 /* 字号绑档位而不用 em: em 乘出来是 16.8 / 12.32 这类碎字号, 雅黑发虚。
-   标题封顶 title 15 —— 回复里的标题是粗体, 再大就压过工坊提问 (head 17 常规) 这个章节标题;
+   标题封顶 title 15 —— 回复里的标题是粗体, 再大就压过提问 (head 17 常规) 这个章节标题;
    h3/h4 与回复正文同档, 只靠粗体拉开 */
 .markdown-body h1,
 .markdown-body h2 { font-size: var(--fs-title); }
@@ -2050,7 +1549,7 @@ html:has([data-pet]) #root {
 
 /* range 滑块: WebView2 浅色下未填充轨道渲染为近黑长条 (accent-color 只作用填充段),
    显式定义 track 底为线色、thumb 为 accent, 收进强调通道并与 surface 层次同源。
-   禁用态降透明度 + 灰滑块, 与"仅壁纸皮肤生效"的提示一致表达 */
+   禁用态降透明度 + 灰滑块 */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
@@ -2107,9 +1606,7 @@ input[type="range"]:disabled::-webkit-slider-thumb {
 }
 
 /* ============================================================
-   设置窗 (全屏覆盖层, design §8): 工坊 = 贴边两栏 (侧栏 pane / 内容 bg);
-   舞台 = 浮在壁纸上的两张卡。舞台上 --bg 是 transparent, 设置窗里全是表单与
-   长文本, 内容区必须换 --raise 实底托住可读性 (不用 backdrop-filter, 同 §2.4)
+   设置窗 (全屏覆盖层, design §8): 贴边两栏 (侧栏 pane / 内容 bg)
    ============================================================ */
 .setwin {
   background: var(--pane);
@@ -2121,26 +1618,8 @@ input[type="range"]:disabled::-webkit-slider-thumb {
 .setwin-main {
   background: var(--bg);
 }
-[data-style="stage"] .setwin {
-  gap: 10px;
-  padding: 10px 12px 12px;
-  /* 幕底叠暗幕浓度: 设置窗下仍透一点壁纸, 两张卡浮在其上 */
-  background: color-mix(in oklch, var(--scrim-color) calc(var(--scrim) * 100%), transparent);
-}
-[data-style="stage"] .setwin-nav {
-  border-right: 0;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: var(--shadow);
-}
-[data-style="stage"] .setwin-main {
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: var(--shadow);
-  background: var(--raise);
-}
 
-/* 设置窗导航项: 工坊 = raise 底 + 左缘 2px accent 竖条; 舞台 = accent-soft 胶囊 */
+/* 设置窗导航项: raise 底 + 左缘 2px accent 竖条 */
 .setwin-navitem {
   position: relative;
 }
@@ -2160,16 +1639,6 @@ input[type="range"]:disabled::-webkit-slider-thumb {
   width: 2px;
   border-radius: 0 2px 2px 0;
   background: var(--accent);
-}
-[data-style="stage"] .setwin-navitem {
-  border-radius: 12px;
-}
-[data-style="stage"] .setwin-navitem.on {
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 40%, transparent);
-}
-[data-style="stage"] .setwin-navitem.on::before {
-  display: none;
 }
 
 /* 设置视图进场 / 分区切换淡入: 整窗进场位移大一点表明"切了界面", 分区切换只用轻量版
@@ -2240,10 +1709,9 @@ input[type="range"]:disabled::-webkit-slider-thumb {
 }
 
 /* ---- 皮肤骨架预览 (设置 · 主题, ThemePanel SkinSkeleton) ----
-   .sk 自带 data-style / data-base, 内部颜色全走 token, 由皮肤 colors 覆盖;
-   只用色块不出文字。class 全部 sk- 前缀, 不被 [data-style] .xxx 的全局分支误伤;
-   反过来, 本块的风格分支必须写成 .sk[data-style] —— 裸 [data-style="atelier"] .sk-x 会匹配到
-   <html> 祖先, 当前皮肤是工坊时舞台预览也会长出工坊菱形 */
+   .sk 自带 data-base, 命中 [data-base] 整套默认 token, 内部颜色全走 token, 由皮肤 colors 覆盖;
+   只用色块不出文字。按方向分支必须写成 .sk[data-base] —— 裸 [data-base="x"] .sk-x 会匹配到
+   <html> 祖先, 预览会跟着当前主题而不是被预览的皮肤走 */
 .sk {
   position: relative;
   display: flex;
@@ -2252,25 +1720,7 @@ input[type="range"]:disabled::-webkit-slider-thumb {
   overflow: hidden;
   background: var(--bg);
 }
-[data-style="stage"].sk {
-  background: var(--scrim-color);
-}
-.sk-wall,
-.sk-scrim {
-  position: absolute;
-  inset: 0;
-}
-.sk-wall {
-  background-position: center;
-  background-size: cover;
-}
-.sk-scrim {
-  background: color-mix(in oklch, var(--scrim-color) 72%, transparent);
-}
-.sk[data-base="light"] > .sk-scrim {
-  background: color-mix(in oklch, var(--scrim-color) 36%, transparent);
-}
-.sk > :not(.sk-wall, .sk-scrim) {
+.sk > * {
   position: relative;
 }
 .sk i {
@@ -2331,8 +1781,8 @@ input[type="range"]:disabled::-webkit-slider-thumb {
   min-width: 0;
   padding: 12px 14px 0 22px;
 }
-/* 工坊: 左侧脊线 + 菱形, 提问是一条粗标题线 */
-.sk[data-style="atelier"] > .sk-main::before {
+/* 左侧脊线 + 菱形, 提问是一条粗标题线 */
+.sk > .sk-main::before {
   content: "";
   position: absolute;
   left: 11px;
@@ -2341,7 +1791,7 @@ input[type="range"]:disabled::-webkit-slider-thumb {
   width: 1px;
   background: var(--line-2);
 }
-.sk[data-style="atelier"] .sk-prompt {
+.sk .sk-prompt {
   position: relative;
   width: 62%;
   height: 7px;
@@ -2350,7 +1800,7 @@ input[type="range"]:disabled::-webkit-slider-thumb {
   background: var(--fg);
   opacity: 0.85;
 }
-.sk[data-style="atelier"] .sk-prompt::before {
+.sk .sk-prompt::before {
   content: "";
   position: absolute;
   left: -14px;
@@ -2359,19 +1809,6 @@ input[type="range"]:disabled::-webkit-slider-thumb {
   height: 6px;
   background: var(--accent);
   transform: rotate(45deg);
-}
-/* 舞台: 提问是右对齐 accent 气泡 */
-.sk[data-style="stage"] > .sk-main {
-  padding-left: 14px;
-}
-.sk[data-style="stage"] .sk-prompt {
-  align-self: flex-end;
-  width: 46%;
-  height: 14px;
-  margin-bottom: 4px;
-  border-radius: 7px 7px 2px 7px;
-  background: color-mix(in oklch, var(--accent) 26%, var(--raise));
-  border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
 }
 .sk-main i {
   background: var(--fg-2);
@@ -2396,15 +1833,9 @@ input[type="range"]:disabled::-webkit-slider-thumb {
   background: var(--raise);
   border: 1px solid var(--line-2);
 }
-.sk[data-style="stage"] .sk-input {
-  border-radius: 9px;
-}
 .sk-input span {
   width: 12px;
   height: 12px;
   border-radius: 3px;
   background: var(--accent);
-}
-.sk[data-style="stage"] .sk-input span {
-  border-radius: 6px;
 }

@@ -1,44 +1,7 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useThemeStore, type SkinMeta } from "../../store/theme";
+import { DEFAULT_SKIN_ID, useThemeStore, type SkinMeta } from "../../store/theme";
 import { Check, FolderOpen, RefreshCw, Info, Moon, Sun } from "lucide-react";
-
-// 浓度 slider: 拖动实时写 CSS 变量 + 持久化 (store 内完成)
-function OpacitySlider({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-  disabled = false,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (n: number) => void;
-  /** 禁用: 纯色皮肤下暗幕是视觉空操作 */
-  disabled?: boolean;
-}) {
-  return (
-    <label className={`block ${disabled ? "opacity-50" : ""}`}>
-      <div className="mb-1 flex items-center justify-between text-label text-fg-2">
-        <span>{label}</span>
-        <span className="tabular-nums text-fg">{Math.round(value * 100)}%</span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={0.01}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className={`w-full ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
-      />
-    </label>
-  );
-}
 
 // 设置分区标题: label 档 + 半粗 + 三级文字色 (与检查器 .ov-title 同一口径)
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -50,29 +13,14 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 // 皮肤骨架预览: 按皮肤 colors 画一张没有文字的界面缩略图 (图标轨 / 会话列表 / 时间线 / 输入框)。
-// 根元素挂 data-style + data-base, 直接命中 index.css 里 [data-style][data-base] 的整套默认 token,
+// 根元素挂 data-base, 直接命中 index.css 里 [data-base] 的整套默认 token,
 // 皮肤 colors 再以 inline 变量覆盖 —— 与 applyTheme 写 :root 的层叠关系一致, 不在 TS 里复制默认值。
 // 取代原 preview 截图: 截图带真实会话内容, 且自定义皮肤得手动截
-function SkinSkeleton({ skin, thumb }: { skin: SkinMeta; thumb: string | undefined }) {
-  const vars: Record<string, string> = {
-    // :root 上当前皮肤的 stage-tint 会被继承; 预览皮肤没声明时重置, 让 token 回落默认色相
-    "--stage-tint": "initial",
-  };
+function SkinSkeleton({ skin }: { skin: SkinMeta }) {
+  const vars: Record<string, string> = {};
   for (const [k, v] of Object.entries(skin.colors)) vars[`--${k}`] = v;
   return (
-    <div
-      className="sk"
-      data-style={skin.has_bg ? "stage" : "atelier"}
-      data-base={skin.base}
-      style={vars as CSSProperties}
-      aria-hidden
-    >
-      {skin.has_bg && (
-        <>
-          {thumb && <div className="sk-wall" style={{ backgroundImage: `url("${thumb}")` }} />}
-          <div className="sk-scrim" />
-        </>
-      )}
+    <div className="sk" data-base={skin.base} style={vars as CSSProperties} aria-hidden>
       <div className="sk-rail">
         <i className="on" />
         <i />
@@ -99,36 +47,23 @@ function SkinSkeleton({ skin, thumb }: { skin: SkinMeta; thumb: string | undefin
   );
 }
 
-// 皮肤列表 + 暗幕浓度 (设置页「主题」tab)
+// 主题列表 (设置页「主题」tab)
 export function ThemePanel() {
   const skins = useThemeStore((s) => s.skins);
   const activeSkinId = useThemeStore((s) => s.activeSkinId);
-  const scrim = useThemeStore((s) => s.scrim);
   const applyTheme = useThemeStore((s) => s.applyTheme);
-  const setScrim = useThemeStore((s) => s.setScrim);
   const reloadSkins = useThemeStore((s) => s.reloadSkins);
-  // 当前激活皮肤: 判断是壁纸(舞台)还是纯色(工坊)皮肤, 决定暗幕滑杆可用性
-  const activeSkin = skins.find((s) => s.id === activeSkinId);
-  // 切换中皮肤 id: 异步取背景图期间防连点
+  // 切换中皮肤 id: applyTheme 异步取 override.css 期间防连点
   const [busy, setBusy] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  // 壁纸皮肤的缩略图 (skin id → data URI): 打开主题页时按需取, Rust 侧有缓存, 取过不再解码
-  const [thumbs, setThumbs] = useState<Record<string, string>>({});
-  useEffect(() => {
-    let alive = true;
-    for (const skin of skins) {
-      if (!skin.has_bg || thumbs[skin.id]) continue;
-      invoke<string>("get_skin_asset", { skinId: skin.id, assetName: "thumb" })
-        .then((uri) => alive && setThumbs((m) => ({ ...m, [skin.id]: uri })))
-        // 缩略图失败只影响预览底图, 骨架照常显示
-        .catch((e) => console.error("皮肤缩略图加载失败", skin.id, e));
-    }
-    return () => {
-      alive = false;
-    };
-    // thumbs 不进依赖: 每取回一张就重跑会对仍在途的皮肤重复请求
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [skins]);
+  // Rust 侧按「亮色在前 + id」排序, 默认主题再提到第一位
+  const ordered = useMemo(
+    () => [
+      ...skins.filter((s) => s.id === DEFAULT_SKIN_ID),
+      ...skins.filter((s) => s.id !== DEFAULT_SKIN_ID),
+    ],
+    [skins],
+  );
 
   const onPick = async (skin: SkinMeta) => {
     if (skin.id === activeSkinId || busy) return;
@@ -151,14 +86,11 @@ export function ThemePanel() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* 皮肤 · 风格 */}
       <section>
-        <SectionTitle>皮肤 · 风格</SectionTitle>
-        <p className="-mt-1 mb-3 text-body text-fg-2">
-          皮肤即主题：壁纸皮肤走「壁纸舞台」风格，纯色皮肤走「狐火工坊」风格。切换即时生效。
-        </p>
+        <SectionTitle>主题</SectionTitle>
+        <p className="-mt-1 mb-3 text-body text-fg-2">切换即时生效。</p>
         <div className="grid grid-cols-2 gap-3">
-          {skins.map((skin) => {
+          {ordered.map((skin) => {
             const isActive = skin.id === activeSkinId;
             return (
               <button
@@ -174,7 +106,7 @@ export function ThemePanel() {
                 title={`${skin.name}${skin.author ? ` · ${skin.author}` : ""} v${skin.version}`}
               >
                 <div className="h-28 w-full">
-                  <SkinSkeleton skin={skin} thumb={thumbs[skin.id]} />
+                  <SkinSkeleton skin={skin} />
                 </div>
                 <div className="flex items-center justify-between gap-2 border-t border-[var(--line)] bg-[var(--raise)] px-3 py-2">
                   <div className="min-w-0">
@@ -185,10 +117,7 @@ export function ThemePanel() {
                       ) : (
                         <Sun className="h-3 w-3" />
                       )}
-                      <span>
-                        {skin.has_bg ? "舞台" : "工坊"} · {skin.base === "dark" ? "暗" : "亮"}
-                      </span>
-                      {skin.author ? ` · ${skin.author}` : ""}
+                      {skin.author && <span className="truncate">{skin.author}</span>}
                     </div>
                   </div>
                   {isActive && <Check className="h-4 w-4 shrink-0 text-[var(--accent)]" />}
@@ -219,25 +148,6 @@ export function ThemePanel() {
             自定义皮肤放入皮肤目录，刷新后即可切换
           </span>
         </div>
-      </section>
-
-      {/* 暗幕浓度: 合并旧「会话区/侧栏不透明率 + 背景模糊」三滑杆, 仅壁纸舞台生效 */}
-      <section className="space-y-3 border-t border-[var(--line)] pt-5">
-        <SectionTitle>暗幕浓度</SectionTitle>
-        <p className="-mt-1 mb-2 text-body text-fg-2">
-          控制舞台暗幕（浅色皮肤为白幕）的浓度，面板与文字的可读性靠它拉开。
-        </p>
-        <OpacitySlider
-          label="浓度"
-          value={scrim}
-          min={0.5}
-          max={0.95}
-          onChange={setScrim}
-          disabled={!activeSkin?.has_bg}
-        />
-        {!activeSkin?.has_bg && (
-          <p className="text-mini text-fg-4">仅壁纸皮肤生效</p>
-        )}
       </section>
     </div>
   );

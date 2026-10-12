@@ -11,7 +11,7 @@
 - **多会话 sidecar 进程池** —— 每个 pi 会话独立 `spawn` 一个 `pi --mode rpc` 子进程；LRU 淘汰最久未活动的进程，并带预热槽（warm slot）：打开会话即在后台预 spawn 同 cwd 的 pi，下次点击直接复用，绕开 pi 约 3.5s 的冷启动。
 - **流式对话渲染** —— 实时消费 `text_delta` / `thinking` / `toolcall` 事件流，Markdown（GFM）+ Shiki 语法高亮，消息气泡框可选开关、可调底色与不透明率，文字色随底色亮度联动。
 - **项目与会话历史** —— 扫描 `~/.pi/agent/sessions/`，侧边栏以项目分组折叠展示历史会话，支持预览、续聊（reattach）、本地移除。
-- **主题皮肤系统** —— 皮肤包由 `skin.json`（色阶 + 浅/深 base 方向）+ 可选背景图 + `override.css` 组成；会话区 / 侧边栏不透明率独立可调，背景模糊度可调。内置 `light-sky` / `tohsaka-rin` 两套。
+- **主题皮肤系统** —— 纯色主题，皮肤包由 `skin.json`（色阶 + 浅/深 base 方向）+ 可选 `override.css` 组成。内置 8 套按颜色命名的主题，默认「雪白 · 亮」；用户可往 `~/.pi-kitsune/skins/` 放自定义皮肤。
 - **@ 引用文件搜索** —— Windows 上调用 Everything (`es.exe`) 做毫秒级路径加速，失败时静默降级回递归全量扫描，绝不让 @ 引用整体不可用。
 - **屏幕截图** —— `xcap` 截主显示器全屏 → PNG base64，随消息发给视觉模型（像素级，路径无效）。
 - **/ 命令面板** —— 本地白名单命令（新建会话 / 切换模型 / 思考级别 / 中止 / 打开 skills / packages 面板）+ pi 透传命令（来自扩展 / prompt / skill）。
@@ -63,7 +63,7 @@ npm run tauri build
 ```
 pi-kitsune-desktop/
 ├── src/                        # 前端 React
-│   ├── App.tsx                  # 主界面：背景层 + 侧边栏 + 会话主区 + 面板抽屉
+│   ├── App.tsx                  # 主界面：侧边栏 + 会话主区 + 检查器 + 面板抽屉
 │   ├── main.tsx                 # 入口：全局注册 pi_event / session_evicted 监听
 │   ├── pet/                     # 桌宠窗口 (?window=pet 分流后的独立渲染入口)
 │   ├── components/              # UI 组件
@@ -94,39 +94,35 @@ pi-kitsune-desktop/
 
 ## 皮肤系统
 
-皮肤包放在 `src-tauri/resources/skins/<skin-id>/`，结构如下：
+只支持纯色主题。皮肤包放在 `src-tauri/resources/skins/<skin-id>/`（内置）或 `~/.pi-kitsune/skins/<skin-id>/`（用户自备），结构如下：
 
 ```
 <skin-id>/
 ├── skin.json        # 必需：元信息 + 色阶 + base 方向
-├── bg.jpg           # 可选：背景图（has_bg = true 时读取并注入 --bg-image）
-├── override.css     # 可选：自定义样式覆盖（建议选择器带 [data-theme] 前缀防串扰）
-└── preview.jpg      # 可选：设置面板预览图
+└── override.css     # 可选：自定义样式覆盖（建议选择器带 [data-theme] 前缀防串扰）
 ```
 
 `skin.json` 示例：
 
 ```json
 {
-  "id": "tohsaka-rin",
-  "name": "远坂凛",
-  "author": "hanjiang",
-  "version": "1.0.0",
+  "id": "white",
+  "name": "雪白 · 亮",
+  "author": "Pi Kitsune",
+  "version": "1.0",
   "base": "light",
   "colors": {
-    "primary-50": "253 242 244",
-    "primary-500": "236 72 112",
-    "primary-900": "120 20 40",
-    "panel": "255 255 255",
-    "bubble-bg": "255 255 255"
+    "bg": "oklch(100% 0 0)",
+    "fg": "oklch(20% 0 0)",
+    "accent": "oklch(22% 0 0)"
   },
-  "has_bg": true,
-  "has_override": true,
-  "bubble": true
+  "override": "override.css"
 }
 ```
 
-切换皮肤时，前端会清掉上一套写过的 CSS 变量再写入新的一组，注入 / 移除 `override.css`，并做约 220ms 的淡入淡出过渡。`bubble` 字段是皮肤推荐的气泡框开关，仅当用户从未手动改过时生效。
+`colors` 里的每个 key 都会写成 `:root` 上的 `--<key>` 变量，没声明的项回落到 `index.css` 按 `base` 方向给的默认值。设置页的预览是按 `colors` 画出来的骨架缩略图，不需要预览图。旧皮肤包里的 `background` / `bubble` 字段会被忽略，只生效配色。
+
+切换皮肤时，前端会清掉上一套写过的 CSS 变量再写入新的一组，注入 / 移除 `override.css`，并做约 220ms 的淡入淡出过渡。
 
 ## 桌宠系统
 

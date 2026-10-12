@@ -6,11 +6,10 @@ import { PetWindow } from "./pet/PetWindow";
 import { useSessionStore } from "./store/session";
 import "./index.css";
 
-// 主题属性由 theme.ts 的 init/applyTheme 写入; 这里先补默认值 (与 DEFAULT_SKIN_ID=flame 一致的
-// 工坊暗), 避免皮肤列表异步返回前首帧没有任何 token / 方向属性
+// 主题属性由 theme.ts 的 init/applyTheme 写入; 这里先补默认方向 (与 DEFAULT_SKIN_ID=white 一致的亮色),
+// 避免皮肤列表异步返回前首帧没有任何 token / 方向属性
 const rootEl = document.documentElement;
-rootEl.dataset.style = "atelier";
-rootEl.dataset.base = "dark";
+rootEl.dataset.base = "light";
 
 // 同一份 bundle 服务两个窗口, 按 query 分流。桌宠窗口由 Rust 侧
 // open_pet_window 以 index.html?window=pet 打开

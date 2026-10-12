@@ -8,7 +8,7 @@ import { CopyButton } from "../ui";
 
 interface TurnViewProps {
   turn: Turn;
-  /** 会话流式中且这是最后一轮: 工坊给脊线加流光 */
+  /** 会话流式中且这是最后一轮: 给脊线加流光 */
   live: boolean;
   /** 正在流式生成的 assistant entry id: 只有它末尾显示光标 */
   streamingReplyId: string | null;
@@ -86,7 +86,7 @@ function sameTurnProps(a: TurnViewProps, b: TurnViewProps): boolean {
   return a.turn.items.every((item, i) => sameItem(item, b.turn.items[i]));
 }
 
-/** 用户提问: 工坊 = 章节标题 (上方「你」元信息); 舞台 = 右对齐 accent 气泡 */
+/** 用户提问: 章节标题 (上方「你」元信息) */
 const PromptView = memo(function PromptView({ entry }: { entry: ChatEntry }) {
   return (
     <header className="tl-prompt">
