@@ -165,8 +165,7 @@ export function UiRequestModal({
 }
 
 // notify 通知条: 主区右上 (StageHead 下方) 堆叠, 自动消失 (info/warning/error 三态)
-// 位置选右上而非输入卡上方: 输入卡上方是 steer 队列浮层的地盘, 贴主区顶部不与其争位;
-// 舞台下检查器浮卡从右缘滑出, 容器按 --insp-w 让位后不会叠在浮卡上
+// 位置选右上而非输入卡上方: 输入卡上方是 steer 队列浮层的地盘, 贴主区顶部不与其争位
 const TOAST_TTL = 3500;
 /** 同屏最多展示的通知组数, 多出的折叠为「还有 N 条」 (防通知刷屏遮住正文) */
 const MAX_VISIBLE_GROUPS = 3;
@@ -215,8 +214,7 @@ export function NotificationToasts({
 
   return (
     <div
-      className="pointer-events-none absolute top-[72px] z-40 flex w-[340px] max-w-[calc(100%-32px)] flex-col gap-2"
-      style={{ right: "calc(var(--insp-w, 0px) + 16px)" }}
+      className="pointer-events-none absolute right-4 top-[72px] z-40 flex w-[340px] max-w-[calc(100%-32px)] flex-col gap-2"
     >
       {/* 计时器与卡片分离: 折叠未渲染的组也要按时到期, 否则数据会永远留在 store 里 */}
       {groups.map((g) => (

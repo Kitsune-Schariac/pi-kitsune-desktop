@@ -1,11 +1,10 @@
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { GitBranch, ListTree, Radar, ScanSearch, X } from "lucide-react";
 import { useSessionStore } from "../../store/session";
 import { useGitStore } from "../../store/git";
 import { useFleetStore, parseSessionUuid } from "../../store/fleet";
 import { useFleetStreamEntries } from "../../hooks/useFleetStreamEntries";
 import { useTrellisTasksStore } from "../../store/trellisTasks";
-import { useThemeStore } from "../../store/theme";
 import { useUiStore, type InspectorTab } from "../../store/ui";
 import { useResizableWidth } from "../../hooks/useResizableWidth";
 import { GitSidebarPanel } from "../GitSidebarPanel";
@@ -16,11 +15,10 @@ import { SessionOverview } from "../inspector/SessionOverview";
 
 /**
  * 检查器 (框架 C 第四列): 详情 / Git / 舰队 / 任务四个页签。
- * 工坊 = 常驻 flex 列 (左缘拖拽调宽), 舞台 = 从右滑出的浮卡 (index.css 按 data-style 分支)。
+ * 常驻 flex 列 (左缘拖拽调宽), 收起即卸载让位。
  * 三个内嵌面板沿用现有实现, 只去掉各自的关闭按钮 (onClose 传空)。
  */
 export function Inspector() {
-  const activeHasBg = useThemeStore((s) => s.activeHasBg);
   const inspectorOpen = useUiStore((s) => s.inspectorOpen);
   const inspectorTab = useUiStore((s) => s.inspectorTab);
   const setInspectorTab = useUiStore((s) => s.setInspectorTab);
@@ -83,17 +81,7 @@ export function Inspector() {
     direction: -1,
   });
 
-  // 舞台下文字列让位宽度 (阶段 3 的 Timeline 消费); 工坊由 flex 列天然占位, 不需要让位
-  useEffect(() => {
-    document.documentElement.style.setProperty(
-      "--insp-w",
-      activeHasBg && inspectorOpen ? `${width}px` : "0px",
-    );
-  }, [activeHasBg, inspectorOpen, width]);
-
-  if (!inspectorOpen && !activeHasBg) return null;
-  // 舞台下常驻挂载: 浮卡用 class 切滑出/滑入 (卸载重挂只能播一次性入场动画, 表达不了"滑出");
-  // 工坊是 grid 常驻列, 收起即卸载让位
+  if (!inspectorOpen) return null;
 
   const tabs: { key: InspectorTab; label: string; icon: ReactNode; disabled?: boolean; badge?: ReactNode }[] = [
     { key: "detail", label: "详情", icon: <ScanSearch className="h-[14px] w-[14px]" /> },
@@ -125,7 +113,7 @@ export function Inspector() {
   ];
 
   return (
-    <aside style={{ width }} className={`inspector inspector-col ${inspectorOpen ? "" : "insp-closed"}`}>
+    <aside style={{ width }} className="inspector inspector-col">
       <div className="flex h-11 shrink-0 items-center gap-3 border-b border-[var(--line)] px-4">
         {tabs.map(({ key, label, icon, disabled, badge }) => (
           <button
@@ -166,7 +154,7 @@ export function Inspector() {
         )}
       </div>
 
-      {/* 左缘宽度拖拽手柄: 舞台浮卡与工坊列共用 */}
+      {/* 左缘宽度拖拽手柄 */}
       <div
         onMouseDown={onDragStart}
         className="group absolute inset-y-0 left-0 z-10 w-[7px] cursor-col-resize"

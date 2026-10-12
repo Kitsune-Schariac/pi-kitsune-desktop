@@ -7,7 +7,7 @@ import type { SettingsSection } from "../settings/SettingsWindow";
 /**
  * 图标轨 (框架 C 第一列): 会话开关会话列表, Skill / Package 开抽屉,
  * 统计 / 桌宠 / 设置直接打开设置窗的对应分区。
- * 激活态形态按 data-style 分支 (工坊 = 左缘竖条, 舞台 = accent 实心块, 见 index.css .rail-btn)。
+ * 激活态 = 左缘竖条 (见 index.css .rail-btn)。
  */
 export function Rail({
   onOpenPanel,

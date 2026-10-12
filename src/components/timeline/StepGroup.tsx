@@ -31,7 +31,7 @@ interface StepGroupProps {
 /**
  * 连续工具调用聚合的步骤组: 头 = 执行 N 步 + 工具分布 + 失败数 + 总耗时。
  * 含失败或运行中的组默认展开 (失败必须浮出来), 其余默认折叠; 用户手动开合后由本地 state 记忆。
- * 工坊展开为一步一行, 舞台为一直展开的胶囊串 (index.css 按 data-style 分支)。
+ * 展开后一步一行。
  */
 export const StepGroup = memo(function StepGroup({ entries, selectedId, revealSeq, onStepClick }: StepGroupProps) {
   const stats = groupStats(entries);

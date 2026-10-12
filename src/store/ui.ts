@@ -1,6 +1,6 @@
 // 纯 UI 状态 store (design §3.2): 外壳的展开 / 页签 / 选中步, 与数据 store 分离。
-// 持久化: paneOpen / listMode 落 localStorage; inspectorOpen 不持久化 —— 随风格初始化
-// (App 在风格变化时设初值: 工坊展开, 舞台收起把右侧让给角色), selectedStepId 随会话切换清空。
+// 持久化: paneOpen / listMode 落 localStorage; inspectorOpen 不持久化 (每次启动默认展开),
+// selectedStepId 随会话切换清空。
 import { create } from "zustand";
 
 const PANE_OPEN_KEY = "kitsune.paneOpen";
@@ -34,7 +34,7 @@ interface UiStore {
   paneOpen: boolean;
   /** 会话列表视图: 最近 / 项目 (持久化 kitsune.listMode) */
   listMode: SessionListMode;
-  /** 检查器展开 (不持久化, 随风格初始化) */
+  /** 检查器展开 (不持久化, 启动默认展开) */
   inspectorOpen: boolean;
   inspectorTab: InspectorTab;
   /** 检查器选中的步骤条目 id (ChatEntry.id); 切会话时清空 */
@@ -59,7 +59,7 @@ interface UiStore {
 export const useUiStore = create<UiStore>((set) => ({
   paneOpen: readPaneOpen(),
   listMode: readListMode(),
-  inspectorOpen: false,
+  inspectorOpen: true,
   inspectorTab: "detail",
   selectedStepId: null,
   locateStepSeq: 0,

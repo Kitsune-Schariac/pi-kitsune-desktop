@@ -18,8 +18,7 @@ function sessionRank(s: SessionNode): number {
 }
 
 /**
- * 空状态 (design §8): 工坊 = 居中问候 + 最近会话快捷入口; 舞台 = 问候落文字列, 右侧留给角色。
- * 形态差异由 index.css 的 .empty-* 按 data-style 分支表达。
+ * 空状态 (design §8): 居中问候 + 最近会话快捷入口。
  */
 export function EmptyState() {
   const projects = useProjectsStore((s) => s.projects);
@@ -65,7 +64,7 @@ export function EmptyState() {
       <p className="empty-sub mt-3 text-ui text-fg-3">选择项目，开始与 pi 对话</p>
       {recent.length > 0 && (
         <div className="empty-recent">
-          {/* 分组小标题复用会话列表最近视图的 .sess-grp (两风格形态已有分支) */}
+          {/* 分组小标题复用会话列表最近视图的 .sess-grp */}
           <div className="sess-grp">最近会话</div>
           {recent.map(({ project, session }) => {
             const title = session.preview.split("\n")[0].trim() || session.file_name;
