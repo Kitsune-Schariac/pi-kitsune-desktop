@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import type { Element } from "hast";
 import { useThemeStore } from "../store/theme";
 import { getHighlighter, highlightToHtml } from "../lib/highlighter";
+import { CopyButton } from "./ui";
 
 // Markdown 渲染封装: react-markdown + GFM(表格/删除线/任务列表) + Shiki 语法高亮
 // Shiki 使用 VS Code 同款 TextMate 语法, 对真实代码(注解/泛型/lambda/链式调用)识别率远高于 highlight.js
@@ -12,8 +13,9 @@ import { getHighlighter, highlightToHtml } from "../lib/highlighter";
 // 改为模块级预热 highlighter + 自定义 pre 组件同步高亮, 未就绪时回退纯文本
 // (shiki 单例、语言清单、主题联动与高亮缓存已抽到 lib/highlighter.ts, 供 DiffView 共用)
 
-// 代码块渲染: 从 pre 代理 code 的 props, 同步调用 shiki 高亮
-// lang 未知或 highlighter 未就绪时回退到默认 pre/code 渲染(纯文本)
+// 代码块渲染: 从 pre 代理 code 的 props, 同步调用 shiki 高亮; 右上角带复制钮
+// 不渲染 children (那会走自定义 code 组件), 而是拿原文自拼 pre/code ——
+// 这样自定义 code 组件只会被行内代码触发, 无需再区分行内 / 块级
 function CodeBlock({ children }: { children?: ReactNode }) {
   const codeEl = children as
     | { props?: { className?: string; children?: ReactNode } }
@@ -21,14 +23,23 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   const className = codeEl?.props?.className;
   const lang = /language-(\w+)/.exec(className ?? "")?.[1];
   const raw = codeEl?.props?.children;
+  const code = typeof raw === "string" ? raw.replace(/\n$/, "") : null;
 
-  if (lang && typeof raw === "string" && getHighlighter()) {
-    const code = raw.replace(/\n$/, "");
+  let body: ReactNode = null;
+  if (lang && code !== null && getHighlighter()) {
     const html = highlightToHtml(code, lang);
-    if (html) return <div dangerouslySetInnerHTML={{ __html: html }} />;
-    return <pre>{children}</pre>;
+    if (html) body = <div dangerouslySetInnerHTML={{ __html: html }} />;
   }
-  return <pre>{children}</pre>;
+  return (
+    <div className="md-code">
+      {body ?? (
+        <pre>
+          <code className={className}>{code ?? raw}</code>
+        </pre>
+      )}
+      {code !== null && <CopyButton text={code} title="复制代码" className="md-code-copy" />}
+    </div>
+  );
 }
 
 // memo 保证流式更新时只有文本变化的条目重新解析, 其余条目跳过重渲染

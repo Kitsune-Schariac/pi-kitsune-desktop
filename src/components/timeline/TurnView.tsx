@@ -4,6 +4,7 @@ import type { ChatEntry } from "../../store/session";
 import type { TimelineItem, Turn } from "../../lib/timeline";
 import { Markdown } from "../Markdown";
 import { StepGroup } from "./StepGroup";
+import { CopyButton } from "../ui";
 
 interface TurnViewProps {
   turn: Turn;
@@ -90,7 +91,10 @@ const PromptView = memo(function PromptView({ entry }: { entry: ChatEntry }) {
   return (
     <header className="tl-prompt">
       {/* ChatEntry 没有时间戳, 元信息只写「你」, 不编造时间 (原型的"你 · 14:02"是示意数据) */}
-      <span className="tl-prompt-meta">你</span>
+      <div className="tl-prompt-meta">
+        <span>你</span>
+        <CopyButton text={entry.text ?? ""} title="复制提问" className="tl-copy" />
+      </div>
       <p className="tl-prompt-text">{entry.text}</p>
     </header>
   );
@@ -106,6 +110,12 @@ const ReplyView = memo(function ReplyView({ entry, cursor }: { entry: ChatEntry;
         {/* 空回复时正文还没有块级元素, 伪元素挂不上去, 光标直接内联在省略号后 */}
         {cursor && !entry.text && <span className="tl-caret" />}
       </div>
+      {/* 流式中不给复制: 内容还没写完, 复制到的是半截 */}
+      {entry.text && !cursor && (
+        <div className="tl-actions">
+          <CopyButton text={entry.text} title="复制回复 (Markdown)" className="tl-copy" />
+        </div>
+      )}
     </div>
   );
 });

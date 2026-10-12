@@ -667,6 +667,54 @@ html:has([data-pet]) #root {
   animation: tl-spine 1.8s linear infinite;
   box-shadow: 0 0 10px color-mix(in oklch, var(--accent) 50%, transparent);
 }
+
+/* ---- 一键复制 (回复 / 提问 / 代码块共用 .copy-btn) ----
+   平时隐藏, hover 所在块才显: 用 opacity 不用 display, 显隐不引起布局跳动 */
+.copy-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--fg-4);
+  cursor: pointer;
+  transition: color 0.15s var(--ease), background-color 0.15s var(--ease), opacity 0.15s var(--ease);
+}
+.copy-btn:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+.copy-btn.done {
+  color: var(--ok);
+}
+.tl-copy {
+  opacity: 0;
+}
+.tl-prompt:hover .tl-copy,
+.tl-reply-wrap:hover .tl-copy,
+.tl-copy:focus-visible,
+.tl-copy.done {
+  opacity: 1;
+}
+/* 「你」与复制钮同一行; 舞台下 meta 在气泡右上方, 钮跟在「你」左侧 */
+.tl-prompt-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+}
+[data-style="stage"] .tl-prompt-meta {
+  flex-direction: row-reverse;
+}
+.tl-prompt-meta .copy-btn {
+  width: 20px;
+  height: 20px;
+}
+.tl-actions {
+  display: flex;
+  margin-top: 4px;
+  margin-left: -4px;
+}
 @keyframes tl-spine {
   from { background-position: 0 100%; }
   to { background-position: 0 -140%; }
@@ -1886,6 +1934,23 @@ html:has([data-pet]) #root {
 .markdown-body .shiki code {
   font-family: inherit;
   color: inherit;
+}
+
+/* 代码块复制钮: 右上角浮出, 底色垫一层 --well 防止压在代码上看不清 */
+.markdown-body .md-code {
+  position: relative;
+}
+.markdown-body .md-code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  background: var(--well);
+}
+.markdown-body .md-code:hover .md-code-copy,
+.markdown-body .md-code-copy:focus-visible,
+.markdown-body .md-code-copy.done {
+  opacity: 1;
 }
 
 /* 行内代码 */

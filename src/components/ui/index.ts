@@ -10,3 +10,4 @@ export { Select } from "./Select";
 export type { SelectDensity } from "./Select";
 export { Segmented } from "./Segmented";
 export type { SegmentedSize, SegmentedOption } from "./Segmented";
+export { CopyButton } from "./CopyButton";
