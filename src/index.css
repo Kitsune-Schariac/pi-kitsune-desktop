@@ -2238,3 +2238,173 @@ input[type="range"]:disabled::-webkit-slider-thumb {
   padding-right: 24px;
   white-space: pre;
 }
+
+/* ---- 皮肤骨架预览 (设置 · 主题, ThemePanel SkinSkeleton) ----
+   .sk 自带 data-style / data-base, 内部颜色全走 token, 由皮肤 colors 覆盖;
+   只用色块不出文字。class 全部 sk- 前缀, 不被 [data-style] .xxx 的全局分支误伤;
+   反过来, 本块的风格分支必须写成 .sk[data-style] —— 裸 [data-style="atelier"] .sk-x 会匹配到
+   <html> 祖先, 当前皮肤是工坊时舞台预览也会长出工坊菱形 */
+.sk {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+[data-style="stage"].sk {
+  background: var(--scrim-color);
+}
+.sk-wall,
+.sk-scrim {
+  position: absolute;
+  inset: 0;
+}
+.sk-wall {
+  background-position: center;
+  background-size: cover;
+}
+.sk-scrim {
+  background: color-mix(in oklch, var(--scrim-color) 72%, transparent);
+}
+.sk[data-base="light"] > .sk-scrim {
+  background: color-mix(in oklch, var(--scrim-color) 36%, transparent);
+}
+.sk > :not(.sk-wall, .sk-scrim) {
+  position: relative;
+}
+.sk i {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fg-4);
+  opacity: 0.55;
+}
+.sk .w-50 { width: 50%; }
+.sk .w-60 { width: 60%; }
+.sk .w-70 { width: 70%; }
+.sk .w-75 { width: 75%; }
+.sk .w-85 { width: 85%; }
+.sk .w-90 { width: 90%; }
+
+.sk-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 20px;
+  padding-top: 10px;
+  background: var(--rail);
+  border-right: 1px solid var(--line);
+}
+.sk-rail i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.sk-rail i.on {
+  background: var(--accent);
+  opacity: 1;
+}
+
+.sk-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 26%;
+  padding: 10px 8px;
+  background: var(--pane);
+  border-right: 1px solid var(--line);
+}
+.sk-pane i.on {
+  position: relative;
+  background: var(--fg-2);
+  opacity: 0.9;
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.sk-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px 0 22px;
+}
+/* 工坊: 左侧脊线 + 菱形, 提问是一条粗标题线 */
+.sk[data-style="atelier"] > .sk-main::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 12px;
+  bottom: 30px;
+  width: 1px;
+  background: var(--line-2);
+}
+.sk[data-style="atelier"] .sk-prompt {
+  position: relative;
+  width: 62%;
+  height: 7px;
+  margin-bottom: 4px;
+  border-radius: 2px;
+  background: var(--fg);
+  opacity: 0.85;
+}
+.sk[data-style="atelier"] .sk-prompt::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  transform: rotate(45deg);
+}
+/* 舞台: 提问是右对齐 accent 气泡 */
+.sk[data-style="stage"] > .sk-main {
+  padding-left: 14px;
+}
+.sk[data-style="stage"] .sk-prompt {
+  align-self: flex-end;
+  width: 46%;
+  height: 14px;
+  margin-bottom: 4px;
+  border-radius: 7px 7px 2px 7px;
+  background: color-mix(in oklch, var(--accent) 26%, var(--raise));
+  border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
+}
+.sk-main i {
+  background: var(--fg-2);
+  opacity: 0.5;
+}
+.sk-codeblock {
+  height: 16px;
+  margin-top: 2px;
+  border-radius: 3px;
+  background: var(--well);
+  border: 1px solid var(--line);
+}
+.sk-input {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 18px;
+  margin-top: auto;
+  margin-bottom: 8px;
+  padding: 0 3px;
+  border-radius: 5px;
+  background: var(--raise);
+  border: 1px solid var(--line-2);
+}
+.sk[data-style="stage"] .sk-input {
+  border-radius: 9px;
+}
+.sk-input span {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+.sk[data-style="stage"] .sk-input span {
+  border-radius: 6px;
+}

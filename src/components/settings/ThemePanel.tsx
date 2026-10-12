@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useThemeStore, type SkinMeta } from "../../store/theme";
 import { Check, FolderOpen, RefreshCw, Info, Moon, Sun } from "lucide-react";
@@ -49,6 +49,56 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
+// 皮肤骨架预览: 按皮肤 colors 画一张没有文字的界面缩略图 (图标轨 / 会话列表 / 时间线 / 输入框)。
+// 根元素挂 data-style + data-base, 直接命中 index.css 里 [data-style][data-base] 的整套默认 token,
+// 皮肤 colors 再以 inline 变量覆盖 —— 与 applyTheme 写 :root 的层叠关系一致, 不在 TS 里复制默认值。
+// 取代原 preview 截图: 截图带真实会话内容, 且自定义皮肤得手动截
+function SkinSkeleton({ skin, thumb }: { skin: SkinMeta; thumb: string | undefined }) {
+  const vars: Record<string, string> = {
+    // :root 上当前皮肤的 stage-tint 会被继承; 预览皮肤没声明时重置, 让 token 回落默认色相
+    "--stage-tint": "initial",
+  };
+  for (const [k, v] of Object.entries(skin.colors)) vars[`--${k}`] = v;
+  return (
+    <div
+      className="sk"
+      data-style={skin.has_bg ? "stage" : "atelier"}
+      data-base={skin.base}
+      style={vars as CSSProperties}
+      aria-hidden
+    >
+      {skin.has_bg && (
+        <>
+          {thumb && <div className="sk-wall" style={{ backgroundImage: `url("${thumb}")` }} />}
+          <div className="sk-scrim" />
+        </>
+      )}
+      <div className="sk-rail">
+        <i className="on" />
+        <i />
+        <i />
+      </div>
+      <div className="sk-pane">
+        <i className="w-70" />
+        <i className="on w-85" />
+        <i className="w-60" />
+        <i className="w-75" />
+        <i className="w-50" />
+      </div>
+      <div className="sk-main">
+        <div className="sk-prompt" />
+        <i className="w-90" />
+        <i className="w-75" />
+        <i className="w-85" />
+        <div className="sk-codeblock" />
+        <div className="sk-input">
+          <span />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 皮肤列表 + 暗幕浓度 (设置页「主题」tab)
 export function ThemePanel() {
   const skins = useThemeStore((s) => s.skins);
@@ -62,6 +112,23 @@ export function ThemePanel() {
   // 切换中皮肤 id: 异步取背景图期间防连点
   const [busy, setBusy] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // 壁纸皮肤的缩略图 (skin id → data URI): 打开主题页时按需取, Rust 侧有缓存, 取过不再解码
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let alive = true;
+    for (const skin of skins) {
+      if (!skin.has_bg || thumbs[skin.id]) continue;
+      invoke<string>("get_skin_asset", { skinId: skin.id, assetName: "thumb" })
+        .then((uri) => alive && setThumbs((m) => ({ ...m, [skin.id]: uri })))
+        // 缩略图失败只影响预览底图, 骨架照常显示
+        .catch((e) => console.error("皮肤缩略图加载失败", skin.id, e));
+    }
+    return () => {
+      alive = false;
+    };
+    // thumbs 不进依赖: 每取回一张就重跑会对仍在途的皮肤重复请求
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skins]);
 
   const onPick = async (skin: SkinMeta) => {
     if (skin.id === activeSkinId || busy) return;
@@ -106,18 +173,8 @@ export function ThemePanel() {
                 } ${busy === skin.id ? "opacity-60" : ""}`}
                 title={`${skin.name}${skin.author ? ` · ${skin.author}` : ""} v${skin.version}`}
               >
-                <div className="h-24 w-full bg-[var(--well)]">
-                  {skin.preview_data_uri ? (
-                    <img
-                      src={skin.preview_data_uri}
-                      alt={skin.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-mini text-fg-4">
-                      无预览
-                    </div>
-                  )}
+                <div className="h-28 w-full">
+                  <SkinSkeleton skin={skin} thumb={thumbs[skin.id]} />
                 </div>
                 <div className="flex items-center justify-between gap-2 border-t border-[var(--line)] bg-[var(--raise)] px-3 py-2">
                   <div className="min-w-0">
