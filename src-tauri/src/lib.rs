@@ -4,6 +4,7 @@ mod behavior_stats;
 mod pi_runtime;
 mod search;
 mod git;
+mod local_path;
 mod models_config;
 mod pets;
 mod provider_probe;
@@ -506,6 +507,8 @@ pub fn run() {
             session_fs::list_dir, session_fs::read_session_entries_public,
             session_fs::list_files_recursive,
             search::search_files,
+            local_path::resolve_local_path, local_path::read_text_file,
+            local_path::open_local_path, local_path::reveal_local_path, local_path::open_external_url,
             git::git_status, git::git_diff, git::git_branches, git::git_log, git::git_show,
             git::git_stage, git::git_unstage, git::git_commit, git::git_checkout,
             capture::capture_screenshot,

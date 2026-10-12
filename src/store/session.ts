@@ -157,6 +157,8 @@ interface SessionStore {
   // notify 通知条 (全局, 跨会话展示)
   notifications: UiNotification[];
   dismissNotification: (id: string) => void;
+  /** 软件级提示 (如点开的路径不存在): 走同一个右下角弹窗, 3.5s 自动消失 */
+  notify: (message: string, notifyType?: UiNotification["notifyType"]) => void;
 }
 
 // reattach 防竞态: 每次递增, 异步完成时比对, 不一致则丢弃 (快速连切时旧 reattach 不串到当前会话)
@@ -806,6 +808,11 @@ export const useSessionStore = create<SessionStore>((set, get) => {
 
     dismissNotification: (id) => {
       set((state) => ({ notifications: state.notifications.filter((n) => n.id !== id) }));
+    },
+
+    notify: (message, notifyType = "warning") => {
+      const n: UiNotification = { id: crypto.randomUUID(), message, notifyType };
+      set((state) => ({ notifications: [...state.notifications, n] }));
     },
 
     // 速度采样: 实时累加器不在 store 里 (高频写入刻意不走 zustand, 避免每 token 一次重渲染),

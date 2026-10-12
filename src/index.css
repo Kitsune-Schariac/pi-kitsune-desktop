@@ -1953,6 +1953,32 @@ html:has([data-pet]) #root {
   opacity: 1;
 }
 
+/* 可点击的本地路径: 正文路径走链接色; 行内代码路径保持代码外观, hover 加虚下划线提示可点 */
+.markdown-body .md-path {
+  color: var(--accent);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.markdown-body .md-path:hover {
+  text-decoration: underline;
+}
+.markdown-body .md-path-code {
+  color: inherit;
+}
+.markdown-body .md-path-code:hover {
+  text-decoration: none;
+}
+.markdown-body .md-path-code code {
+  cursor: pointer;
+  text-decoration: underline dotted color-mix(in oklch, var(--accent-2) 55%, transparent);
+  text-underline-offset: 3px;
+  transition: border-color 0.15s var(--ease), background-color 0.15s var(--ease);
+}
+.markdown-body .md-path-code:hover code {
+  border-color: var(--accent-2);
+  text-decoration-style: solid;
+}
+
 /* 行内代码 */
 .markdown-body code {
   padding: 0.15em 0.4em;
@@ -2170,4 +2196,45 @@ input[type="range"]:disabled::-webkit-slider-thumb {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---- 程序内文件查看器 (FileViewer) ----
+   行号列 sticky 贴左: 横向滚长行时行号不跟着滚走; 底色与卡片同为 --popover 盖住代码 */
+.fv-code {
+  display: table;
+  min-width: 100%;
+  padding: 8px 0;
+  font-family: var(--f-mono);
+  font-size: var(--fs-label);
+  line-height: 20px;
+  color: var(--fg);
+}
+.fv-line {
+  display: table-row;
+}
+.fv-line.hit {
+  background: var(--accent-soft);
+}
+.fv-ln {
+  display: table-cell;
+  position: sticky;
+  left: 0;
+  min-width: 56px;
+  padding: 0 12px 0 16px;
+  text-align: right;
+  color: var(--fg-4);
+  background: var(--popover);
+  user-select: none;
+}
+.fv-line.hit .fv-ln {
+  color: var(--accent);
+  /* accent-soft 半透明, sticky 列必须不透明才盖得住横滚的代码: 叠在 --popover 上 */
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--popover);
+}
+.fv-text {
+  display: table-cell;
+  /* 代码列吃满剩余宽度: 否则 table 把多余宽度平摊, 行号列被撑出一大片空白 */
+  width: 100%;
+  padding-right: 24px;
+  white-space: pre;
 }

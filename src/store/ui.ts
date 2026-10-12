@@ -50,6 +50,10 @@ interface UiStore {
   clearStep: () => void;
   /** 请求时间线定位当前选中步骤 (递增信号) */
   locateStep: () => void;
+  /** 程序内文件查看器: 会话里点开的文本文件 (path 已解析为绝对路径, line 为跳转行) */
+  viewer: { path: string; line: number | null } | null;
+  openViewer: (path: string, line: number | null) => void;
+  closeViewer: () => void;
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -59,6 +63,7 @@ export const useUiStore = create<UiStore>((set) => ({
   inspectorTab: "detail",
   selectedStepId: null,
   locateStepSeq: 0,
+  viewer: null,
 
   togglePane: () =>
     set((s) => {
@@ -89,4 +94,7 @@ export const useUiStore = create<UiStore>((set) => ({
   clearStep: () => set({ selectedStepId: null }),
 
   locateStep: () => set((s) => ({ locateStepSeq: s.locateStepSeq + 1 })),
+
+  openViewer: (path, line) => set({ viewer: { path, line } }),
+  closeViewer: () => set({ viewer: null }),
 }));
