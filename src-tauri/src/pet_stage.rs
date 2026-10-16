@@ -40,6 +40,9 @@ enum Motion {
 static HITBOX: OnceLock<Mutex<Option<HitBox>>> = OnceLock::new();
 static REQUEST: OnceLock<Mutex<Option<Request>>> = OnceLock::new();
 static DRAGGING: AtomicBool = AtomicBool::new(false);
+/// 按下但还没判成拖动 (可能只是单击): 同样要锁住不穿透, 否则手一抖出了包围盒,
+/// 窗口切成穿透, 页面就再也收不到 mousemove / mouseup, 单击和拖动都判定不了
+static PRESSED: AtomicBool = AtomicBool::new(false);
 /// 重力: 0 = 前端还没告知, 1 = 关, 2 = 开。
 /// 必须有"未知"态: 开窗瞬间配置还没到, 若默认按开处理, 关了重力的用户会被先拽到地面再也回不去
 static GRAVITY: AtomicU8 = AtomicU8::new(0);
@@ -107,6 +110,7 @@ pub fn start(app: tauri::AppHandle) {
         *r = None;
     }
     DRAGGING.store(false, Ordering::SeqCst);
+    PRESSED.store(false, Ordering::SeqCst);
     GRAVITY.store(0, Ordering::SeqCst);
 
     std::thread::spawn(move || {
@@ -151,8 +155,14 @@ pub fn start(app: tauri::AppHandle) {
 
             // 拖动结束由这里判定: 系统拖拽的模态移动循环会吞掉松手消息 (tao 只给原生窗口补发
             // WM_LBUTTONUP, WebView 里的页面收不到 mouseup), 前端没法自己知道拖完了
-            if DRAGGING.load(Ordering::SeqCst) && !primary_button_down() {
+            let button_down = primary_button_down();
+            if DRAGGING.load(Ordering::SeqCst) && !button_down {
                 DRAGGING.store(false, Ordering::SeqCst);
+            }
+            // 按下锁的兜底: 正常由前端 mouseup 解除, 万一 mouseup 丢了 (如按下后切走了窗口)
+            // 也别让锁一直挂着, 否则透明画布会一直挡鼠标
+            if PRESSED.load(Ordering::SeqCst) && !button_down {
+                PRESSED.store(false, Ordering::SeqCst);
             }
             let dragging = DRAGGING.load(Ordering::SeqCst);
 
@@ -208,12 +218,13 @@ pub fn start(app: tauri::AppHandle) {
             was_dragging = dragging;
 
             let dragging = DRAGGING.load(Ordering::SeqCst);
+            let pressed = PRESSED.load(Ordering::SeqCst);
             // 采样失败按"不在"处理 —— 宁可一时点不到宠物, 也不能让整张透明画布挡住用户
             let (inside, near) = match &probe {
                 Some(p) => (cursor_in_hitbox(p, scale), cursor_near_window(p)),
                 None => (false, false),
             };
-            let ignore = !(dragging || inside);
+            let ignore = !(dragging || pressed || inside);
             if last_ignore != Some(ignore) {
                 // 失败 (窗口正在销毁) 不记状态, 下一轮重试或随窗口消失退出
                 if win.set_ignore_cursor_events(ignore).is_ok() {
@@ -240,7 +251,9 @@ pub fn start(app: tauri::AppHandle) {
 
             let tick = if matches!(motion, Motion::Fall { .. }) {
                 TICK_FALL
-            } else if matches!(motion, Motion::Walk { .. }) || dragging || near {
+            } else if matches!(motion, Motion::Walk { .. }) {
+                TICK_WALK
+            } else if dragging || pressed || near {
                 TICK_NEAR
             } else {
                 TICK_FAR
@@ -460,6 +473,12 @@ pub fn pet_stage_set_hitbox(rect: HitBox) {
 #[tauri::command]
 pub fn pet_stage_drag(active: bool) {
     DRAGGING.store(active, Ordering::SeqCst);
+}
+
+/// 按下 / 松开: 按住期间锁定不穿透, 让页面能完整收到这次按压的 mousemove / mouseup
+#[tauri::command]
+pub fn pet_stage_press(active: bool) {
+    PRESSED.store(active, Ordering::SeqCst);
 }
 
 /// 走到脚底 x (逻辑像素), speed 为逻辑像素/秒; 到达发 arrived, 被屏幕边缘挡住发 edge

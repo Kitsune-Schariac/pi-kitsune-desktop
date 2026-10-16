@@ -9,7 +9,8 @@ import {
 } from "@tauri-apps/api/window";
 import { Menu } from "@tauri-apps/api/menu";
 import type { PetAnimation, PetConfig, PetMeta, PetState } from "../store/pet";
-import { canvasSize, footFromWindowPos, windowPosFromFoot } from "./canvas";
+import { canvasSize, windowPosFromFoot } from "./canvas";
+import { pressDown, startStage } from "./stage";
 
 // 缩放边界: 太小看不清帧, 太大精灵图糊 (2 倍图放到 3 倍已是上限)
 const ZOOM_MIN = 0.5;
@@ -259,72 +260,8 @@ export function PetWindow() {
     return () => window.removeEventListener("wheel", onWheel);
   }, []);
 
-  // --- 左键拖动 + 拖完回传位置 ---
-  // 拖动结束有两条来路: Windows 上系统拖拽的模态循环会吞掉松手消息, 页面收不到 mouseup,
-  // 由 Rust 舞台线程读鼠标键状态后发 pet_stage dragEnd; 其他平台靠 mouseup 兜底。
-  // 两条都可能到, 用 ref 保证一次拖动只收尾一次
-  const dragRef = useRef<{ active: boolean; onUp: (() => void) | null }>({ active: false, onUp: null });
-
-  const finishDrag = useCallback(() => {
-    const d = dragRef.current;
-    if (d.onUp) window.removeEventListener("mouseup", d.onUp);
-    d.onUp = null;
-    if (!d.active) return;
-    d.active = false;
-    invoke("pet_stage_drag", { active: false }).catch(() => {});
-    void (async () => {
-      try {
-        // outerPosition 给的是物理像素, 而重开窗时 Rust 侧 builder.position() 收的是逻辑坐标,
-        // 高 DPI 屏 (125% 缩放) 直接存物理值会让下次开窗位置偏掉 —— 存之前先换算
-        const p = petRef.current;
-        if (!p) return;
-        const win = getCurrentWindow();
-        const [pos, scale] = await Promise.all([win.outerPosition(), win.scaleFactor()]);
-        const canvas = canvasSize(p.frame_width, p.frame_height, zoomRef.current);
-        await emitTo("main", "pet_patch", { pos: footFromWindowPos(pos.toLogical(scale), canvas) });
-      } catch {
-        // 拿不到位置就不落盘, 下次开窗回到默认位置即可
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    let disposed = false;
-    let off: (() => void) | null = null;
-    void listen<{ kind: string; foot: { x: number; y: number } }>("pet_stage", (e) => {
-      const { kind, foot } = e.payload;
-      if (kind === "dragEnd") {
-        finishDrag();
-      } else if (kind === "landed" || kind === "arrived" || kind === "edge" || kind === "snapped") {
-        // 舞台线程挪过窗口之后, 新落点由它带着脚底点报上来, 直接落盘
-        emitTo("main", "pet_patch", { pos: { x: foot.x, y: foot.y, v: 2 } }).catch(() => {});
-      }
-    }).then((f) => {
-      // StrictMode 卸载后才 resolve 的监听器就地退订
-      if (disposed) f();
-      else off = f;
-    });
-    return () => {
-      disposed = true;
-      off?.();
-    };
-  }, [finishDrag]);
-
-  const onMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.button !== 0) return;
-      const d = dragRef.current;
-      d.active = true;
-      if (!d.onUp) {
-        d.onUp = finishDrag;
-        window.addEventListener("mouseup", d.onUp);
-      }
-      // 先锁住"不穿透"再开拖, 免得快速甩动时鼠标短暂出了包围盒、窗口切成穿透把拖拽打断
-      invoke("pet_stage_drag", { active: true }).catch(() => {});
-      getCurrentWindow().startDragging().catch(() => {});
-    },
-    [finishDrag],
-  );
+  // --- 单击 / 拖动判定与落点存盘都在 stage.ts; 这里只负责订阅 Rust 舞台事件的生命周期 ---
+  useEffect(() => startStage(), []);
 
   // --- 右键菜单: 切角色 / 重置位置 / 关闭 ---
   const onContextMenu = useCallback(
@@ -389,7 +326,7 @@ export function PetWindow() {
     <div data-pet style={{ position: "relative", width: canvas.w, height: canvas.h }}>
       <div
         ref={boxRef}
-        onMouseDown={onMouseDown}
+        onMouseDown={pressDown}
         onContextMenu={onContextMenu}
         style={{
           position: "absolute",

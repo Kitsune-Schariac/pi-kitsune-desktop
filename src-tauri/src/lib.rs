@@ -520,7 +520,7 @@ pub fn run() {
             skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
             pets::list_pets, pets::get_pet_asset, pets::open_pets_dir,
             open_pet_window, close_pet_window,
-            pet_stage::pet_stage_set_hitbox, pet_stage::pet_stage_drag,
+            pet_stage::pet_stage_set_hitbox, pet_stage::pet_stage_drag, pet_stage::pet_stage_press,
             pet_stage::pet_stage_move_to, pet_stage::pet_stage_stop, pet_stage::pet_stage_set_gravity,
             subagent_fleet::list_fleet_runs, subagent_fleet::read_fleet_run_detail,
             trellis_tasks::list_trellis_tasks, trellis_tasks::read_trellis_task_doc,
