@@ -1,13 +1,12 @@
-// 桌宠 store (主窗口侧): 配置真值 + 多会话状态聚合 + 与桌宠窗口的事件桥
+// 桌宠 store (主窗口侧): 配置真值 + 宠物列表 + 事件桥的生命周期
 // 契约对齐 Rust pets.rs (serde 序列化, snake_case 字段)
 //
 // 桌宠窗口是纯受控端, 配置只在这里落 localStorage —— 两个窗口同源共享 localStorage,
-// 双写同一个键会有竞态, 所以桌宠侧的变更一律 emit 回来由这里统一写。
+// 双写同一个键会有竞态, 所以桌宠侧的变更一律 emit 回来由这里统一写 (applyPatch)。
+// 会话聚合与事件监听在 src/pet/bridge.ts, 只在开启桌宠时动态加载, 关着时一个监听都不挂。
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, emitTo } from "@tauri-apps/api/event";
-import { useSessionStore, type SessionState } from "./session";
-import { useThemeStore } from "./theme";
+import { emitTo } from "@tauri-apps/api/event";
 import { canvasSize, windowPosFromFoot, type FootPos } from "../pet/canvas";
 
 /** busy 不区分思考/执行工具 —— agent 只要在跑就是忙, 由渲染侧在忙碌动画池里随机取 */
@@ -63,9 +62,6 @@ const WALK_KEY = "kitsune.petWalk";
 const POS_KEY = "kitsune.petPos";
 
 const DEFAULT_ZOOM = 1;
-// 覆盖态时长: greet 是开窗打招呼, error 是报错后的短暂定格
-const GREET_MS = 2500;
-const ERROR_MS = 2000;
 
 // StrictMode 双跑 effect 防重入
 let initialized = false;
@@ -82,11 +78,21 @@ interface PetStore {
 
   init: () => void;
   loadPets: () => Promise<void>;
+  /** 桌宠窗口回传的变更 (经事件桥转进来) */
+  applyPatch: (p: PetPatch) => void;
   setEnabled: (v: boolean) => Promise<void>;
   setPetId: (id: string) => void;
   setZoom: (z: number) => void;
   setGravity: (v: boolean) => void;
   setWalk: (v: boolean) => void;
+}
+
+/** 桌宠窗口 → 主窗口的变更回传 (pet_patch 载荷) */
+export interface PetPatch {
+  zoom?: number;
+  petId?: string;
+  pos?: FootPos | null;
+  enabled?: boolean;
 }
 
 /** 推给桌宠窗口的配置 (桌宠侧 pet_config 监听的载荷) */
@@ -131,35 +137,26 @@ function readPos(): StoredPos | null {
   }
 }
 
-/** 多会话聚合成单一状态 (全局聚合: 任一会话在忙, 桌宠就忙) */
-function aggregate(sessions: Record<string, SessionState>): PetState {
-  const list = Object.values(sessions);
-  if (list.length === 0) return "offline";
-  return list.some((s) => s.isStreaming) ? "busy" : "idle";
+// 事件桥: 开启桌宠时才动态加载并启动, 关闭时释放
+let stopBridge: (() => void) | null = null;
+let bridgeStarting: Promise<void> | null = null;
+
+async function ensureBridge() {
+  if (stopBridge) return;
+  // 并发开启只加载一次: 快速连点开关时第二次调用复用第一次的加载
+  bridgeStarting ??= import("../pet/bridge")
+    .then(async (m) => {
+      stopBridge = await m.startBridge();
+    })
+    .finally(() => {
+      bridgeStarting = null;
+    });
+  await bridgeStarting;
 }
 
-// 时限性覆盖态: greet/error 不由 aggregate 推导, 到点自动撤销后重算
-let override: PetState | null = null;
-let overrideTimer: ReturnType<typeof setTimeout> | null = null;
-// 上次推给桌宠的值: 每个 text_delta 都会触发 store 变更, 不去重会变成每秒几十次 IPC
-let lastPushed: PetState | null = null;
-
-function pushState() {
-  const next = override ?? aggregate(useSessionStore.getState().sessions);
-  if (next === lastPushed) return;
-  lastPushed = next;
-  emitTo("pet", "pet_state", { state: next }).catch(() => {});
-}
-
-function setOverride(state: PetState, ms: number) {
-  if (overrideTimer) clearTimeout(overrideTimer);
-  override = state;
-  pushState();
-  overrideTimer = setTimeout(() => {
-    override = null;
-    overrideTimer = null;
-    pushState();
-  }, ms);
+function releaseBridge() {
+  stopBridge?.();
+  stopBridge = null;
 }
 
 export const usePetStore = create<PetStore>((set, get) => ({
@@ -174,59 +171,30 @@ export const usePetStore = create<PetStore>((set, get) => ({
   init: () => {
     if (initialized) return;
     initialized = true;
-
-    // 会话状态变化 → 重算并按需推送 (pushState 内部做了值去重)
-    useSessionStore.subscribe(() => pushState());
-
-    // 换皮肤 → 重推配置, 让气泡跟着换色。applyTheme 先写完 CSS 变量才 set activeSkinId,
-    // 所以这里读到的已经是新皮肤的值
-    useThemeStore.subscribe((s, prev) => {
-      if (s.activeSkinId !== prev.activeSkinId) pushConfig();
-    });
-
-    // 工具报错是瞬时事件, store 状态里留不下"刚刚发生"的痕迹, 单独挂一个监听捕获。
-    // 这里只读事件不调 handleEvent, 不会让 session store 双跑 (那是 main.tsx 的活)
-    listen<{ sessionId: string; event: Record<string, unknown> }>("pi_event", (e) => {
-      const ev = e.payload.event;
-      if (ev.type === "tool_execution_end" && ev.isError) setOverride("error", ERROR_MS);
-    });
-
-    // 桌宠窗口挂载完成 → 回推配置与当前状态。开窗瞬间就推的话, 窗口还没挂载完, 事件会丢
-    listen("pet_ready", () => {
-      pushConfig();
-      lastPushed = null; // 强制下一次推送, 让新开的窗口拿到当前态
-      setOverride("greet", GREET_MS);
-    });
-
-    // 桌宠窗口侧的变更回传 (滚轮缩放 / 拖动落点 / 右键切角色或关闭)
-    listen<{ zoom?: number; petId?: string; pos?: FootPos | null; enabled?: boolean }>(
-      "pet_patch",
-      (e) => {
-        const p = e.payload;
-        if (typeof p.zoom === "number") {
-          localStorage.setItem(ZOOM_KEY, String(p.zoom));
-          set({ zoom: p.zoom });
-        }
-        if (typeof p.petId === "string") {
-          localStorage.setItem(PET_ID_KEY, p.petId);
-          set({ petId: p.petId });
-          pushConfig();
-        }
-        if (p.pos !== undefined) {
-          if (p.pos === null) localStorage.removeItem(POS_KEY);
-          else localStorage.setItem(POS_KEY, JSON.stringify(p.pos));
-          set({ pos: p.pos });
-        }
-        if (p.enabled === false) void get().setEnabled(false);
-      },
-    );
-
     // 必须等宠物列表拉回来再开窗: setEnabled 要从 pets 里挑角色算窗口尺寸,
     // 抢跑会读到空列表直接静默 return, 表现为"上次开着但重启后不出来"
     void (async () => {
       await get().loadPets();
       if (get().enabled) await get().setEnabled(true);
     })();
+  },
+
+  applyPatch: (p) => {
+    if (typeof p.zoom === "number") {
+      localStorage.setItem(ZOOM_KEY, String(p.zoom));
+      set({ zoom: p.zoom });
+    }
+    if (typeof p.petId === "string") {
+      localStorage.setItem(PET_ID_KEY, p.petId);
+      set({ petId: p.petId });
+      pushConfig();
+    }
+    if (p.pos !== undefined) {
+      if (p.pos === null) localStorage.removeItem(POS_KEY);
+      else localStorage.setItem(POS_KEY, JSON.stringify(p.pos));
+      set({ pos: p.pos });
+    }
+    if (p.enabled === false) void get().setEnabled(false);
   },
 
   loadPets: async () => {
@@ -249,11 +217,19 @@ export const usePetStore = create<PetStore>((set, get) => ({
     set({ enabled: v });
     if (!v) {
       await invoke("close_pet_window").catch((e) => console.error("[pet] 关窗失败", e));
+      releaseBridge();
       return;
     }
-    const { pets, petId, zoom, pos } = get();
-    const pet = pets.find((p) => p.id === petId) ?? pets[0];
+    const pet = get().pets.find((p) => p.id === get().petId) ?? get().pets[0];
     if (!pet) return; // 没有可用宠物包, 设置面板会给空态提示
+    // 桥要在开窗前就绪, 否则桌宠窗口的 pet_ready 握手没人接
+    await ensureBridge();
+    // 加载期间用户又把开关关了: 别再开窗, 刚起的桥也放掉
+    if (!get().enabled) {
+      releaseBridge();
+      return;
+    }
+    const { zoom, pos } = get();
     let foot = pos;
     if (foot && foot.v !== 2) {
       // 旧版存的是窗口左上角, 那时窗口 = 帧尺寸 × zoom (还没有画布), 按旧窗口换算成脚底点并写回,
@@ -297,7 +273,8 @@ export const usePetStore = create<PetStore>((set, get) => ({
   },
 }));
 
-function pushConfig() {
+/** 把当前配置推给桌宠窗口 (窗口不存在时 emit 静默失败, 无副作用) */
+export function pushConfig() {
   const { petId, zoom, gravity, walk } = usePetStore.getState();
   const cfg: PetConfig = { petId, zoom, gravity, walk, theme: readTheme() };
   emitTo("pet", "pet_config", cfg).catch(() => {});

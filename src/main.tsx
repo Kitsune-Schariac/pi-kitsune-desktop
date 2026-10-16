@@ -2,7 +2,6 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { listen } from "@tauri-apps/api/event";
 import App from "./App";
-import { PetWindow } from "./pet/PetWindow";
 import { useSessionStore } from "./store/session";
 import "./index.css";
 
@@ -17,11 +16,14 @@ const isPetWindow = new URLSearchParams(location.search).get("window") === "pet"
 const root = ReactDOM.createRoot(document.getElementById("root")!);
 
 if (isPetWindow) {
-  // 桌宠窗口绝不注册 pi_event: Tauri 事件是广播的, 两个窗口都注册会让 session store 双跑
-  root.render(
-    <React.StrictMode>
-      <PetWindow />
-    </React.StrictMode>,
+  // 桌宠窗口绝不注册 pi_event: Tauri 事件是广播的, 两个窗口都注册会让 session store 双跑。
+  // 动态加载: 桌宠代码单独成块, 不开桌宠的用户主窗口不必下载解析它
+  void import("./pet/PetWindow").then(({ PetWindow }) =>
+    root.render(
+      <React.StrictMode>
+        <PetWindow />
+      </React.StrictMode>,
+    ),
   );
 } else {
   // 全局注册 pi 事件监听: 放在 React 组件树外, 只执行一次
