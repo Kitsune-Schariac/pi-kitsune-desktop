@@ -185,12 +185,21 @@ async fn open_pet_window(
     .skip_taskbar(true)
     .shadow(false)
     .resizable(false);
-    if let (Some(x), Some(y)) = (x, y) {
-        builder = builder.position(x, y);
+    // 存档位置不能交给 builder.position: tao 创建窗口时只认"左上角落在某块屏幕内"的初始位置,
+    // 否则回落到系统默认位置。宠物贴着屏幕左边时画布左上角在屏幕外, 每次重启都会被挪走。
+    // 所以先隐藏着建出来, 再 set_position (创建后挪窗口没有这个限制), 最后显示, 也免得先在默认位置闪一下
+    let restore = x.zip(y);
+    if restore.is_some() {
+        builder = builder.visible(false);
     }
-    builder
+    let win = builder
         .build()
         .map_err(|e| format!("创建桌宠窗口失败: {e}"))?;
+    if let Some((x, y)) = restore {
+        win.set_position(tauri::LogicalPosition::new(x, y))
+            .map_err(|e| format!("定位桌宠窗口失败: {e}"))?;
+        win.show().map_err(|e| format!("显示桌宠窗口失败: {e}"))?;
+    }
     pet_stage::start(app.clone());
     Ok(())
 }

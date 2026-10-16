@@ -11,6 +11,7 @@ import { Menu } from "@tauri-apps/api/menu";
 import type { PetAnimation, PetConfig, PetMeta, PetState } from "../store/pet";
 import { canvasSize, windowPosFromFoot } from "./canvas";
 import { onStageEvent, pressDown, startStage } from "./stage";
+import { Bubble } from "./Bubble";
 import { bodyTransform, breathScale, msToNextBreath, setDangling, squash } from "./effects";
 
 // 缩放边界: 太小看不清帧, 太大精灵图糊 (2 倍图放到 3 倍已是上限)
@@ -262,6 +263,9 @@ export function PetWindow() {
         (e) => {
           setZoom(e.payload.zoom);
           invoke("pet_stage_set_gravity", { on: e.payload.gravity }).catch(() => {});
+          const root = document.documentElement;
+          root.dataset.base = e.payload.theme.base;
+          for (const [k, v] of Object.entries(e.payload.theme.vars)) root.style.setProperty(`--${k}`, v);
           invoke<PetMeta[]>("list_pets")
             .then((list) => {
               setPets(list);
@@ -410,6 +414,12 @@ export function PetWindow() {
           }}
         />
       </div>
+      <Bubble
+        canvasW={canvas.w}
+        canvasH={canvas.h}
+        charW={pet.frame_width * zoom}
+        charH={pet.frame_height * zoom}
+      />
     </div>
   );
 }

@@ -40,6 +40,10 @@ enum Motion {
 static HITBOX: OnceLock<Mutex<Option<HitBox>>> = OnceLock::new();
 static REQUEST: OnceLock<Mutex<Option<Request>>> = OnceLock::new();
 static DRAGGING: AtomicBool = AtomicBool::new(false);
+/// 拖动刚结束、dragEnd 还没发。不能靠线程"上一轮看到在拖、这一轮看到没拖"去推断:
+/// 前端兜底的 drag(true) / drag(false) 可能落在同一个轮询间隔里, 线程从没看到过"在拖",
+/// dragEnd 就丢了 (实测出现过拖动晃动摘不掉)。所以由结束拖动的那一方原子地立这个标记
+static DRAG_END_PENDING: AtomicBool = AtomicBool::new(false);
 /// 按下但还没判成拖动 (可能只是单击): 同样要锁住不穿透, 否则手一抖出了包围盒,
 /// 窗口切成穿透, 页面就再也收不到 mousemove / mouseup, 单击和拖动都判定不了
 static PRESSED: AtomicBool = AtomicBool::new(false);
@@ -110,6 +114,7 @@ pub fn start(app: tauri::AppHandle) {
         *r = None;
     }
     DRAGGING.store(false, Ordering::SeqCst);
+    DRAG_END_PENDING.store(false, Ordering::SeqCst);
     PRESSED.store(false, Ordering::SeqCst);
     GRAVITY.store(0, Ordering::SeqCst);
 
@@ -128,7 +133,6 @@ pub fn start(app: tauri::AppHandle) {
         // None = 还没设置过, 保证第一轮一定下发一次穿透状态
         let mut last_ignore: Option<bool> = None;
         let mut motion = Motion::Idle;
-        let mut was_dragging = false;
         let mut last_tick = Instant::now();
         #[cfg(debug_assertions)]
         let (mut cost_sum, mut cost_n, mut report_at) = (Duration::ZERO, 0u32, Instant::now());
@@ -156,8 +160,8 @@ pub fn start(app: tauri::AppHandle) {
             // 拖动结束由这里判定: 系统拖拽的模态移动循环会吞掉松手消息 (tao 只给原生窗口补发
             // WM_LBUTTONUP, WebView 里的页面收不到 mouseup), 前端没法自己知道拖完了
             let button_down = primary_button_down();
-            if DRAGGING.load(Ordering::SeqCst) && !button_down {
-                DRAGGING.store(false, Ordering::SeqCst);
+            if !button_down && DRAGGING.swap(false, Ordering::SeqCst) {
+                DRAG_END_PENDING.store(true, Ordering::SeqCst);
             }
             // 按下锁的兜底: 正常由前端 mouseup 解除, 万一 mouseup 丢了 (如按下后切走了窗口)
             // 也别让锁一直挂着, 否则透明画布会一直挡鼠标
@@ -183,7 +187,7 @@ pub fn start(app: tauri::AppHandle) {
             }
 
             if let Some(p) = &probe {
-                if was_dragging && !dragging {
+                if DRAG_END_PENDING.swap(false, Ordering::SeqCst) {
                     emit(&app, "dragEnd", p, scale);
                     // 松手在半空且开着重力 → 掉下去; 落地点由 landed 事件回报
                     if gravity_on() {
@@ -215,7 +219,6 @@ pub fn start(app: tauri::AppHandle) {
                     }
                 }
             }
-            was_dragging = dragging;
 
             let dragging = DRAGGING.load(Ordering::SeqCst);
             let pressed = PRESSED.load(Ordering::SeqCst);
@@ -472,7 +475,11 @@ pub fn pet_stage_set_hitbox(rect: HitBox) {
 /// 快速甩动时鼠标会短暂落到包围盒外, 这时切成穿透会让拖拽当场断掉
 #[tauri::command]
 pub fn pet_stage_drag(active: bool) {
-    DRAGGING.store(active, Ordering::SeqCst);
+    if active {
+        DRAGGING.store(true, Ordering::SeqCst);
+    } else if DRAGGING.swap(false, Ordering::SeqCst) {
+        DRAG_END_PENDING.store(true, Ordering::SeqCst);
+    }
 }
 
 /// 按下 / 松开: 按住期间锁定不穿透, 让页面能完整收到这次按压的 mousemove / mouseup

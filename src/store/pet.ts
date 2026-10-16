@@ -7,6 +7,7 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emitTo } from "@tauri-apps/api/event";
 import { useSessionStore, type SessionState } from "./session";
+import { useThemeStore } from "./theme";
 import { canvasSize, windowPosFromFoot, type FootPos } from "../pet/canvas";
 
 /** busy 不区分思考/执行工具 —— agent 只要在跑就是忙, 由渲染侧在忙碌动画池里随机取 */
@@ -76,6 +77,27 @@ export interface PetConfig {
   zoom: number;
   gravity: boolean;
   walk: boolean;
+  theme: PetTheme;
+}
+
+/** 皮肤配色: 皮肤是主窗口往自己的 <html> 上内联写 CSS 变量, 桌宠窗口是另一个页面拿不到,
+ *  只能由主窗口把气泡用得到的几个变量读出来一起下发 */
+export interface PetTheme {
+  base: "light" | "dark";
+  vars: Record<string, string>;
+}
+
+const THEME_VARS = ["bg", "fg", "fg-2", "line", "line-2", "accent"];
+
+function readTheme(): PetTheme {
+  const root = document.documentElement;
+  const cs = getComputedStyle(root);
+  const vars: Record<string, string> = {};
+  for (const k of THEME_VARS) {
+    const v = cs.getPropertyValue(`--${k}`).trim();
+    if (v) vars[k] = v;
+  }
+  return { base: root.dataset.base === "dark" ? "dark" : "light", vars };
 }
 
 type StoredPos = { x: number; y: number; v?: number };
@@ -137,6 +159,12 @@ export const usePetStore = create<PetStore>((set, get) => ({
 
     // 会话状态变化 → 重算并按需推送 (pushState 内部做了值去重)
     useSessionStore.subscribe(() => pushState());
+
+    // 换皮肤 → 重推配置, 让气泡跟着换色。applyTheme 先写完 CSS 变量才 set activeSkinId,
+    // 所以这里读到的已经是新皮肤的值
+    useThemeStore.subscribe((s, prev) => {
+      if (s.activeSkinId !== prev.activeSkinId) pushConfig();
+    });
 
     // 工具报错是瞬时事件, store 状态里留不下"刚刚发生"的痕迹, 单独挂一个监听捕获。
     // 这里只读事件不调 handleEvent, 不会让 session store 双跑 (那是 main.tsx 的活)
@@ -253,6 +281,6 @@ export const usePetStore = create<PetStore>((set, get) => ({
 
 function pushConfig() {
   const { petId, zoom, gravity, walk } = usePetStore.getState();
-  const cfg: PetConfig = { petId, zoom, gravity, walk };
+  const cfg: PetConfig = { petId, zoom, gravity, walk, theme: readTheme() };
   emitTo("pet", "pet_config", cfg).catch(() => {});
 }

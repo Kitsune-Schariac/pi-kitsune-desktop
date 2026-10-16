@@ -22,6 +22,10 @@ export function PetPanel() {
   const setPetId = usePetStore((s) => s.setPetId);
   const setZoom = usePetStore((s) => s.setZoom);
   const loadPets = usePetStore((s) => s.loadPets);
+  const gravity = usePetStore((s) => s.gravity);
+  const walk = usePetStore((s) => s.walk);
+  const setGravity = usePetStore((s) => s.setGravity);
+  const setWalk = usePetStore((s) => s.setWalk);
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = async () => {
@@ -127,6 +131,40 @@ export function PetPanel() {
         <p className="mt-[6px] text-label text-[var(--fg-4)]">
           在桌宠上滚滚轮也能缩放；左键拖动移动位置，右键出菜单。
         </p>
+      </section>
+
+      <section>
+        <SectionTitle>活动</SectionTitle>
+        <div className="space-y-3">
+          <label className="flex cursor-pointer items-start gap-[10px]">
+            <input
+              type="checkbox"
+              checked={gravity}
+              onChange={(e) => setGravity(e.target.checked)}
+              className="mt-[3px] h-4 w-4 accent-[var(--accent)]"
+            />
+            <span>
+              <span className="block text-body text-[var(--fg)]">重力</span>
+              <span className="block text-label text-[var(--fg-4)]">
+                站在任务栏上，拖到半空松手会掉下来；关掉后放哪停哪。
+              </span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-[10px]">
+            <input
+              type="checkbox"
+              checked={walk}
+              onChange={(e) => setWalk(e.target.checked)}
+              className="mt-[3px] h-4 w-4 accent-[var(--accent)]"
+            />
+            <span>
+              <span className="block text-body text-[var(--fg)]">散步</span>
+              <span className="block text-label text-[var(--fg-4)]">
+                闲不住时在屏幕底边走来走去；觉得分心就关掉。
+              </span>
+            </span>
+          </label>
+        </div>
       </section>
 
       <section>
