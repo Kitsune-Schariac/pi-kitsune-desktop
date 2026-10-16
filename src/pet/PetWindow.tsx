@@ -209,7 +209,7 @@ export function PetWindow() {
         st.frame += 1;
       }
 
-      // 换到发呆的那一步: 画完首帧直接睡到下次开播
+      // 刚播完一轮待机、转入发呆的那一步: 画首帧, 之后只为呼吸换档醒来, 直到下次开播
       const active = pool !== null || st.state !== "idle" || st.idlePlaying;
       const cur = active ? anim : p.animations.idle;
       paint(el, p, cur, st.frame, now);

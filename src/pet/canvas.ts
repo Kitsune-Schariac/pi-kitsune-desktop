@@ -1,8 +1,8 @@
 // 桌宠画布尺寸: 窗口比角色大, 上方与两侧留给气泡和跳跃。透明区域由 Rust 舞台线程动态穿透。
 // 主窗口开窗 (store/pet.ts) 与桌宠窗口排版 (PetWindow.tsx) 必须用同一组倍数, 所以单独放这里,
 // 也避免桌宠窗口为了两个常量去 import 主窗口的 store
-export const CANVAS_SCALE_W = 2;
-export const CANVAS_SCALE_H = 1.6;
+const CANVAS_SCALE_W = 2;
+const CANVAS_SCALE_H = 1.6;
 
 /**
  * 宠物位置以"脚底点"(角色底边中点, 逻辑坐标) 记录, 不记窗口左上角: 画布比角色大且随缩放变化,
@@ -17,10 +17,6 @@ export interface FootPos {
 /** 角色贴画布底边、水平居中, 所以脚底点 = 画布底边中点 */
 export function windowPosFromFoot(foot: { x: number; y: number }, canvas: { w: number; h: number }) {
   return { x: foot.x - canvas.w / 2, y: foot.y - canvas.h };
-}
-
-export function footFromWindowPos(win: { x: number; y: number }, canvas: { w: number; h: number }): FootPos {
-  return { x: win.x + canvas.w / 2, y: win.y + canvas.h, v: 2 };
 }
 
 /** 画布逻辑尺寸; 角色贴画布底边、水平居中 */

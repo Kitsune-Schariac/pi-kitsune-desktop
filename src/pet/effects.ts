@@ -15,7 +15,7 @@ const BREATH_STEP_MS = BREATH_PERIOD_MS / BREATH_LEVELS.length;
 const reducedQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 /** 系统开了"减少动态效果": 关掉呼吸与晃动, 镜像这类表达朝向的不受影响 */
-export function reducedMotion(): boolean {
+function reducedMotion(): boolean {
   return reducedQuery.matches;
 }
 
