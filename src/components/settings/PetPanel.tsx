@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { usePetStore, type PetTier } from "../../store/pet";
+import { usePetStore } from "../../store/pet";
+import { PetImport, TIER_LABEL } from "./PetImport";
 import { Cat, FolderOpen, RefreshCw } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -11,9 +12,6 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     </h3>
   );
 }
-
-// 宠物包档位: 只有 idle 是必选, 动作类别越全宠物越生动 (见 pets.rs BASIC / FULL)
-const TIER_LABEL: Record<PetTier, string> = { required: "必选档", basic: "基础档", full: "完整档" };
 
 // 桌宠开关 + 角色选择 + 缩放 (设置页「桌宠」tab)
 export function PetPanel() {
@@ -80,8 +78,8 @@ export function PetPanel() {
             <Cat className="mx-auto mb-2 h-6 w-6 text-[var(--fg-4)]" />
             <p className="text-body text-[var(--fg-2)]">还没有宠物包</p>
             <p className="mt-1 text-label text-[var(--fg-4)]">
-              把宠物包放进 <code className="font-mono">~/.pi-kitsune/pets/&lt;id&gt;/</code>
-              ，每个目录含 pet.json 与精灵图
+              用下面的「导入宠物」选一个 zip 或文件夹，或直接放进
+              <code className="font-mono">~/.pi-kitsune/pets/&lt;id&gt;/</code>
             </p>
           </div>
         ) : (
@@ -176,6 +174,11 @@ export function PetPanel() {
             </span>
           </label>
         </div>
+      </section>
+
+      <section>
+        <SectionTitle>导入宠物</SectionTitle>
+        <PetImport />
       </section>
 
       <section>
