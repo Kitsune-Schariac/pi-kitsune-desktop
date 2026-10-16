@@ -10,7 +10,8 @@ import {
 import { Menu } from "@tauri-apps/api/menu";
 import type { PetAnimation, PetConfig, PetMeta, PetState } from "../store/pet";
 import { canvasSize, windowPosFromFoot } from "./canvas";
-import { pressDown, startStage } from "./stage";
+import { onStageEvent, pressDown, startStage } from "./stage";
+import { bodyTransform, breathScale, msToNextBreath, setDangling, squash } from "./effects";
 
 // 缩放边界: 太小看不清帧, 太大精灵图糊 (2 倍图放到 3 倍已是上限)
 const ZOOM_MIN = 0.5;
@@ -67,6 +68,8 @@ export function PetWindow() {
     idlePlaying: false,
     idleNextAt: 0,
     fresh: true,
+    /** 朝向与素材相反时水平镜像 (散步转身用, 由大脑设置) */
+    mirrored: false,
   });
   // 立刻跑一步帧循环 (取消已排好的定时器); 循环挂载前是空函数
   const kickRef = useRef<() => void>(() => {});
@@ -141,9 +144,14 @@ export function PetWindow() {
     const schedule = (ms: number) => {
       timer = window.setTimeout(step, Math.max(0, ms));
     };
-    const paint = (el: HTMLDivElement, p: PetMeta, anim: PetAnimation, frame: number) => {
+    // 呼吸只给"安静待着"的状态: 打招呼、报错这些本身就有大动作, 再叠呼吸反而乱
+    const breathing = (state: PetState) => state === "idle" || state === "busy";
+    const paint = (el: HTMLDivElement, p: PetMeta, anim: PetAnimation, frame: number, now: number) => {
       const z = zoomRef.current;
+      const st = animRef.current;
       el.style.backgroundPosition = `${-frame * p.frame_width * z}px ${-anim.row * p.frame_height * z}px`;
+      // 呼吸跟着换帧一起更新, 不单独增加重绘次数 (透明窗每次重绘都很贵, 见 effects.ts)
+      el.style.transform = bodyTransform(st.mirrored, breathing(st.state) ? breathScale(now) : 1);
     };
     function step() {
       timer = 0;
@@ -159,8 +167,9 @@ export function PetWindow() {
       if (st.state === "idle" && !st.idlePlaying) {
         if (now < st.idleNextAt) {
           st.fresh = false;
-          paint(el, p, p.animations.idle, 0);
-          schedule(st.idleNextAt - now);
+          paint(el, p, p.animations.idle, 0, now);
+          // 发呆期间只为呼吸换档醒来 (0.8 秒一次), 其余时间一直睡到下次开播
+          schedule(Math.min(st.idleNextAt - now, msToNextBreath(now)));
           return;
         }
         st.idlePlaying = true;
@@ -202,9 +211,9 @@ export function PetWindow() {
       // 换到发呆的那一步: 画完首帧直接睡到下次开播
       const active = pool !== null || st.state !== "idle" || st.idlePlaying;
       const cur = active ? anim : p.animations.idle;
-      paint(el, p, cur, st.frame);
+      paint(el, p, cur, st.frame, now);
       if (stopped) return;
-      schedule(active ? anim.duration / anim.frames : st.idleNextAt - now);
+      schedule(active ? anim.duration / anim.frames : Math.min(st.idleNextAt - now, msToNextBreath(now)));
     }
     kickRef.current = () => {
       if (timer) window.clearTimeout(timer);
@@ -299,6 +308,20 @@ export function PetWindow() {
   // --- 单击 / 拖动判定与落点存盘都在 stage.ts; 这里只负责订阅 Rust 舞台事件的生命周期 ---
   useEffect(() => startStage(), []);
 
+  // --- 舞台事件驱动的程序化效果: 拎起来晃, 落地压一下 ---
+  const fxRef = useRef<HTMLDivElement>(null);
+  useEffect(
+    () =>
+      onStageEvent((e) => {
+        const fx = fxRef.current;
+        if (!fx) return;
+        if (e.kind === "dragStart") setDangling(fx, true);
+        else if (e.kind === "dragEnd") setDangling(fx, false);
+        else if (e.kind === "landed") squash(fx);
+      }),
+    [],
+  );
+
   // --- 右键菜单: 切角色 / 重置位置 / 关闭 ---
   const onContextMenu = useCallback(
     async (e: React.MouseEvent) => {
@@ -360,23 +383,33 @@ export function PetWindow() {
   // 外层是整张透明画布, 角色贴底居中; 交互只挂在角色上 (透明区域本来也收不到鼠标, 已被穿透)
   return (
     <div data-pet style={{ position: "relative", width: canvas.w, height: canvas.h }}>
+      {/* 外层承接一次性 / 拖动效果 (挤压、晃动), 内层本体管镜像与呼吸, 两层 transform 互不覆盖 */}
       <div
-        ref={boxRef}
-        onMouseDown={pressDown}
-        onContextMenu={onContextMenu}
+        ref={fxRef}
         style={{
           position: "absolute",
           left: (canvas.w - pet.frame_width * zoom) / 2,
           bottom: 0,
           width: pet.frame_width * zoom,
           height: pet.frame_height * zoom,
-          backgroundImage: `url("${sprite.url}")`,
-          backgroundSize: `${sprite.w * zoom}px ${sprite.h * zoom}px`,
-          backgroundRepeat: "no-repeat",
-          imageRendering: "-webkit-optimize-contrast",
-          cursor: "grab",
         }}
-      />
+      >
+        <div
+          ref={boxRef}
+          onMouseDown={pressDown}
+          onContextMenu={onContextMenu}
+          style={{
+            width: "100%",
+            height: "100%",
+            backgroundImage: `url("${sprite.url}")`,
+            backgroundSize: `${sprite.w * zoom}px ${sprite.h * zoom}px`,
+            backgroundRepeat: "no-repeat",
+            imageRendering: "-webkit-optimize-contrast",
+            transformOrigin: "50% 100%",
+            cursor: "grab",
+          }}
+        />
+      </div>
     </div>
   );
 }
