@@ -8,7 +8,7 @@ import {
   PhysicalPosition,
 } from "@tauri-apps/api/window";
 import { Menu } from "@tauri-apps/api/menu";
-import type { PetAnimation, PetConfig, PetMeta, PetState } from "../store/pet";
+import type { PetAction, PetConfig, PetMeta, PetState } from "../store/pet";
 import { canvasSize, windowPosFromFoot } from "./canvas";
 import { onStageEvent, pressDown, startStage } from "./stage";
 import { Bubble } from "./Bubble";
@@ -23,26 +23,26 @@ const ZOOM_STEP = 0.1;
 const IDLE_REST_MIN_MS = 5000;
 const IDLE_REST_MAX_MS = 14000;
 
-// 忙碌动画池的内置定义: 按 hatch-pet 的 atlas 契约, row7=running(执行中) row8=review(专注),
-// 这两行正好是"在干活"的两种表现。写成内置而不是依赖 pet.json —— 旧宠物包 (如薇尔莉特)
-// 的映射里根本没定义 row8, 但精灵图那一行是画了的, 靠配置就享受不到随机
-const BUILTIN_BUSY: PetAnimation[] = [
-  { row: 7, frames: 6, duration: 900, loop: true },
-  { row: 8, frames: 6, duration: 1500, loop: true },
-];
+// 过渡期映射: 旧的五个状态 → 动作类别。大脑任务会整体取代 PetState, 这里先让新格式的包跑起来
+const STATE_CATEGORY: Record<PetState, string> = {
+  idle: "idle",
+  busy: "work",
+  greet: "notify",
+  error: "sad",
+  offline: "sad",
+};
 
-/**
- * 忙碌动画池: pet.json 显式配了 stateSequences.busy 就以它为准, 否则用内置的 row7/row8。
- * totalRows 是精灵图的实际行数, 用来挡掉越界行 (不按 8x9 契约做的包不至于播出一片空白)
- */
-function busyPool(pet: PetMeta, totalRows: number): PetAnimation[] {
-  const names = pet.state_sequences?.busy;
-  if (names?.length) {
-    const picked = names.map((n) => pet.animations[n]).filter(Boolean);
-    if (picked.length) return picked;
+/** 在某类别的变体里按 weight 加权随机挑一个; 包里没有这个类别就退回 idle (idle 是包的必选项) */
+function pickAction(p: PetMeta, category: string): PetAction {
+  let pool = p.actions.filter((a) => a.category === category);
+  if (!pool.length) pool = p.actions.filter((a) => a.category === "idle");
+  const total = pool.reduce((sum, a) => sum + a.weight, 0);
+  let r = Math.random() * total;
+  for (const a of pool) {
+    r -= a.weight;
+    if (r <= 0) return a;
   }
-  const usable = BUILTIN_BUSY.filter((a) => a.row < totalRows);
-  return usable.length ? usable : [pet.animations.idle];
+  return pool[pool.length - 1];
 }
 
 /**
@@ -56,7 +56,8 @@ export function PetWindow() {
   const boxRef = useRef<HTMLDivElement>(null);
   const [pets, setPets] = useState<PetMeta[]>([]);
   const [pet, setPet] = useState<PetMeta | null>(null);
-  const [sprite, setSprite] = useState<{ url: string; w: number; h: number } | null>(null);
+  // 包里每张图一份: 素材键 → data URI 与原始像素尺寸。v2 包每个动作一张横条图, 要全部加载
+  const [sprites, setSprites] = useState<Record<string, { url: string; w: number; h: number }> | null>(null);
   const [zoom, setZoom] = useState(1);
 
   // 帧循环每帧都要读这些值, 但它们变化不该重启循环, 也不该触发重渲染 → 放 ref
@@ -64,8 +65,9 @@ export function PetWindow() {
   // (换状态 / 换缩放后要立刻画对, 但不该因此跳过一帧)
   const animRef = useRef({
     state: "idle" as PetState,
+    /** 当前在播的动作; 换状态或忙碌时每轮重挑 */
+    action: null as PetAction | null,
     frame: 0,
-    busyIdx: 0,
     idlePlaying: false,
     idleNextAt: 0,
     fresh: true,
@@ -74,31 +76,40 @@ export function PetWindow() {
   });
   // 立刻跑一步帧循环 (取消已排好的定时器); 循环挂载前是空函数
   const kickRef = useRef<() => void>(() => {});
-  // 精灵图行数, 给忙碌池挡越界行用 (sprite 加载后才知道)
-  const rowsRef = useRef(0);
+  const spritesRef = useRef(sprites);
+  spritesRef.current = sprites;
   const petRef = useRef<PetMeta | null>(null);
   const zoomRef = useRef(1);
   petRef.current = pet;
   zoomRef.current = zoom;
 
-  // --- 精灵图加载: data URI 交给 Image, onload 直接读真实像素尺寸 ---
-  // (旧 Electron 版在 preload 里手写了 60 行 WebP 文件头解析干这事, 这里不需要)
+  // --- 图片加载: data URI 交给 Image, onload 直接读真实像素尺寸 ---
+  // 全部加载完才渲染, 否则换动作时会闪一下空白
   useEffect(() => {
     if (!pet) return;
     let alive = true;
-    invoke<string>("get_pet_asset", { petId: pet.id })
-      .then((url) => {
-        const img = new Image();
-        img.onload = () => {
-          if (!alive) return;
-          rowsRef.current = Math.floor(img.naturalHeight / pet.frame_height);
-          setSprite({ url, w: img.naturalWidth, h: img.naturalHeight });
-        };
-        img.src = url;
+    setSprites(null);
+    const images = [...new Set(pet.actions.map((a) => a.image))];
+    void Promise.all(
+      images.map((image) =>
+        invoke<string>("get_pet_asset", { petId: pet.id, image }).then(
+          (url) =>
+            new Promise<[string, { url: string; w: number; h: number }]>((resolve, reject) => {
+              const img = new Image();
+              img.onload = () => resolve([image, { url, w: img.naturalWidth, h: img.naturalHeight }]);
+              img.onerror = reject;
+              img.src = url;
+            }),
+        ),
+      ),
+    )
+      .then((entries) => {
+        if (!alive) return;
+        animRef.current.action = pickAction(pet, STATE_CATEGORY[animRef.current.state]);
+        animRef.current.frame = 0;
+        setSprites(Object.fromEntries(entries));
       })
-      .catch(() => {
-        if (alive) setSprite(null);
-      });
+      .catch((e) => console.error("[pet] 加载宠物图片失败", e));
     return () => {
       alive = false;
     };
@@ -147,10 +158,19 @@ export function PetWindow() {
     };
     // 呼吸只给"安静待着"的状态: 打招呼、报错这些本身就有大动作, 再叠呼吸反而乱
     const breathing = (state: PetState) => state === "idle" || state === "busy";
-    const paint = (el: HTMLDivElement, p: PetMeta, anim: PetAnimation, frame: number, now: number) => {
+    const paint = (el: HTMLDivElement, p: PetMeta, a: PetAction, frame: number, now: number) => {
+      const img = spritesRef.current?.[a.image];
+      if (!img) return;
       const z = zoomRef.current;
       const st = animRef.current;
-      el.style.backgroundPosition = `${-frame * p.frame_width * z}px ${-anim.row * p.frame_height * z}px`;
+      // 换图 / 换缩放才改背景图与尺寸, 同一张图上换帧只动 background-position
+      const key = `${a.image}@${z}`;
+      if (el.dataset.sheet !== key) {
+        el.dataset.sheet = key;
+        el.style.backgroundImage = `url("${img.url}")`;
+        el.style.backgroundSize = `${img.w * z}px ${img.h * z}px`;
+      }
+      el.style.backgroundPosition = `${-frame * p.frame_width * z}px ${-a.row * p.frame_height * z}px`;
       // 呼吸跟着换帧一起更新, 不单独增加重绘次数 (透明窗每次重绘都很贵, 见 effects.ts)
       el.style.transform = bodyTransform(st.mirrored, breathing(st.state) ? breathScale(now) : 1);
     };
@@ -158,9 +178,9 @@ export function PetWindow() {
       timer = 0;
       const p = petRef.current;
       const el = boxRef.current;
-      // 宠物或精灵图还没就绪: 不排下一次, 就绪时由 kick 重新拉起
-      if (!p || !el) return;
       const st = animRef.current;
+      // 宠物或图片还没就绪: 不排下一次, 就绪时由 kick 重新拉起
+      if (!p || !el || !st.action) return;
       const now = performance.now();
 
       // 空闲发呆: 停在首帧不动, 到点了才播一轮完整待机动画, 播完继续发呆。
@@ -168,7 +188,7 @@ export function PetWindow() {
       if (st.state === "idle" && !st.idlePlaying) {
         if (now < st.idleNextAt) {
           st.fresh = false;
-          paint(el, p, p.animations.idle, 0, now);
+          paint(el, p, st.action, 0, now);
           // 发呆期间只为呼吸换档醒来 (0.8 秒一次), 其余时间一直睡到下次开播
           schedule(Math.min(st.idleNextAt - now, msToNextBreath(now)));
           return;
@@ -178,29 +198,23 @@ export function PetWindow() {
         st.fresh = true;
       }
 
-      // 忙碌时在动画池里随机取一个播, 播完一轮再随机 —— 不区分思考/执行工具
-      const pool = st.state === "busy" ? busyPool(p, rowsRef.current) : null;
-      const anim = pool
-        ? pool[st.busyIdx % pool.length]
-        : p.animations[st.state] ?? p.animations.idle;
-      if (!anim || anim.frames <= 0) return;
-
       let stopped = false;
+      const frames = st.action.durations.length;
       if (st.fresh) {
         st.fresh = false;
-      } else if (st.frame >= anim.frames - 1) {
-        if (pool) {
-          // 一轮播完重新随机 (允许抽到同一个, 连播两轮反而自然)
-          st.busyIdx = Math.floor(Math.random() * pool.length);
+      } else if (st.frame >= frames - 1) {
+        if (st.state === "busy") {
+          // 忙碌时每播完一轮在 work 变体里重挑 (允许抽到同一个, 连播两轮反而自然)
+          st.action = pickAction(p, "work");
           st.frame = 0;
         } else if (st.state === "idle") {
           // 待机播完一轮 → 回到发呆, 安排下次开播的时刻
           st.idlePlaying = false;
           st.idleNextAt = now + IDLE_REST_MIN_MS + Math.random() * (IDLE_REST_MAX_MS - IDLE_REST_MIN_MS);
           st.frame = 0;
-        } else if (!anim.loop) {
-          // 非循环: 停在末帧, 不再排定时器, 等换状态时 kick
-          st.frame = anim.frames - 1;
+        } else if (st.state === "offline") {
+          // 没有会话: 难过一轮后停在末帧 (蹲下不动), 不再排定时器, 等换状态时 kick
+          st.frame = frames - 1;
           stopped = true;
         } else {
           st.frame = 0;
@@ -209,12 +223,11 @@ export function PetWindow() {
         st.frame += 1;
       }
 
-      // 刚播完一轮待机、转入发呆的那一步: 画首帧, 之后只为呼吸换档醒来, 直到下次开播
-      const active = pool !== null || st.state !== "idle" || st.idlePlaying;
-      const cur = active ? anim : p.animations.idle;
-      paint(el, p, cur, st.frame, now);
+      paint(el, p, st.action, st.frame, now);
       if (stopped) return;
-      schedule(active ? anim.duration / anim.frames : Math.min(st.idleNextAt - now, msToNextBreath(now)));
+      // 刚播完一轮待机、转入发呆的那一步: 画首帧, 之后只为呼吸换档醒来, 直到下次开播
+      const resting = st.state === "idle" && !st.idlePlaying;
+      schedule(resting ? Math.min(st.idleNextAt - now, msToNextBreath(now)) : st.action.durations[st.frame]);
     }
     kickRef.current = () => {
       if (timer) window.clearTimeout(timer);
@@ -227,11 +240,11 @@ export function PetWindow() {
     };
   }, []);
 
-  // 精灵图就绪 / 缩放变化: 立刻按新尺寸重画当前帧 (发呆期间不 kick 的话要等好几秒才画对)
+  // 图片就绪 / 缩放变化: 立刻按新尺寸重画当前帧 (发呆期间不 kick 的话要等好几秒才画对)
   useEffect(() => {
     animRef.current.fresh = true;
     kickRef.current();
-  }, [sprite, zoom]);
+  }, [sprites, zoom]);
 
   // --- 与主窗口的事件通道 ---
   useEffect(() => {
@@ -247,10 +260,10 @@ export function PetWindow() {
         st.state = e.payload.state;
         st.frame = 0;
         st.fresh = true;
-        if (st.state === "busy") {
-          // 进忙碌态立刻随机一个动作开播, 不然要等一轮才随机
-          st.busyIdx = Math.floor(Math.random() * 100);
-        } else if (st.state === "idle") {
+        // 进新状态立刻挑一个对应类别的动作开播
+        const p = petRef.current;
+        if (p) st.action = pickAction(p, STATE_CATEGORY[st.state]);
+        if (st.state === "idle") {
           // 刚闲下来先播一轮待机再发呆 —— 直接静止会像卡住了
           st.idlePlaying = true;
           st.idleNextAt = 0;
@@ -332,7 +345,7 @@ export function PetWindow() {
       e.preventDefault();
       const items = pets.map((p) => ({
         id: `pet-${p.id}`,
-        text: p.id === pet?.id ? `● ${p.display_name}` : `　${p.display_name}`,
+        text: p.id === pet?.id ? `● ${p.name}` : `　${p.name}`,
         action: () => {
           emitTo("main", "pet_patch", { petId: p.id }).catch(() => {});
         },
@@ -381,7 +394,7 @@ export function PetWindow() {
     [pets, pet, zoom],
   );
 
-  if (!pet || !sprite) return <div data-pet />;
+  if (!pet || !sprites) return <div data-pet />;
 
   const canvas = canvasSize(pet.frame_width, pet.frame_height, zoom);
   // 外层是整张透明画布, 角色贴底居中; 交互只挂在角色上 (透明区域本来也收不到鼠标, 已被穿透)
@@ -405,8 +418,7 @@ export function PetWindow() {
           style={{
             width: "100%",
             height: "100%",
-            backgroundImage: `url("${sprite.url}")`,
-            backgroundSize: `${sprite.w * zoom}px ${sprite.h * zoom}px`,
+            // 背景图与尺寸由帧循环按当前动作的图片设置 (v2 包每个动作一张图)
             backgroundRepeat: "no-repeat",
             imageRendering: "-webkit-optimize-contrast",
             transformOrigin: "50% 100%",

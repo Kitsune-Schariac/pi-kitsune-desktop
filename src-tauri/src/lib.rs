@@ -6,6 +6,7 @@ mod search;
 mod git;
 mod local_path;
 mod models_config;
+mod pet_import;
 mod pet_stage;
 mod pets;
 mod provider_probe;
@@ -528,6 +529,7 @@ pub fn run() {
             behavior_stats::get_behavior_stats, behavior_stats::get_session_behavior,
             skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
             pets::list_pets, pets::get_pet_asset, pets::open_pets_dir,
+            pet_import::inspect_pet_import, pet_import::commit_pet_import, pet_import::discard_pet_import,
             open_pet_window, close_pet_window,
             pet_stage::pet_stage_set_hitbox, pet_stage::pet_stage_drag, pet_stage::pet_stage_press,
             pet_stage::pet_stage_move_to, pet_stage::pet_stage_stop, pet_stage::pet_stage_set_gravity,

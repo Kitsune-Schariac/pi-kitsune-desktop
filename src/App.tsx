@@ -59,7 +59,7 @@ export default function App() {
     loadProjects();
     // 主题皮肤系统: 拉皮肤列表 + 恢复持久化 + 应用当前主题 (模块级防重入)
     useThemeStore.getState().init();
-    // 桌宠: 订阅会话状态做聚合 + 挂桌宠窗口事件桥 + 上次开着就自动开回来 (模块级防重入)
+    // 桌宠: 拉宠物列表, 上次开着就自动开回来 (此时才动态加载事件桥; 关着则不挂任何监听)
     usePetStore.getState().init();
   }, [loadProjects]);
 

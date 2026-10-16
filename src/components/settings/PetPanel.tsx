@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { usePetStore } from "../../store/pet";
+import { PetImport, TIER_LABEL } from "./PetImport";
 import { Cat, FolderOpen, RefreshCw } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -77,8 +78,8 @@ export function PetPanel() {
             <Cat className="mx-auto mb-2 h-6 w-6 text-[var(--fg-4)]" />
             <p className="text-body text-[var(--fg-2)]">还没有宠物包</p>
             <p className="mt-1 text-label text-[var(--fg-4)]">
-              把宠物包放进 <code className="font-mono">~/.pi-kitsune/pets/&lt;id&gt;/</code>
-              ，每个目录含 pet.json 与精灵图
+              用下面的「导入宠物」选一个 zip 或文件夹，或直接放进
+              <code className="font-mono">~/.pi-kitsune/pets/&lt;id&gt;/</code>
             </p>
           </div>
         ) : (
@@ -95,15 +96,23 @@ export function PetPanel() {
                       ? "border-[var(--accent)] ring-2 ring-[var(--accent-soft)]"
                       : "border-[var(--line)] hover:border-[var(--line-2)]"
                   }`}
-                  title={p.description || p.display_name}
+                  title={p.description || p.name}
                 >
                   <div className="flex items-center gap-2">
                     <Cat className="h-4 w-4 shrink-0 text-[var(--fg-3)]" />
-                    <span className="truncate text-body text-[var(--fg)]">{p.display_name}</span>
+                    <span className="truncate text-body text-[var(--fg)]">{p.name}</span>
+                    <span className="ml-auto shrink-0 rounded border border-[var(--line)] px-[5px] text-label text-[var(--fg-3)]">
+                      {TIER_LABEL[p.tier]}
+                    </span>
                   </div>
                   <p className="mt-1 line-clamp-2 text-label text-[var(--fg-4)]">
                     {p.description || `${p.frame_width}×${p.frame_height}`}
                   </p>
+                  {p.missing.length > 0 && (
+                    <p className="mt-1 truncate text-label text-[var(--fg-4)]" title={p.missing.join("、")}>
+                      缺：{p.missing.join("、")}
+                    </p>
+                  )}
                 </button>
               );
             })}
@@ -165,6 +174,11 @@ export function PetPanel() {
             </span>
           </label>
         </div>
+      </section>
+
+      <section>
+        <SectionTitle>导入宠物</SectionTitle>
+        <PetImport />
       </section>
 
       <section>
