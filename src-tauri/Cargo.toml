@@ -28,3 +28,8 @@ arboard = { version = "3", default-features = false }
 xcap = "0.9"
 image = "0.25"
 encoding_rs = "0.8"
+
+[target.'cfg(windows)'.dependencies]
+# 桌宠拖动结束检测: 系统拖拽的模态移动循环会吞掉松手消息, WebView 收不到 mouseup,
+# 只能在舞台线程里直接读鼠标键状态。版本与依赖树里已有的 windows-sys 对齐, 不新增编译单元
+windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }

@@ -6,6 +6,7 @@ mod search;
 mod git;
 mod local_path;
 mod models_config;
+mod pet_stage;
 mod pets;
 mod provider_probe;
 mod session_fs;
@@ -158,7 +159,7 @@ fn app_version() -> String {
 
 /// 开桌宠窗: 透明无边框置顶小窗, 加载同一份前端 bundle 但带 ?window=pet 走桌宠分支。
 /// 已存在则只 show (重复开不再建第二个窗)。
-/// 尺寸由前端按 帧尺寸 × zoom 算好传进来; x/y 缺省时交给 builder 默认落位, 前端首帧再自行安置。
+/// 尺寸是前端算好的画布尺寸 (比角色大, 透明区域靠舞台线程动态穿透); x/y 缺省时交给 builder 默认落位。
 #[tauri::command]
 async fn open_pet_window(
     app: tauri::AppHandle,
@@ -184,12 +185,22 @@ async fn open_pet_window(
     .skip_taskbar(true)
     .shadow(false)
     .resizable(false);
-    if let (Some(x), Some(y)) = (x, y) {
-        builder = builder.position(x, y);
+    // 存档位置不能交给 builder.position: tao 创建窗口时只认"左上角落在某块屏幕内"的初始位置,
+    // 否则回落到系统默认位置。宠物贴着屏幕左边时画布左上角在屏幕外, 每次重启都会被挪走。
+    // 所以先隐藏着建出来, 再 set_position (创建后挪窗口没有这个限制), 最后显示, 也免得先在默认位置闪一下
+    let restore = x.zip(y);
+    if restore.is_some() {
+        builder = builder.visible(false);
     }
-    builder
+    let win = builder
         .build()
         .map_err(|e| format!("创建桌宠窗口失败: {e}"))?;
+    if let Some((x, y)) = restore {
+        win.set_position(tauri::LogicalPosition::new(x, y))
+            .map_err(|e| format!("定位桌宠窗口失败: {e}"))?;
+        win.show().map_err(|e| format!("显示桌宠窗口失败: {e}"))?;
+    }
+    pet_stage::start(app.clone());
     Ok(())
 }
 
@@ -518,6 +529,8 @@ pub fn run() {
             skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
             pets::list_pets, pets::get_pet_asset, pets::open_pets_dir,
             open_pet_window, close_pet_window,
+            pet_stage::pet_stage_set_hitbox, pet_stage::pet_stage_drag, pet_stage::pet_stage_press,
+            pet_stage::pet_stage_move_to, pet_stage::pet_stage_stop, pet_stage::pet_stage_set_gravity,
             subagent_fleet::list_fleet_runs, subagent_fleet::read_fleet_run_detail,
             trellis_tasks::list_trellis_tasks, trellis_tasks::read_trellis_task_doc,
             models_config::read_models_config, models_config::write_models_config,

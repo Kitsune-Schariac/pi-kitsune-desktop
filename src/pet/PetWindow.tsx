@@ -8,7 +8,11 @@ import {
   PhysicalPosition,
 } from "@tauri-apps/api/window";
 import { Menu } from "@tauri-apps/api/menu";
-import type { PetAnimation, PetMeta, PetState } from "../store/pet";
+import type { PetAnimation, PetConfig, PetMeta, PetState } from "../store/pet";
+import { canvasSize, windowPosFromFoot } from "./canvas";
+import { onStageEvent, pressDown, startStage } from "./stage";
+import { Bubble } from "./Bubble";
+import { bodyTransform, breathScale, msToNextBreath, setDangling, squash } from "./effects";
 
 // 缩放边界: 太小看不清帧, 太大精灵图糊 (2 倍图放到 3 倍已是上限)
 const ZOOM_MIN = 0.5;
@@ -56,15 +60,20 @@ export function PetWindow() {
   const [zoom, setZoom] = useState(1);
 
   // 帧循环每帧都要读这些值, 但它们变化不该重启循环, 也不该触发重渲染 → 放 ref
-  // busyAnim: 忙碌时当前随机到的动画名; idlePlaying/idleNextAt: 空闲发呆与下次开播时刻
+  // idlePlaying/idleNextAt: 空闲发呆与下次开播时刻; fresh: 下一步只重画当前帧、不推进
+  // (换状态 / 换缩放后要立刻画对, 但不该因此跳过一帧)
   const animRef = useRef({
     state: "idle" as PetState,
     frame: 0,
-    lastTs: 0,
     busyIdx: 0,
     idlePlaying: false,
     idleNextAt: 0,
+    fresh: true,
+    /** 朝向与素材相反时水平镜像 (散步转身用, 由大脑设置) */
+    mirrored: false,
   });
+  // 立刻跑一步帧循环 (取消已排好的定时器); 循环挂载前是空函数
+  const kickRef = useRef<() => void>(() => {});
   // 精灵图行数, 给忙碌池挡越界行用 (sprite 加载后才知道)
   const rowsRef = useRef(0);
   const petRef = useRef<PetMeta | null>(null);
@@ -95,32 +104,78 @@ export function PetWindow() {
     };
   }, [pet]);
 
-  // --- 窗口尺寸跟随 帧尺寸 × zoom ---
+  // --- 窗口 = 画布 (比角色大); 角色包围盒上报给舞台线程做命中, 只在角色或缩放变化时报一次 ---
   useEffect(() => {
     if (!pet) return;
-    const w = Math.round(pet.frame_width * zoom);
-    const h = Math.round(pet.frame_height * zoom);
-    getCurrentWindow().setSize(new LogicalSize(w, h)).catch(() => {});
+    const canvas = canvasSize(pet.frame_width, pet.frame_height, zoom);
+    // 换尺寸时保持脚底点不动: setSize 只改右下角, 不补位置的话缩放 / 换角色时宠物会"往右下长"。
+    // 全程物理像素算, 避免逻辑坐标来回换算的舍入误差在反复缩放后累积成漂移
+    const win = getCurrentWindow();
+    void (async () => {
+      try {
+        const [pos, size, scale] = await Promise.all([
+          win.outerPosition(),
+          win.outerSize(),
+          win.scaleFactor(),
+        ]);
+        const nw = Math.round(canvas.w * scale);
+        const nh = Math.round(canvas.h * scale);
+        if (nw === size.width && nh === size.height) return;
+        const footX = pos.x + size.width / 2;
+        const footY = pos.y + size.height;
+        await win.setSize(new LogicalSize(canvas.w, canvas.h));
+        await win.setPosition(new PhysicalPosition(Math.round(footX - nw / 2), Math.round(footY - nh)));
+      } catch {
+        // 窗口正在关闭等情况拿不到几何信息, 不调整即可
+      }
+    })();
+    const w = pet.frame_width * zoom;
+    const h = pet.frame_height * zoom;
+    invoke("pet_stage_set_hitbox", {
+      rect: { x: (canvas.w - w) / 2, y: canvas.h - h, w, h },
+    }).catch(() => {});
   }, [pet, zoom]);
 
   // --- 帧循环: 手动改 background-position, 不走 React 状态 (每帧 setState 会把窗口拖垮) ---
+  // 用定时器按"下一帧到期时间"调度, 不用 requestAnimationFrame: rAF 每个屏幕刷新周期都回调,
+  // 宠物停在首帧发呆时也一样, 实测整棵进程树白占单核约 3.9%。帧动画本身才 4~10fps,
+  // 定时器只在真要换帧时醒来, 发呆期间一睡就是好几秒
   useEffect(() => {
-    let raf = 0;
-    const tick = (ts: number) => {
-      raf = requestAnimationFrame(tick);
+    let timer = 0;
+    const schedule = (ms: number) => {
+      timer = window.setTimeout(step, Math.max(0, ms));
+    };
+    // 呼吸只给"安静待着"的状态: 打招呼、报错这些本身就有大动作, 再叠呼吸反而乱
+    const breathing = (state: PetState) => state === "idle" || state === "busy";
+    const paint = (el: HTMLDivElement, p: PetMeta, anim: PetAnimation, frame: number, now: number) => {
+      const z = zoomRef.current;
+      const st = animRef.current;
+      el.style.backgroundPosition = `${-frame * p.frame_width * z}px ${-anim.row * p.frame_height * z}px`;
+      // 呼吸跟着换帧一起更新, 不单独增加重绘次数 (透明窗每次重绘都很贵, 见 effects.ts)
+      el.style.transform = bodyTransform(st.mirrored, breathing(st.state) ? breathScale(now) : 1);
+    };
+    function step() {
+      timer = 0;
       const p = petRef.current;
       const el = boxRef.current;
+      // 宠物或精灵图还没就绪: 不排下一次, 就绪时由 kick 重新拉起
       if (!p || !el) return;
-
       const st = animRef.current;
+      const now = performance.now();
 
       // 空闲发呆: 停在首帧不动, 到点了才播一轮完整待机动画, 播完继续发呆。
       // 一直循环播 idle 会让桌宠显得很聒噪, 真人不在电脑前时它也在不停晃
       if (st.state === "idle" && !st.idlePlaying) {
-        if (ts < st.idleNextAt) return;
+        if (now < st.idleNextAt) {
+          st.fresh = false;
+          paint(el, p, p.animations.idle, 0, now);
+          // 发呆期间只为呼吸换档醒来 (0.8 秒一次), 其余时间一直睡到下次开播
+          schedule(Math.min(st.idleNextAt - now, msToNextBreath(now)));
+          return;
+        }
         st.idlePlaying = true;
         st.frame = 0;
-        st.lastTs = 0;
+        st.fresh = true;
       }
 
       // 忙碌时在动画池里随机取一个播, 播完一轮再随机 —— 不区分思考/执行工具
@@ -130,11 +185,10 @@ export function PetWindow() {
         : p.animations[st.state] ?? p.animations.idle;
       if (!anim || anim.frames <= 0) return;
 
-      const perFrame = anim.duration / anim.frames;
-      if (ts - st.lastTs < perFrame) return;
-      st.lastTs = ts;
-
-      if (st.frame >= anim.frames - 1) {
+      let stopped = false;
+      if (st.fresh) {
+        st.fresh = false;
+      } else if (st.frame >= anim.frames - 1) {
         if (pool) {
           // 一轮播完重新随机 (允许抽到同一个, 连播两轮反而自然)
           st.busyIdx = Math.floor(Math.random() * pool.length);
@@ -142,11 +196,12 @@ export function PetWindow() {
         } else if (st.state === "idle") {
           // 待机播完一轮 → 回到发呆, 安排下次开播的时刻
           st.idlePlaying = false;
-          st.idleNextAt =
-            ts + IDLE_REST_MIN_MS + Math.random() * (IDLE_REST_MAX_MS - IDLE_REST_MIN_MS);
+          st.idleNextAt = now + IDLE_REST_MIN_MS + Math.random() * (IDLE_REST_MAX_MS - IDLE_REST_MIN_MS);
           st.frame = 0;
         } else if (!anim.loop) {
-          st.frame = anim.frames - 1; // 非循环: 停在末帧
+          // 非循环: 停在末帧, 不再排定时器, 等换状态时 kick
+          st.frame = anim.frames - 1;
+          stopped = true;
         } else {
           st.frame = 0;
         }
@@ -154,14 +209,29 @@ export function PetWindow() {
         st.frame += 1;
       }
 
-      const z = zoomRef.current;
-      const x = -animRef.current.frame * p.frame_width * z;
-      const y = -anim.row * p.frame_height * z;
-      el.style.backgroundPosition = `${x}px ${y}px`;
+      // 刚播完一轮待机、转入发呆的那一步: 画首帧, 之后只为呼吸换档醒来, 直到下次开播
+      const active = pool !== null || st.state !== "idle" || st.idlePlaying;
+      const cur = active ? anim : p.animations.idle;
+      paint(el, p, cur, st.frame, now);
+      if (stopped) return;
+      schedule(active ? anim.duration / anim.frames : Math.min(st.idleNextAt - now, msToNextBreath(now)));
+    }
+    kickRef.current = () => {
+      if (timer) window.clearTimeout(timer);
+      step();
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    step();
+    return () => {
+      window.clearTimeout(timer);
+      kickRef.current = () => {};
+    };
   }, []);
+
+  // 精灵图就绪 / 缩放变化: 立刻按新尺寸重画当前帧 (发呆期间不 kick 的话要等好几秒才画对)
+  useEffect(() => {
+    animRef.current.fresh = true;
+    kickRef.current();
+  }, [sprite, zoom]);
 
   // --- 与主窗口的事件通道 ---
   useEffect(() => {
@@ -176,7 +246,7 @@ export function PetWindow() {
         const st = animRef.current;
         st.state = e.payload.state;
         st.frame = 0;
-        st.lastTs = 0;
+        st.fresh = true;
         if (st.state === "busy") {
           // 进忙碌态立刻随机一个动作开播, 不然要等一轮才随机
           st.busyIdx = Math.floor(Math.random() * 100);
@@ -185,11 +255,17 @@ export function PetWindow() {
           st.idlePlaying = true;
           st.idleNextAt = 0;
         }
+        // 定时器可能正睡在发呆里, 换状态要立刻开播
+        kickRef.current();
       });
-      const offConfig = await listen<{ petId: string | null; zoom: number }>(
+      const offConfig = await listen<PetConfig>(
         "pet_config",
         (e) => {
           setZoom(e.payload.zoom);
+          invoke("pet_stage_set_gravity", { on: e.payload.gravity }).catch(() => {});
+          const root = document.documentElement;
+          root.dataset.base = e.payload.theme.base;
+          for (const [k, v] of Object.entries(e.payload.theme.vars)) root.style.setProperty(`--${k}`, v);
           invoke<PetMeta[]>("list_pets")
             .then((list) => {
               setPets(list);
@@ -233,28 +309,22 @@ export function PetWindow() {
     return () => window.removeEventListener("wheel", onWheel);
   }, []);
 
-  // --- 左键拖动 + 拖完回传位置 ---
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    const win = getCurrentWindow();
-    win.startDragging().catch(() => {});
-    // startDragging 是阻塞式系统拖拽, 结束后才 resolve 不了 —— 用一次性 mouseup 兜住落点
-    const onUp = () => {
-      window.removeEventListener("mouseup", onUp);
-      void (async () => {
-        try {
-          // outerPosition 给的是物理像素, 而重开窗时 Rust 侧 builder.position() 收的是逻辑坐标,
-          // 高 DPI 屏 (125% 缩放) 直接存物理值会让下次开窗位置偏掉 —— 存之前先换算
-          const [pos, scale] = await Promise.all([win.outerPosition(), win.scaleFactor()]);
-          const l = pos.toLogical(scale);
-          await emitTo("main", "pet_patch", { pos: { x: l.x, y: l.y } });
-        } catch {
-          // 拿不到位置就不落盘, 下次开窗回到默认位置即可
-        }
-      })();
-    };
-    window.addEventListener("mouseup", onUp);
-  }, []);
+  // --- 单击 / 拖动判定与落点存盘都在 stage.ts; 这里只负责订阅 Rust 舞台事件的生命周期 ---
+  useEffect(() => startStage(), []);
+
+  // --- 舞台事件驱动的程序化效果: 拎起来晃, 落地压一下 ---
+  const fxRef = useRef<HTMLDivElement>(null);
+  useEffect(
+    () =>
+      onStageEvent((e) => {
+        const fx = fxRef.current;
+        if (!fx) return;
+        if (e.kind === "dragStart") setDangling(fx, true);
+        else if (e.kind === "dragEnd") setDangling(fx, false);
+        else if (e.kind === "landed") squash(fx);
+      }),
+    [],
+  );
 
   // --- 右键菜单: 切角色 / 重置位置 / 关闭 ---
   const onContextMenu = useCallback(
@@ -279,18 +349,21 @@ export function PetWindow() {
             // 就地把窗口挪回右下角并回传落盘 —— 只清持久化不动窗口的话, 用户点了没反应
             action: () => {
               void (async () => {
-                const win = getCurrentWindow();
+                if (!pet) return;
                 const mon = await currentMonitor();
                 if (!mon) return;
-                const sz = await win.outerSize();
-                // 物理像素运算; 底部多留一截, 免得桌宠被压在任务栏下面
-                const margin = Math.round(24 * mon.scaleFactor);
-                const x = mon.position.x + mon.size.width - sz.width - margin;
-                const y = mon.position.y + mon.size.height - sz.height - Math.round(80 * mon.scaleFactor);
-                await win.setPosition(new PhysicalPosition(x, y));
-                // 落盘存逻辑坐标 (Rust 侧 builder.position 按逻辑坐标解释)
-                const l = new PhysicalPosition(x, y).toLogical(mon.scaleFactor);
-                await emitTo("main", "pet_patch", { pos: { x: l.x, y: l.y } });
+                // 用 workArea (扣掉任务栏) 而不是整块屏: 脚底贴着它的底边就不会被任务栏压住,
+                // 任务栏在左 / 上 / 隐藏时也都对
+                const s = mon.scaleFactor;
+                const wa = mon.workArea;
+                const right = (wa.position.x + wa.size.width) / s;
+                const bottom = (wa.position.y + wa.size.height) / s;
+                const foot = { x: right - 24 - (pet.frame_width * zoom) / 2, y: bottom, v: 2 as const };
+                const at = windowPosFromFoot(foot, canvasSize(pet.frame_width, pet.frame_height, zoom));
+                await getCurrentWindow().setPosition(
+                  new PhysicalPosition(Math.round(at.x * s), Math.round(at.y * s)),
+                );
+                await emitTo("main", "pet_patch", { pos: foot });
               })();
             },
           },
@@ -305,26 +378,48 @@ export function PetWindow() {
       });
       await menu.popup();
     },
-    [pets, pet],
+    [pets, pet, zoom],
   );
 
   if (!pet || !sprite) return <div data-pet />;
 
+  const canvas = canvasSize(pet.frame_width, pet.frame_height, zoom);
+  // 外层是整张透明画布, 角色贴底居中; 交互只挂在角色上 (透明区域本来也收不到鼠标, 已被穿透)
   return (
-    <div
-      data-pet
-      ref={boxRef}
-      onMouseDown={onMouseDown}
-      onContextMenu={onContextMenu}
-      style={{
-        width: pet.frame_width * zoom,
-        height: pet.frame_height * zoom,
-        backgroundImage: `url("${sprite.url}")`,
-        backgroundSize: `${sprite.w * zoom}px ${sprite.h * zoom}px`,
-        backgroundRepeat: "no-repeat",
-        imageRendering: "-webkit-optimize-contrast",
-        cursor: "grab",
-      }}
-    />
+    <div data-pet style={{ position: "relative", width: canvas.w, height: canvas.h }}>
+      {/* 外层承接一次性 / 拖动效果 (挤压、晃动), 内层本体管镜像与呼吸, 两层 transform 互不覆盖 */}
+      <div
+        ref={fxRef}
+        style={{
+          position: "absolute",
+          left: (canvas.w - pet.frame_width * zoom) / 2,
+          bottom: 0,
+          width: pet.frame_width * zoom,
+          height: pet.frame_height * zoom,
+        }}
+      >
+        <div
+          ref={boxRef}
+          onMouseDown={pressDown}
+          onContextMenu={onContextMenu}
+          style={{
+            width: "100%",
+            height: "100%",
+            backgroundImage: `url("${sprite.url}")`,
+            backgroundSize: `${sprite.w * zoom}px ${sprite.h * zoom}px`,
+            backgroundRepeat: "no-repeat",
+            imageRendering: "-webkit-optimize-contrast",
+            transformOrigin: "50% 100%",
+            cursor: "grab",
+          }}
+        />
+      </div>
+      <Bubble
+        canvasW={canvas.w}
+        canvasH={canvas.h}
+        charW={pet.frame_width * zoom}
+        charH={pet.frame_height * zoom}
+      />
+    </div>
   );
 }

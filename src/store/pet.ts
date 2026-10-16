@@ -7,6 +7,8 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emitTo } from "@tauri-apps/api/event";
 import { useSessionStore, type SessionState } from "./session";
+import { useThemeStore } from "./theme";
+import { canvasSize, windowPosFromFoot, type FootPos } from "../pet/canvas";
 
 /** busy 不区分思考/执行工具 —— agent 只要在跑就是忙, 由渲染侧在忙碌动画池里随机取 */
 export type PetState = "idle" | "greet" | "busy" | "error" | "offline";
@@ -37,6 +39,9 @@ export interface PetMeta {
 const ENABLED_KEY = "kitsune.petEnabled";
 const PET_ID_KEY = "kitsune.petId";
 const ZOOM_KEY = "kitsune.petZoom";
+// 重力 / 散步默认开: 只有用户显式关过才存 "0", 没存过的老用户升级后直接是开
+const GRAVITY_KEY = "kitsune.petGravity";
+const WALK_KEY = "kitsune.petWalk";
 const POS_KEY = "kitsune.petPos";
 
 const DEFAULT_ZOOM = 1;
@@ -51,7 +56,10 @@ interface PetStore {
   enabled: boolean;
   petId: string | null;
   zoom: number;
-  pos: { x: number; y: number } | null;
+  gravity: boolean;
+  walk: boolean;
+  /** 脚底点 (v: 2); 旧版存的窗口左上角没有 v, 开窗时迁移 */
+  pos: StoredPos | null;
   pets: PetMeta[];
 
   init: () => void;
@@ -59,9 +67,42 @@ interface PetStore {
   setEnabled: (v: boolean) => Promise<void>;
   setPetId: (id: string) => void;
   setZoom: (z: number) => void;
+  setGravity: (v: boolean) => void;
+  setWalk: (v: boolean) => void;
 }
 
-function readPos(): { x: number; y: number } | null {
+/** 推给桌宠窗口的配置 (桌宠侧 pet_config 监听的载荷) */
+export interface PetConfig {
+  petId: string | null;
+  zoom: number;
+  gravity: boolean;
+  walk: boolean;
+  theme: PetTheme;
+}
+
+/** 皮肤配色: 皮肤是主窗口往自己的 <html> 上内联写 CSS 变量, 桌宠窗口是另一个页面拿不到,
+ *  只能由主窗口把气泡用得到的几个变量读出来一起下发 */
+export interface PetTheme {
+  base: "light" | "dark";
+  vars: Record<string, string>;
+}
+
+const THEME_VARS = ["bg", "fg", "fg-2", "line", "line-2", "accent"];
+
+function readTheme(): PetTheme {
+  const root = document.documentElement;
+  const cs = getComputedStyle(root);
+  const vars: Record<string, string> = {};
+  for (const k of THEME_VARS) {
+    const v = cs.getPropertyValue(`--${k}`).trim();
+    if (v) vars[k] = v;
+  }
+  return { base: root.dataset.base === "dark" ? "dark" : "light", vars };
+}
+
+type StoredPos = { x: number; y: number; v?: number };
+
+function readPos(): StoredPos | null {
   try {
     const raw = localStorage.getItem(POS_KEY);
     if (!raw) return null;
@@ -107,6 +148,8 @@ export const usePetStore = create<PetStore>((set, get) => ({
   enabled: localStorage.getItem(ENABLED_KEY) === "1",
   petId: localStorage.getItem(PET_ID_KEY),
   zoom: Number(localStorage.getItem(ZOOM_KEY)) || DEFAULT_ZOOM,
+  gravity: localStorage.getItem(GRAVITY_KEY) !== "0",
+  walk: localStorage.getItem(WALK_KEY) !== "0",
   pos: readPos(),
   pets: [],
 
@@ -117,6 +160,12 @@ export const usePetStore = create<PetStore>((set, get) => ({
     // 会话状态变化 → 重算并按需推送 (pushState 内部做了值去重)
     useSessionStore.subscribe(() => pushState());
 
+    // 换皮肤 → 重推配置, 让气泡跟着换色。applyTheme 先写完 CSS 变量才 set activeSkinId,
+    // 所以这里读到的已经是新皮肤的值
+    useThemeStore.subscribe((s, prev) => {
+      if (s.activeSkinId !== prev.activeSkinId) pushConfig();
+    });
+
     // 工具报错是瞬时事件, store 状态里留不下"刚刚发生"的痕迹, 单独挂一个监听捕获。
     // 这里只读事件不调 handleEvent, 不会让 session store 双跑 (那是 main.tsx 的活)
     listen<{ sessionId: string; event: Record<string, unknown> }>("pi_event", (e) => {
@@ -126,14 +175,13 @@ export const usePetStore = create<PetStore>((set, get) => ({
 
     // 桌宠窗口挂载完成 → 回推配置与当前状态。开窗瞬间就推的话, 窗口还没挂载完, 事件会丢
     listen("pet_ready", () => {
-      const { petId, zoom } = get();
-      emitTo("pet", "pet_config", { petId, zoom }).catch(() => {});
+      pushConfig();
       lastPushed = null; // 强制下一次推送, 让新开的窗口拿到当前态
       setOverride("greet", GREET_MS);
     });
 
     // 桌宠窗口侧的变更回传 (滚轮缩放 / 拖动落点 / 右键切角色或关闭)
-    listen<{ zoom?: number; petId?: string; pos?: { x: number; y: number } | null; enabled?: boolean }>(
+    listen<{ zoom?: number; petId?: string; pos?: FootPos | null; enabled?: boolean }>(
       "pet_patch",
       (e) => {
         const p = e.payload;
@@ -144,7 +192,7 @@ export const usePetStore = create<PetStore>((set, get) => ({
         if (typeof p.petId === "string") {
           localStorage.setItem(PET_ID_KEY, p.petId);
           set({ petId: p.petId });
-          emitTo("pet", "pet_config", { petId: p.petId, zoom: get().zoom }).catch(() => {});
+          pushConfig();
         }
         if (p.pos !== undefined) {
           if (p.pos === null) localStorage.removeItem(POS_KEY);
@@ -188,23 +236,51 @@ export const usePetStore = create<PetStore>((set, get) => ({
     const { pets, petId, zoom, pos } = get();
     const pet = pets.find((p) => p.id === petId) ?? pets[0];
     if (!pet) return; // 没有可用宠物包, 设置面板会给空态提示
+    let foot = pos;
+    if (foot && foot.v !== 2) {
+      // 旧版存的是窗口左上角, 那时窗口 = 帧尺寸 × zoom (还没有画布), 按旧窗口换算成脚底点并写回,
+      // 不迁移的话升级后宠物会整体往左上偏半个画布
+      foot = { x: foot.x + (pet.frame_width * zoom) / 2, y: foot.y + pet.frame_height * zoom, v: 2 };
+      localStorage.setItem(POS_KEY, JSON.stringify(foot));
+      set({ pos: foot });
+    }
+    const canvas = canvasSize(pet.frame_width, pet.frame_height, zoom);
+    const at = foot ? windowPosFromFoot(foot, canvas) : null;
     await invoke("open_pet_window", {
-      w: Math.round(pet.frame_width * zoom),
-      h: Math.round(pet.frame_height * zoom),
-      x: pos?.x,
-      y: pos?.y,
+      w: canvas.w,
+      h: canvas.h,
+      x: at?.x,
+      y: at?.y,
     }).catch((e) => console.error("[pet] 开窗失败", e));
   },
 
   setPetId: (id) => {
     localStorage.setItem(PET_ID_KEY, id);
     set({ petId: id });
-    emitTo("pet", "pet_config", { petId: id, zoom: get().zoom }).catch(() => {});
+    pushConfig();
   },
 
   setZoom: (z) => {
     localStorage.setItem(ZOOM_KEY, String(z));
     set({ zoom: z });
-    emitTo("pet", "pet_config", { petId: get().petId, zoom: z }).catch(() => {});
+    pushConfig();
+  },
+
+  setGravity: (v) => {
+    localStorage.setItem(GRAVITY_KEY, v ? "1" : "0");
+    set({ gravity: v });
+    pushConfig();
+  },
+
+  setWalk: (v) => {
+    localStorage.setItem(WALK_KEY, v ? "1" : "0");
+    set({ walk: v });
+    pushConfig();
   },
 }));
+
+function pushConfig() {
+  const { petId, zoom, gravity, walk } = usePetStore.getState();
+  const cfg: PetConfig = { petId, zoom, gravity, walk, theme: readTheme() };
+  emitTo("pet", "pet_config", cfg).catch(() => {});
+}

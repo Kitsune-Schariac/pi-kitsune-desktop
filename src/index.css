@@ -170,6 +170,17 @@ html:has([data-pet]) #root {
   user-select: none;
 }
 
+/* 桌宠被拎起来时的晃动 (src/pet/effects.ts setDangling): 以头顶为支点左右摆。
+   拖动期间整窗本就在移动重绘, 这里用连续动画不额外增加多少合成开销 */
+@keyframes pet-fx-dangle {
+  from { transform: rotate(-6deg); }
+  to { transform: rotate(6deg); }
+}
+.pet-fx-dangle {
+  transform-origin: 50% 0%;
+  animation: pet-fx-dangle 0.45s ease-in-out infinite alternate;
+}
+
 /* 显隐保底 (踩坑 §4.9): 面板/页签显隐若用 hidden 属性, 必须全局盖过 display:flex 等
    布局 class, 否则 flex 容器里 hidden 元素仍占位/同显 */
 [hidden] {
