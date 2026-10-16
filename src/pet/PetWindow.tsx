@@ -9,6 +9,7 @@ import {
 } from "@tauri-apps/api/window";
 import { Menu } from "@tauri-apps/api/menu";
 import type { PetAnimation, PetMeta, PetState } from "../store/pet";
+import { canvasSize } from "./canvas";
 
 // 缩放边界: 太小看不清帧, 太大精灵图糊 (2 倍图放到 3 倍已是上限)
 const ZOOM_MIN = 0.5;
@@ -95,12 +96,16 @@ export function PetWindow() {
     };
   }, [pet]);
 
-  // --- 窗口尺寸跟随 帧尺寸 × zoom ---
+  // --- 窗口 = 画布 (比角色大); 角色包围盒上报给舞台线程做命中, 只在角色或缩放变化时报一次 ---
   useEffect(() => {
     if (!pet) return;
-    const w = Math.round(pet.frame_width * zoom);
-    const h = Math.round(pet.frame_height * zoom);
-    getCurrentWindow().setSize(new LogicalSize(w, h)).catch(() => {});
+    const canvas = canvasSize(pet.frame_width, pet.frame_height, zoom);
+    getCurrentWindow().setSize(new LogicalSize(canvas.w, canvas.h)).catch(() => {});
+    const w = pet.frame_width * zoom;
+    const h = pet.frame_height * zoom;
+    invoke("pet_stage_set_hitbox", {
+      rect: { x: (canvas.w - w) / 2, y: canvas.h - h, w, h },
+    }).catch(() => {});
   }, [pet, zoom]);
 
   // --- 帧循环: 手动改 background-position, 不走 React 状态 (每帧 setState 会把窗口拖垮) ---
@@ -234,27 +239,63 @@ export function PetWindow() {
   }, []);
 
   // --- 左键拖动 + 拖完回传位置 ---
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    const win = getCurrentWindow();
-    win.startDragging().catch(() => {});
-    // startDragging 是阻塞式系统拖拽, 结束后才 resolve 不了 —— 用一次性 mouseup 兜住落点
-    const onUp = () => {
-      window.removeEventListener("mouseup", onUp);
-      void (async () => {
-        try {
-          // outerPosition 给的是物理像素, 而重开窗时 Rust 侧 builder.position() 收的是逻辑坐标,
-          // 高 DPI 屏 (125% 缩放) 直接存物理值会让下次开窗位置偏掉 —— 存之前先换算
-          const [pos, scale] = await Promise.all([win.outerPosition(), win.scaleFactor()]);
-          const l = pos.toLogical(scale);
-          await emitTo("main", "pet_patch", { pos: { x: l.x, y: l.y } });
-        } catch {
-          // 拿不到位置就不落盘, 下次开窗回到默认位置即可
-        }
-      })();
-    };
-    window.addEventListener("mouseup", onUp);
+  // 拖动结束有两条来路: Windows 上系统拖拽的模态循环会吞掉松手消息, 页面收不到 mouseup,
+  // 由 Rust 舞台线程读鼠标键状态后发 pet_stage dragEnd; 其他平台靠 mouseup 兜底。
+  // 两条都可能到, 用 ref 保证一次拖动只收尾一次
+  const dragRef = useRef<{ active: boolean; onUp: (() => void) | null }>({ active: false, onUp: null });
+
+  const finishDrag = useCallback(() => {
+    const d = dragRef.current;
+    if (d.onUp) window.removeEventListener("mouseup", d.onUp);
+    d.onUp = null;
+    if (!d.active) return;
+    d.active = false;
+    invoke("pet_stage_drag", { active: false }).catch(() => {});
+    void (async () => {
+      try {
+        // outerPosition 给的是物理像素, 而重开窗时 Rust 侧 builder.position() 收的是逻辑坐标,
+        // 高 DPI 屏 (125% 缩放) 直接存物理值会让下次开窗位置偏掉 —— 存之前先换算
+        const win = getCurrentWindow();
+        const [pos, scale] = await Promise.all([win.outerPosition(), win.scaleFactor()]);
+        const l = pos.toLogical(scale);
+        await emitTo("main", "pet_patch", { pos: { x: l.x, y: l.y } });
+      } catch {
+        // 拿不到位置就不落盘, 下次开窗回到默认位置即可
+      }
+    })();
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let off: (() => void) | null = null;
+    void listen<{ kind: string }>("pet_stage", (e) => {
+      if (e.payload.kind === "dragEnd") finishDrag();
+    }).then((f) => {
+      // StrictMode 卸载后才 resolve 的监听器就地退订
+      if (disposed) f();
+      else off = f;
+    });
+    return () => {
+      disposed = true;
+      off?.();
+    };
+  }, [finishDrag]);
+
+  const onMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) return;
+      const d = dragRef.current;
+      d.active = true;
+      if (!d.onUp) {
+        d.onUp = finishDrag;
+        window.addEventListener("mouseup", d.onUp);
+      }
+      // 先锁住"不穿透"再开拖, 免得快速甩动时鼠标短暂出了包围盒、窗口切成穿透把拖拽打断
+      invoke("pet_stage_drag", { active: true }).catch(() => {});
+      getCurrentWindow().startDragging().catch(() => {});
+    },
+    [finishDrag],
+  );
 
   // --- 右键菜单: 切角色 / 重置位置 / 关闭 ---
   const onContextMenu = useCallback(
@@ -310,21 +351,27 @@ export function PetWindow() {
 
   if (!pet || !sprite) return <div data-pet />;
 
+  const canvas = canvasSize(pet.frame_width, pet.frame_height, zoom);
+  // 外层是整张透明画布, 角色贴底居中; 交互只挂在角色上 (透明区域本来也收不到鼠标, 已被穿透)
   return (
-    <div
-      data-pet
-      ref={boxRef}
-      onMouseDown={onMouseDown}
-      onContextMenu={onContextMenu}
-      style={{
-        width: pet.frame_width * zoom,
-        height: pet.frame_height * zoom,
-        backgroundImage: `url("${sprite.url}")`,
-        backgroundSize: `${sprite.w * zoom}px ${sprite.h * zoom}px`,
-        backgroundRepeat: "no-repeat",
-        imageRendering: "-webkit-optimize-contrast",
-        cursor: "grab",
-      }}
-    />
+    <div data-pet style={{ position: "relative", width: canvas.w, height: canvas.h }}>
+      <div
+        ref={boxRef}
+        onMouseDown={onMouseDown}
+        onContextMenu={onContextMenu}
+        style={{
+          position: "absolute",
+          left: (canvas.w - pet.frame_width * zoom) / 2,
+          bottom: 0,
+          width: pet.frame_width * zoom,
+          height: pet.frame_height * zoom,
+          backgroundImage: `url("${sprite.url}")`,
+          backgroundSize: `${sprite.w * zoom}px ${sprite.h * zoom}px`,
+          backgroundRepeat: "no-repeat",
+          imageRendering: "-webkit-optimize-contrast",
+          cursor: "grab",
+        }}
+      />
+    </div>
   );
 }

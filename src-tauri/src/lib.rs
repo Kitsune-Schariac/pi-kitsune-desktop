@@ -6,6 +6,7 @@ mod search;
 mod git;
 mod local_path;
 mod models_config;
+mod pet_stage;
 mod pets;
 mod provider_probe;
 mod session_fs;
@@ -158,7 +159,7 @@ fn app_version() -> String {
 
 /// 开桌宠窗: 透明无边框置顶小窗, 加载同一份前端 bundle 但带 ?window=pet 走桌宠分支。
 /// 已存在则只 show (重复开不再建第二个窗)。
-/// 尺寸由前端按 帧尺寸 × zoom 算好传进来; x/y 缺省时交给 builder 默认落位, 前端首帧再自行安置。
+/// 尺寸是前端算好的画布尺寸 (比角色大, 透明区域靠舞台线程动态穿透); x/y 缺省时交给 builder 默认落位。
 #[tauri::command]
 async fn open_pet_window(
     app: tauri::AppHandle,
@@ -190,6 +191,7 @@ async fn open_pet_window(
     builder
         .build()
         .map_err(|e| format!("创建桌宠窗口失败: {e}"))?;
+    pet_stage::start(app.clone());
     Ok(())
 }
 
@@ -518,6 +520,7 @@ pub fn run() {
             skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
             pets::list_pets, pets::get_pet_asset, pets::open_pets_dir,
             open_pet_window, close_pet_window,
+            pet_stage::pet_stage_set_hitbox, pet_stage::pet_stage_drag,
             subagent_fleet::list_fleet_runs, subagent_fleet::read_fleet_run_detail,
             trellis_tasks::list_trellis_tasks, trellis_tasks::read_trellis_task_doc,
             models_config::read_models_config, models_config::write_models_config,

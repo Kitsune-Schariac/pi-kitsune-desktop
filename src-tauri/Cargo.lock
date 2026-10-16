@@ -3455,6 +3455,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tokio",
+ "windows-sys 0.60.2",
  "xcap",
 ]
 

@@ -7,6 +7,7 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emitTo } from "@tauri-apps/api/event";
 import { useSessionStore, type SessionState } from "./session";
+import { canvasSize } from "../pet/canvas";
 
 /** busy 不区分思考/执行工具 —— agent 只要在跑就是忙, 由渲染侧在忙碌动画池里随机取 */
 export type PetState = "idle" | "greet" | "busy" | "error" | "offline";
@@ -188,9 +189,10 @@ export const usePetStore = create<PetStore>((set, get) => ({
     const { pets, petId, zoom, pos } = get();
     const pet = pets.find((p) => p.id === petId) ?? pets[0];
     if (!pet) return; // 没有可用宠物包, 设置面板会给空态提示
+    const canvas = canvasSize(pet.frame_width, pet.frame_height, zoom);
     await invoke("open_pet_window", {
-      w: Math.round(pet.frame_width * zoom),
-      h: Math.round(pet.frame_height * zoom),
+      w: canvas.w,
+      h: canvas.h,
       x: pos?.x,
       y: pos?.y,
     }).catch((e) => console.error("[pet] 开窗失败", e));
