@@ -38,6 +38,9 @@ export interface PetMeta {
 const ENABLED_KEY = "kitsune.petEnabled";
 const PET_ID_KEY = "kitsune.petId";
 const ZOOM_KEY = "kitsune.petZoom";
+// 重力 / 散步默认开: 只有用户显式关过才存 "0", 没存过的老用户升级后直接是开
+const GRAVITY_KEY = "kitsune.petGravity";
+const WALK_KEY = "kitsune.petWalk";
 const POS_KEY = "kitsune.petPos";
 
 const DEFAULT_ZOOM = 1;
@@ -52,6 +55,8 @@ interface PetStore {
   enabled: boolean;
   petId: string | null;
   zoom: number;
+  gravity: boolean;
+  walk: boolean;
   /** 脚底点 (v: 2); 旧版存的窗口左上角没有 v, 开窗时迁移 */
   pos: StoredPos | null;
   pets: PetMeta[];
@@ -61,6 +66,16 @@ interface PetStore {
   setEnabled: (v: boolean) => Promise<void>;
   setPetId: (id: string) => void;
   setZoom: (z: number) => void;
+  setGravity: (v: boolean) => void;
+  setWalk: (v: boolean) => void;
+}
+
+/** 推给桌宠窗口的配置 (桌宠侧 pet_config 监听的载荷) */
+export interface PetConfig {
+  petId: string | null;
+  zoom: number;
+  gravity: boolean;
+  walk: boolean;
 }
 
 type StoredPos = { x: number; y: number; v?: number };
@@ -111,6 +126,8 @@ export const usePetStore = create<PetStore>((set, get) => ({
   enabled: localStorage.getItem(ENABLED_KEY) === "1",
   petId: localStorage.getItem(PET_ID_KEY),
   zoom: Number(localStorage.getItem(ZOOM_KEY)) || DEFAULT_ZOOM,
+  gravity: localStorage.getItem(GRAVITY_KEY) !== "0",
+  walk: localStorage.getItem(WALK_KEY) !== "0",
   pos: readPos(),
   pets: [],
 
@@ -130,8 +147,7 @@ export const usePetStore = create<PetStore>((set, get) => ({
 
     // 桌宠窗口挂载完成 → 回推配置与当前状态。开窗瞬间就推的话, 窗口还没挂载完, 事件会丢
     listen("pet_ready", () => {
-      const { petId, zoom } = get();
-      emitTo("pet", "pet_config", { petId, zoom }).catch(() => {});
+      pushConfig();
       lastPushed = null; // 强制下一次推送, 让新开的窗口拿到当前态
       setOverride("greet", GREET_MS);
     });
@@ -148,7 +164,7 @@ export const usePetStore = create<PetStore>((set, get) => ({
         if (typeof p.petId === "string") {
           localStorage.setItem(PET_ID_KEY, p.petId);
           set({ petId: p.petId });
-          emitTo("pet", "pet_config", { petId: p.petId, zoom: get().zoom }).catch(() => {});
+          pushConfig();
         }
         if (p.pos !== undefined) {
           if (p.pos === null) localStorage.removeItem(POS_KEY);
@@ -213,12 +229,30 @@ export const usePetStore = create<PetStore>((set, get) => ({
   setPetId: (id) => {
     localStorage.setItem(PET_ID_KEY, id);
     set({ petId: id });
-    emitTo("pet", "pet_config", { petId: id, zoom: get().zoom }).catch(() => {});
+    pushConfig();
   },
 
   setZoom: (z) => {
     localStorage.setItem(ZOOM_KEY, String(z));
     set({ zoom: z });
-    emitTo("pet", "pet_config", { petId: get().petId, zoom: z }).catch(() => {});
+    pushConfig();
+  },
+
+  setGravity: (v) => {
+    localStorage.setItem(GRAVITY_KEY, v ? "1" : "0");
+    set({ gravity: v });
+    pushConfig();
+  },
+
+  setWalk: (v) => {
+    localStorage.setItem(WALK_KEY, v ? "1" : "0");
+    set({ walk: v });
+    pushConfig();
   },
 }));
+
+function pushConfig() {
+  const { petId, zoom, gravity, walk } = usePetStore.getState();
+  const cfg: PetConfig = { petId, zoom, gravity, walk };
+  emitTo("pet", "pet_config", cfg).catch(() => {});
+}

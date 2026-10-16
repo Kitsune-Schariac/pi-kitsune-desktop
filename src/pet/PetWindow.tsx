@@ -8,7 +8,7 @@ import {
   PhysicalPosition,
 } from "@tauri-apps/api/window";
 import { Menu } from "@tauri-apps/api/menu";
-import type { PetAnimation, PetMeta, PetState } from "../store/pet";
+import type { PetAnimation, PetConfig, PetMeta, PetState } from "../store/pet";
 import { canvasSize, footFromWindowPos, windowPosFromFoot } from "./canvas";
 
 // 缩放边界: 太小看不清帧, 太大精灵图糊 (2 倍图放到 3 倍已是上限)
@@ -211,10 +211,11 @@ export function PetWindow() {
           st.idleNextAt = 0;
         }
       });
-      const offConfig = await listen<{ petId: string | null; zoom: number }>(
+      const offConfig = await listen<PetConfig>(
         "pet_config",
         (e) => {
           setZoom(e.payload.zoom);
+          invoke("pet_stage_set_gravity", { on: e.payload.gravity }).catch(() => {});
           invoke<PetMeta[]>("list_pets")
             .then((list) => {
               setPets(list);
@@ -290,8 +291,14 @@ export function PetWindow() {
   useEffect(() => {
     let disposed = false;
     let off: (() => void) | null = null;
-    void listen<{ kind: string }>("pet_stage", (e) => {
-      if (e.payload.kind === "dragEnd") finishDrag();
+    void listen<{ kind: string; foot: { x: number; y: number } }>("pet_stage", (e) => {
+      const { kind, foot } = e.payload;
+      if (kind === "dragEnd") {
+        finishDrag();
+      } else if (kind === "landed" || kind === "arrived" || kind === "edge" || kind === "snapped") {
+        // 舞台线程挪过窗口之后, 新落点由它带着脚底点报上来, 直接落盘
+        emitTo("main", "pet_patch", { pos: { x: foot.x, y: foot.y, v: 2 } }).catch(() => {});
+      }
     }).then((f) => {
       // StrictMode 卸载后才 resolve 的监听器就地退订
       if (disposed) f();
