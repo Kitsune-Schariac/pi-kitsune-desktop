@@ -226,8 +226,9 @@ pub(crate) fn safe_relative(p: &str) -> bool {
             .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
 }
 
-fn tier_of(actions: &[PetAction]) -> (String, Vec<String>) {
-    let has = |c: &str| actions.iter().any(|a| a.category == c);
+/// 按动作类别算档位与缺失类别 (加载器与导入器共用)
+pub(crate) fn tier_of(categories: &[&str]) -> (String, Vec<String>) {
+    let has = |c: &str| categories.contains(&c);
     let missing: Vec<String> = BASIC
         .iter()
         .chain(FULL.iter())
@@ -253,7 +254,8 @@ fn finish(mut m: PetMeta) -> Option<PetMeta> {
         return None;
     }
     m.actions.sort_by(|a, b| a.name.cmp(&b.name));
-    (m.tier, m.missing) = tier_of(&m.actions);
+    let cats: Vec<&str> = m.actions.iter().map(|a| a.category.as_str()).collect();
+    (m.tier, m.missing) = tier_of(&cats);
     if m.name.trim().is_empty() {
         m.name = m.id.clone();
     }
@@ -262,7 +264,7 @@ fn finish(mut m: PetMeta) -> Option<PetMeta> {
 
 /// 解析单个宠物目录 → PetMeta; 读不到 / 解析失败 / 关键字段非法 / 没有 idle 时返回 None (跳过)。
 /// 加载期宽松: 单个坏动作只丢掉它本身, 不连累整包; 严格校验是导入器的事
-fn parse_pet(dir: &Path) -> Option<PetMeta> {
+pub(crate) fn parse_pet(dir: &Path) -> Option<PetMeta> {
     let text = std::fs::read_to_string(dir.join("pet.json")).ok()?;
     let raw: serde_json::Value = serde_json::from_str(&text).ok()?;
     if raw.get("format").and_then(|v| v.as_u64()) == Some(2) {
