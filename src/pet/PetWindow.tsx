@@ -58,15 +58,18 @@ export function PetWindow() {
   const [zoom, setZoom] = useState(1);
 
   // 帧循环每帧都要读这些值, 但它们变化不该重启循环, 也不该触发重渲染 → 放 ref
-  // busyAnim: 忙碌时当前随机到的动画名; idlePlaying/idleNextAt: 空闲发呆与下次开播时刻
+  // idlePlaying/idleNextAt: 空闲发呆与下次开播时刻; fresh: 下一步只重画当前帧、不推进
+  // (换状态 / 换缩放后要立刻画对, 但不该因此跳过一帧)
   const animRef = useRef({
     state: "idle" as PetState,
     frame: 0,
-    lastTs: 0,
     busyIdx: 0,
     idlePlaying: false,
     idleNextAt: 0,
+    fresh: true,
   });
+  // 立刻跑一步帧循环 (取消已排好的定时器); 循环挂载前是空函数
+  const kickRef = useRef<() => void>(() => {});
   // 精灵图行数, 给忙碌池挡越界行用 (sprite 加载后才知道)
   const rowsRef = useRef(0);
   const petRef = useRef<PetMeta | null>(null);
@@ -130,23 +133,39 @@ export function PetWindow() {
   }, [pet, zoom]);
 
   // --- 帧循环: 手动改 background-position, 不走 React 状态 (每帧 setState 会把窗口拖垮) ---
+  // 用定时器按"下一帧到期时间"调度, 不用 requestAnimationFrame: rAF 每个屏幕刷新周期都回调,
+  // 宠物停在首帧发呆时也一样, 实测整棵进程树白占单核约 3.9%。帧动画本身才 4~10fps,
+  // 定时器只在真要换帧时醒来, 发呆期间一睡就是好几秒
   useEffect(() => {
-    let raf = 0;
-    const tick = (ts: number) => {
-      raf = requestAnimationFrame(tick);
+    let timer = 0;
+    const schedule = (ms: number) => {
+      timer = window.setTimeout(step, Math.max(0, ms));
+    };
+    const paint = (el: HTMLDivElement, p: PetMeta, anim: PetAnimation, frame: number) => {
+      const z = zoomRef.current;
+      el.style.backgroundPosition = `${-frame * p.frame_width * z}px ${-anim.row * p.frame_height * z}px`;
+    };
+    function step() {
+      timer = 0;
       const p = petRef.current;
       const el = boxRef.current;
+      // 宠物或精灵图还没就绪: 不排下一次, 就绪时由 kick 重新拉起
       if (!p || !el) return;
-
       const st = animRef.current;
+      const now = performance.now();
 
       // 空闲发呆: 停在首帧不动, 到点了才播一轮完整待机动画, 播完继续发呆。
       // 一直循环播 idle 会让桌宠显得很聒噪, 真人不在电脑前时它也在不停晃
       if (st.state === "idle" && !st.idlePlaying) {
-        if (ts < st.idleNextAt) return;
+        if (now < st.idleNextAt) {
+          st.fresh = false;
+          paint(el, p, p.animations.idle, 0);
+          schedule(st.idleNextAt - now);
+          return;
+        }
         st.idlePlaying = true;
         st.frame = 0;
-        st.lastTs = 0;
+        st.fresh = true;
       }
 
       // 忙碌时在动画池里随机取一个播, 播完一轮再随机 —— 不区分思考/执行工具
@@ -156,11 +175,10 @@ export function PetWindow() {
         : p.animations[st.state] ?? p.animations.idle;
       if (!anim || anim.frames <= 0) return;
 
-      const perFrame = anim.duration / anim.frames;
-      if (ts - st.lastTs < perFrame) return;
-      st.lastTs = ts;
-
-      if (st.frame >= anim.frames - 1) {
+      let stopped = false;
+      if (st.fresh) {
+        st.fresh = false;
+      } else if (st.frame >= anim.frames - 1) {
         if (pool) {
           // 一轮播完重新随机 (允许抽到同一个, 连播两轮反而自然)
           st.busyIdx = Math.floor(Math.random() * pool.length);
@@ -168,11 +186,12 @@ export function PetWindow() {
         } else if (st.state === "idle") {
           // 待机播完一轮 → 回到发呆, 安排下次开播的时刻
           st.idlePlaying = false;
-          st.idleNextAt =
-            ts + IDLE_REST_MIN_MS + Math.random() * (IDLE_REST_MAX_MS - IDLE_REST_MIN_MS);
+          st.idleNextAt = now + IDLE_REST_MIN_MS + Math.random() * (IDLE_REST_MAX_MS - IDLE_REST_MIN_MS);
           st.frame = 0;
         } else if (!anim.loop) {
-          st.frame = anim.frames - 1; // 非循环: 停在末帧
+          // 非循环: 停在末帧, 不再排定时器, 等换状态时 kick
+          st.frame = anim.frames - 1;
+          stopped = true;
         } else {
           st.frame = 0;
         }
@@ -180,14 +199,29 @@ export function PetWindow() {
         st.frame += 1;
       }
 
-      const z = zoomRef.current;
-      const x = -animRef.current.frame * p.frame_width * z;
-      const y = -anim.row * p.frame_height * z;
-      el.style.backgroundPosition = `${x}px ${y}px`;
+      // 换到发呆的那一步: 画完首帧直接睡到下次开播
+      const active = pool !== null || st.state !== "idle" || st.idlePlaying;
+      const cur = active ? anim : p.animations.idle;
+      paint(el, p, cur, st.frame);
+      if (stopped) return;
+      schedule(active ? anim.duration / anim.frames : st.idleNextAt - now);
+    }
+    kickRef.current = () => {
+      if (timer) window.clearTimeout(timer);
+      step();
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    step();
+    return () => {
+      window.clearTimeout(timer);
+      kickRef.current = () => {};
+    };
   }, []);
+
+  // 精灵图就绪 / 缩放变化: 立刻按新尺寸重画当前帧 (发呆期间不 kick 的话要等好几秒才画对)
+  useEffect(() => {
+    animRef.current.fresh = true;
+    kickRef.current();
+  }, [sprite, zoom]);
 
   // --- 与主窗口的事件通道 ---
   useEffect(() => {
@@ -202,7 +236,7 @@ export function PetWindow() {
         const st = animRef.current;
         st.state = e.payload.state;
         st.frame = 0;
-        st.lastTs = 0;
+        st.fresh = true;
         if (st.state === "busy") {
           // 进忙碌态立刻随机一个动作开播, 不然要等一轮才随机
           st.busyIdx = Math.floor(Math.random() * 100);
@@ -211,6 +245,8 @@ export function PetWindow() {
           st.idlePlaying = true;
           st.idleNextAt = 0;
         }
+        // 定时器可能正睡在发呆里, 换状态要立刻开播
+        kickRef.current();
       });
       const offConfig = await listen<PetConfig>(
         "pet_config",
