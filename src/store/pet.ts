@@ -13,26 +13,44 @@ import { canvasSize, windowPosFromFoot, type FootPos } from "../pet/canvas";
 /** busy 不区分思考/执行工具 —— agent 只要在跑就是忙, 由渲染侧在忙碌动画池里随机取 */
 export type PetState = "idle" | "greet" | "busy" | "error" | "offline";
 
-/** Rust 侧 PetAnimation。字段名沿用 pet.json 原样 —— Rust 那边 loop_flag 带 rename = "loop",
- *  serde 的 rename 序列化方向同样生效, 传到前端就是 loop */
-export interface PetAnimation {
+/** Rust 侧 PetAction: 一个动作 = 一张图上的一行帧 (v2 横条图恒为第 0 行, v1 图集为行号) */
+export interface PetAction {
+  /** "类别.变体", 如 work.typing */
+  name: string;
+  category: string;
+  /** 素材键 (包内相对路径), 交给 get_pet_asset */
+  image: string;
   row: number;
-  frames: number;
-  /** 一轮播完的总毫秒数, 非单帧时长 */
-  duration: number;
-  loop: boolean;
+  /** 逐帧毫秒, 长度即帧数 */
+  durations: number[];
+  weight: number;
+  /** 最少 / 最多播几轮; null 由大脑按类别兜底 */
+  loops: [number, number] | null;
+  interruptible: boolean;
+  /** 仅 walk: 逻辑像素/秒 */
+  speed: number | null;
+  /** 仅 walk: 素材朝向 */
+  facing: "left" | "right" | null;
 }
 
-/** Rust 侧 PetMeta */
+export type PetTier = "required" | "basic" | "full";
+
+/** Rust 侧 PetMeta (v2 规整后的统一形态; 旧 Codex 包在加载时适配成同样的结构) */
 export interface PetMeta {
   id: string;
-  display_name: string;
+  name: string;
   description: string;
+  renderer: "frames";
   frame_width: number;
   frame_height: number;
-  animations: Record<string, PetAnimation>;
-  /** 可选编排: 状态 → 依次轮播的动画名 (每播完一轮换下一个); 没有则该状态走同名单动画 */
-  state_sequences: Record<string, string[]>;
+  personality: "default" | "diligent" | "lazy" | "playful";
+  /** 按类别 / 事件分组的台词 */
+  lines: Record<string, string[]>;
+  actions: PetAction[];
+  tier: PetTier;
+  /** 缺失的已知类别 (不含 idle) */
+  missing: string[];
+  source: "v2" | "codex";
 }
 
 // localStorage 键: 与现有 kitsune.* 同前缀

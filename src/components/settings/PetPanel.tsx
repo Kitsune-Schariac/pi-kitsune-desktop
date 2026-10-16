@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { usePetStore } from "../../store/pet";
+import { usePetStore, type PetTier } from "../../store/pet";
 import { Cat, FolderOpen, RefreshCw } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -11,6 +11,9 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     </h3>
   );
 }
+
+// 宠物包档位: 只有 idle 是必选, 动作类别越全宠物越生动 (见 pets.rs BASIC / FULL)
+const TIER_LABEL: Record<PetTier, string> = { required: "必选档", basic: "基础档", full: "完整档" };
 
 // 桌宠开关 + 角色选择 + 缩放 (设置页「桌宠」tab)
 export function PetPanel() {
@@ -95,15 +98,23 @@ export function PetPanel() {
                       ? "border-[var(--accent)] ring-2 ring-[var(--accent-soft)]"
                       : "border-[var(--line)] hover:border-[var(--line-2)]"
                   }`}
-                  title={p.description || p.display_name}
+                  title={p.description || p.name}
                 >
                   <div className="flex items-center gap-2">
                     <Cat className="h-4 w-4 shrink-0 text-[var(--fg-3)]" />
-                    <span className="truncate text-body text-[var(--fg)]">{p.display_name}</span>
+                    <span className="truncate text-body text-[var(--fg)]">{p.name}</span>
+                    <span className="ml-auto shrink-0 rounded border border-[var(--line)] px-[5px] text-label text-[var(--fg-3)]">
+                      {TIER_LABEL[p.tier]}
+                    </span>
                   </div>
                   <p className="mt-1 line-clamp-2 text-label text-[var(--fg-4)]">
                     {p.description || `${p.frame_width}×${p.frame_height}`}
                   </p>
+                  {p.missing.length > 0 && (
+                    <p className="mt-1 truncate text-label text-[var(--fg-4)]" title={p.missing.join("、")}>
+                      缺：{p.missing.join("、")}
+                    </p>
+                  )}
                 </button>
               );
             })}
