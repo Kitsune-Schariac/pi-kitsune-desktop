@@ -9,7 +9,7 @@ import {
 } from "@tauri-apps/api/window";
 import { Menu } from "@tauri-apps/api/menu";
 import type { PetAnimation, PetMeta, PetState } from "../store/pet";
-import { canvasSize } from "./canvas";
+import { canvasSize, footFromWindowPos, windowPosFromFoot } from "./canvas";
 
 // 缩放边界: 太小看不清帧, 太大精灵图糊 (2 倍图放到 3 倍已是上限)
 const ZOOM_MIN = 0.5;
@@ -100,7 +100,27 @@ export function PetWindow() {
   useEffect(() => {
     if (!pet) return;
     const canvas = canvasSize(pet.frame_width, pet.frame_height, zoom);
-    getCurrentWindow().setSize(new LogicalSize(canvas.w, canvas.h)).catch(() => {});
+    // 换尺寸时保持脚底点不动: setSize 只改右下角, 不补位置的话缩放 / 换角色时宠物会"往右下长"。
+    // 全程物理像素算, 避免逻辑坐标来回换算的舍入误差在反复缩放后累积成漂移
+    const win = getCurrentWindow();
+    void (async () => {
+      try {
+        const [pos, size, scale] = await Promise.all([
+          win.outerPosition(),
+          win.outerSize(),
+          win.scaleFactor(),
+        ]);
+        const nw = Math.round(canvas.w * scale);
+        const nh = Math.round(canvas.h * scale);
+        if (nw === size.width && nh === size.height) return;
+        const footX = pos.x + size.width / 2;
+        const footY = pos.y + size.height;
+        await win.setSize(new LogicalSize(canvas.w, canvas.h));
+        await win.setPosition(new PhysicalPosition(Math.round(footX - nw / 2), Math.round(footY - nh)));
+      } catch {
+        // 窗口正在关闭等情况拿不到几何信息, 不调整即可
+      }
+    })();
     const w = pet.frame_width * zoom;
     const h = pet.frame_height * zoom;
     invoke("pet_stage_set_hitbox", {
@@ -255,10 +275,12 @@ export function PetWindow() {
       try {
         // outerPosition 给的是物理像素, 而重开窗时 Rust 侧 builder.position() 收的是逻辑坐标,
         // 高 DPI 屏 (125% 缩放) 直接存物理值会让下次开窗位置偏掉 —— 存之前先换算
+        const p = petRef.current;
+        if (!p) return;
         const win = getCurrentWindow();
         const [pos, scale] = await Promise.all([win.outerPosition(), win.scaleFactor()]);
-        const l = pos.toLogical(scale);
-        await emitTo("main", "pet_patch", { pos: { x: l.x, y: l.y } });
+        const canvas = canvasSize(p.frame_width, p.frame_height, zoomRef.current);
+        await emitTo("main", "pet_patch", { pos: footFromWindowPos(pos.toLogical(scale), canvas) });
       } catch {
         // 拿不到位置就不落盘, 下次开窗回到默认位置即可
       }
@@ -320,18 +342,21 @@ export function PetWindow() {
             // 就地把窗口挪回右下角并回传落盘 —— 只清持久化不动窗口的话, 用户点了没反应
             action: () => {
               void (async () => {
-                const win = getCurrentWindow();
+                if (!pet) return;
                 const mon = await currentMonitor();
                 if (!mon) return;
-                const sz = await win.outerSize();
-                // 物理像素运算; 底部多留一截, 免得桌宠被压在任务栏下面
-                const margin = Math.round(24 * mon.scaleFactor);
-                const x = mon.position.x + mon.size.width - sz.width - margin;
-                const y = mon.position.y + mon.size.height - sz.height - Math.round(80 * mon.scaleFactor);
-                await win.setPosition(new PhysicalPosition(x, y));
-                // 落盘存逻辑坐标 (Rust 侧 builder.position 按逻辑坐标解释)
-                const l = new PhysicalPosition(x, y).toLogical(mon.scaleFactor);
-                await emitTo("main", "pet_patch", { pos: { x: l.x, y: l.y } });
+                // 用 workArea (扣掉任务栏) 而不是整块屏: 脚底贴着它的底边就不会被任务栏压住,
+                // 任务栏在左 / 上 / 隐藏时也都对
+                const s = mon.scaleFactor;
+                const wa = mon.workArea;
+                const right = (wa.position.x + wa.size.width) / s;
+                const bottom = (wa.position.y + wa.size.height) / s;
+                const foot = { x: right - 24 - (pet.frame_width * zoom) / 2, y: bottom, v: 2 as const };
+                const at = windowPosFromFoot(foot, canvasSize(pet.frame_width, pet.frame_height, zoom));
+                await getCurrentWindow().setPosition(
+                  new PhysicalPosition(Math.round(at.x * s), Math.round(at.y * s)),
+                );
+                await emitTo("main", "pet_patch", { pos: foot });
               })();
             },
           },
@@ -346,7 +371,7 @@ export function PetWindow() {
       });
       await menu.popup();
     },
-    [pets, pet],
+    [pets, pet, zoom],
   );
 
   if (!pet || !sprite) return <div data-pet />;

@@ -7,7 +7,7 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emitTo } from "@tauri-apps/api/event";
 import { useSessionStore, type SessionState } from "./session";
-import { canvasSize } from "../pet/canvas";
+import { canvasSize, windowPosFromFoot, type FootPos } from "../pet/canvas";
 
 /** busy 不区分思考/执行工具 —— agent 只要在跑就是忙, 由渲染侧在忙碌动画池里随机取 */
 export type PetState = "idle" | "greet" | "busy" | "error" | "offline";
@@ -52,7 +52,8 @@ interface PetStore {
   enabled: boolean;
   petId: string | null;
   zoom: number;
-  pos: { x: number; y: number } | null;
+  /** 脚底点 (v: 2); 旧版存的窗口左上角没有 v, 开窗时迁移 */
+  pos: StoredPos | null;
   pets: PetMeta[];
 
   init: () => void;
@@ -62,7 +63,9 @@ interface PetStore {
   setZoom: (z: number) => void;
 }
 
-function readPos(): { x: number; y: number } | null {
+type StoredPos = { x: number; y: number; v?: number };
+
+function readPos(): StoredPos | null {
   try {
     const raw = localStorage.getItem(POS_KEY);
     if (!raw) return null;
@@ -134,7 +137,7 @@ export const usePetStore = create<PetStore>((set, get) => ({
     });
 
     // 桌宠窗口侧的变更回传 (滚轮缩放 / 拖动落点 / 右键切角色或关闭)
-    listen<{ zoom?: number; petId?: string; pos?: { x: number; y: number } | null; enabled?: boolean }>(
+    listen<{ zoom?: number; petId?: string; pos?: FootPos | null; enabled?: boolean }>(
       "pet_patch",
       (e) => {
         const p = e.payload;
@@ -189,12 +192,21 @@ export const usePetStore = create<PetStore>((set, get) => ({
     const { pets, petId, zoom, pos } = get();
     const pet = pets.find((p) => p.id === petId) ?? pets[0];
     if (!pet) return; // 没有可用宠物包, 设置面板会给空态提示
+    let foot = pos;
+    if (foot && foot.v !== 2) {
+      // 旧版存的是窗口左上角, 那时窗口 = 帧尺寸 × zoom (还没有画布), 按旧窗口换算成脚底点并写回,
+      // 不迁移的话升级后宠物会整体往左上偏半个画布
+      foot = { x: foot.x + (pet.frame_width * zoom) / 2, y: foot.y + pet.frame_height * zoom, v: 2 };
+      localStorage.setItem(POS_KEY, JSON.stringify(foot));
+      set({ pos: foot });
+    }
     const canvas = canvasSize(pet.frame_width, pet.frame_height, zoom);
+    const at = foot ? windowPosFromFoot(foot, canvas) : null;
     await invoke("open_pet_window", {
       w: canvas.w,
       h: canvas.h,
-      x: pos?.x,
-      y: pos?.y,
+      x: at?.x,
+      y: at?.y,
     }).catch((e) => console.error("[pet] 开窗失败", e));
   },
 

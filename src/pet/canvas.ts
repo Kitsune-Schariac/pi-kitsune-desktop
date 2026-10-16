@@ -4,6 +4,25 @@
 export const CANVAS_SCALE_W = 2;
 export const CANVAS_SCALE_H = 1.6;
 
+/**
+ * 宠物位置以"脚底点"(角色底边中点, 逻辑坐标) 记录, 不记窗口左上角: 画布比角色大且随缩放变化,
+ * 左上角代表不了角色站在哪。v: 2 是格式标记, 旧版存的是窗口左上角 (没有 v), 读到要先迁移
+ */
+export interface FootPos {
+  x: number;
+  y: number;
+  v: 2;
+}
+
+/** 角色贴画布底边、水平居中, 所以脚底点 = 画布底边中点 */
+export function windowPosFromFoot(foot: { x: number; y: number }, canvas: { w: number; h: number }) {
+  return { x: foot.x - canvas.w / 2, y: foot.y - canvas.h };
+}
+
+export function footFromWindowPos(win: { x: number; y: number }, canvas: { w: number; h: number }): FootPos {
+  return { x: win.x + canvas.w / 2, y: win.y + canvas.h, v: 2 };
+}
+
 /** 画布逻辑尺寸; 角色贴画布底边、水平居中 */
 export function canvasSize(frameW: number, frameH: number, zoom: number) {
   return {
