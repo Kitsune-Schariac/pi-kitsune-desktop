@@ -92,9 +92,11 @@ const ROUTINES = ["work", "slack", "walk", "idle", "sleep"] as const;
 type Routine = (typeof ROUTINES)[number];
 
 // score(c) = base × ctx × drive × persona; sleep 的 drive 是开关 (困且长时间没活干才为 1)
+// 选择权重 ≠ 时间占比: 一次 idle 要播 2~4 轮且轮间发呆 2~6 秒 (平均约 11 秒), 一次 work 约 4.5 秒,
+// 所以有会话时 idle 系数压得很低; 调参用 .trellis/tasks/10-16-pet-brain/research/brain-sim.ts 按时间核对
 const BASE: Record<Routine, number> = { work: 1, slack: 0.6, walk: 0.6, idle: 1, sleep: 3 };
-const CTX_RUNNING: Record<Routine, number> = { work: 4, slack: 1, walk: 0.3, idle: 0.6, sleep: 0 };
-const CTX_IDLE: Record<Routine, number> = { work: 0.6, slack: 1, walk: 1, idle: 1, sleep: 1 };
+const CTX_RUNNING: Record<Routine, number> = { work: 4, slack: 1, walk: 0.3, idle: 0.15, sleep: 0 };
+const CTX_IDLE: Record<Routine, number> = { work: 1, slack: 1, walk: 1, idle: 1, sleep: 1 };
 // react 不是常规行为, 它的系数作用在单击反应的期望轮数上 (playful 平均 1.5 轮)
 const PERSONA: Record<PetMeta["personality"], Record<Routine | "react", number>> = {
   default: { work: 1, slack: 1, walk: 1, sleep: 1, idle: 1, react: 1 },
