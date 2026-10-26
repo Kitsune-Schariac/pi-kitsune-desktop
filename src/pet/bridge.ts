@@ -1,4 +1,4 @@
-// 桌宠事件桥 (主窗口侧): 会话状态聚合推给桌宠窗口 + 接收桌宠窗口的变更回传
+// 桌宠事件桥 (主窗口侧): 会话事实快照推给桌宠窗口 + 接收桌宠窗口的变更回传
 //
 // 只在开启桌宠时由 store/pet.ts 动态 import 并启动, 关闭时整体释放 —— 桌宠关着的时候,
 // 主窗口里一个会话订阅、一个事件监听都不挂。配置的读写仍在 store, 这里只管"桥"。
@@ -16,19 +16,7 @@ import {
   type PetActivate,
   type PetPatch,
   type PetSignals,
-  type PetState,
 } from "../store/pet";
-
-// 覆盖态时长: greet 是开窗打招呼, error 是报错后的短暂定格
-const GREET_MS = 2500;
-const ERROR_MS = 2000;
-
-/** 多会话聚合成单一状态 (全局聚合: 任一会话在忙, 桌宠就忙) */
-function aggregate(sessions: Record<string, SessionState>): PetState {
-  const list = Object.values(sessions);
-  if (list.length === 0) return "offline";
-  return list.some((s) => s.isStreaming) ? "busy" : "idle";
-}
 
 /** 气泡里叫得出口的会话名: 会话标题 → 工作目录最后一段 → 兜底 */
 function sessionLabel(s: SessionState): string {
@@ -40,42 +28,16 @@ function sessionLabel(s: SessionState): string {
  * 抢跑的话桌宠窗口的 pet_ready 握手会打在还没注册的监听上直接丢掉
  */
 export async function startBridge(): Promise<() => void> {
-  // 时限性覆盖态: greet/error 不由 aggregate 推导, 到点自动撤销后重算
-  let override: PetState | null = null;
-  let overrideTimer: ReturnType<typeof setTimeout> | null = null;
-  // 上次推给桌宠的值: 每个 text_delta 都会触发 store 变更, 不去重会变成每秒几十次 IPC
-  let lastPushed: PetState | null = null;
-
-  const pushState = () => {
-    const next = override ?? aggregate(useSessionStore.getState().sessions);
-    if (next === lastPushed) return;
-    lastPushed = next;
-    emitTo("pet", "pet_state", { state: next }).catch(() => {});
-  };
-
-  const setOverride = (state: PetState, ms: number) => {
-    if (overrideTimer) clearTimeout(overrideTimer);
-    override = state;
-    pushState();
-    overrideTimer = setTimeout(() => {
-      override = null;
-      overrideTimer = null;
-      pushState();
-    }, ms);
-  };
-
-  // ---- 信号层 ----
-
   // 待看完成: sessionId → 完成时刻。Map 保持插入序, 即完成先后。
   // 不能直接用 hasUnread: 它只在"完成时用户没选中该会话"才置位, 用户选中着会话但人不在
   // (主窗口失焦 / 最小化) 时完成就漏了, 所以这里自己记, hasUnread 只当清除条件之一
   const pending = new Map<string, number>();
   let errorSeq = 0;
-  // 人在不在主窗口前: 窗口聚焦 + 页面可见。Windows 下最小化 / 切虚拟桌面时单靠 onFocusChanged
-  // 不一定可靠, visibilityState 兜底, 两个都满足才算在看
+  // 人在不在主窗口前: 窗口聚焦 + 页面可见, 两个都满足才算在看。实测 WebView2 最小化时
+  // onFocusChanged(false) 可靠, visibilityState 却仍是 visible —— 判定靠聚焦, 可见性只是别的平台的兜底
   let winFocused = document.hasFocus();
   const present = () => winFocused && document.visibilityState === "visible";
-  // 上次推送的快照序列化: 同 pushState, 流式输出期间 store 高频变更, 内容没变就不发
+  // 上次推送的快照序列化: 每个 text_delta 都会触发 store 变更, 内容没变就不发, 否则每秒几十次 IPC
   let lastSignals = "";
 
   const pushSignals = (force = false) => {
@@ -110,13 +72,8 @@ export async function startBridge(): Promise<() => void> {
 
   const offs: Array<() => void> = [() => document.removeEventListener("visibilitychange", onVisibility)];
 
-  // 会话状态变化 → 重算并按需推送 (两边内部都做了去重)
-  offs.push(
-    useSessionStore.subscribe(() => {
-      pushState();
-      pushSignals();
-    }),
-  );
+  // 会话状态变化 → 重算并按需推送 (pushSignals 内部做了去重)
+  offs.push(useSessionStore.subscribe(() => pushSignals()));
 
   // 换皮肤 → 重推配置, 让气泡跟着换色。applyTheme 先写完 CSS 变量才 set activeSkinId,
   // 所以这里读到的已经是新皮肤的值
@@ -134,7 +91,6 @@ export async function startBridge(): Promise<() => void> {
         // 工具报错是瞬时事件, store 状态里留不下"刚刚发生"的痕迹, 只能在这里捕获
         if (ev.type === "tool_execution_end" && ev.isError) {
           errorSeq++;
-          setOverride("error", ERROR_MS);
           pushSignals();
         }
         // 完成判定挂在 agent_settled 而不是 isStreaming 的下降沿: 停止会话 / 进程退出 / detach
@@ -153,11 +109,10 @@ export async function startBridge(): Promise<() => void> {
         winFocused = payload;
         pushSignals();
       }),
-      // 桌宠窗口挂载完成 → 回推配置与当前状态。开窗瞬间就推的话, 窗口还没挂载完, 事件会丢
+      // 桌宠窗口挂载完成 → 回推配置与当前快照 (强推: 新开的窗口不知道之前推过什么)。
+      // 开窗瞬间就推的话, 窗口还没挂载完, 事件会丢
       listen("pet_ready", () => {
         pushConfig();
-        lastPushed = null; // 强制下一次推送, 让新开的窗口拿到当前态
-        setOverride("greet", GREET_MS);
         pushSignals(true);
       }),
       // 单击桌宠 → 呼出主窗口并切到该会话 (等审批的 / 最早做完的)
@@ -179,8 +134,5 @@ export async function startBridge(): Promise<() => void> {
     ])),
   );
 
-  return () => {
-    offs.forEach((f) => f());
-    if (overrideTimer) clearTimeout(overrideTimer);
-  };
+  return () => offs.forEach((f) => f());
 }

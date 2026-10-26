@@ -3,14 +3,11 @@
 //
 // 桌宠窗口是纯受控端, 配置只在这里落 localStorage —— 两个窗口同源共享 localStorage,
 // 双写同一个键会有竞态, 所以桌宠侧的变更一律 emit 回来由这里统一写 (applyPatch)。
-// 会话聚合与事件监听在 src/pet/bridge.ts, 只在开启桌宠时动态加载, 关着时一个监听都不挂。
+// 会话信号与事件监听在 src/pet/bridge.ts, 只在开启桌宠时动态加载, 关着时一个监听都不挂。
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo } from "@tauri-apps/api/event";
 import { canvasSize, windowPosFromFoot, type FootPos } from "../pet/canvas";
-
-/** busy 不区分思考/执行工具 —— agent 只要在跑就是忙, 由渲染侧在忙碌动画池里随机取 */
-export type PetState = "idle" | "greet" | "busy" | "error" | "offline";
 
 /** Rust 侧 PetAction: 一个动作 = 一张图上的一行帧 (v2 横条图恒为第 0 行, v1 图集为行号) */
 export interface PetAction {

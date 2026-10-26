@@ -8,42 +8,20 @@ import {
   PhysicalPosition,
 } from "@tauri-apps/api/window";
 import { Menu } from "@tauri-apps/api/menu";
-import type { PetAction, PetConfig, PetMeta, PetState } from "../store/pet";
+import type { PetAction, PetActivate, PetConfig, PetMeta, PetSignals } from "../store/pet";
 import { canvasSize, windowPosFromFoot } from "./canvas";
 import { onStageEvent, pressDown, startStage } from "./stage";
-import { Bubble } from "./Bubble";
+import { Bubble, setBadge, showBubble } from "./Bubble";
 import { bodyTransform, breathScale, msToNextBreath, setDangling, squash } from "./effects";
+import { createBrain, type Brain, type BrainCommand } from "./brain";
 
 // 缩放边界: 太小看不清帧, 太大精灵图糊 (2 倍图放到 3 倍已是上限)
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3.0;
 const ZOOM_STEP = 0.1;
 
-// 空闲时不循环播动画, 停在首帧发呆, 隔这个区间随机时长才动一次
-const IDLE_REST_MIN_MS = 5000;
-const IDLE_REST_MAX_MS = 14000;
-
-// 过渡期映射: 旧的五个状态 → 动作类别。大脑任务会整体取代 PetState, 这里先让新格式的包跑起来
-const STATE_CATEGORY: Record<PetState, string> = {
-  idle: "idle",
-  busy: "work",
-  greet: "notify",
-  error: "sad",
-  offline: "sad",
-};
-
-/** 在某类别的变体里按 weight 加权随机挑一个; 包里没有这个类别就退回 idle (idle 是包的必选项) */
-function pickAction(p: PetMeta, category: string): PetAction {
-  let pool = p.actions.filter((a) => a.category === category);
-  if (!pool.length) pool = p.actions.filter((a) => a.category === "idle");
-  const total = pool.reduce((sum, a) => sum + a.weight, 0);
-  let r = Math.random() * total;
-  for (const a of pool) {
-    r -= a.weight;
-    if (r <= 0) return a;
-  }
-  return pool[pool.length - 1];
-}
+// 大脑的定时心跳: 推进内驱力、到点的重提醒 / 醒来 / 散步超时。不重画, 只是醒一下 JS
+const BRAIN_TICK_MS = 1000;
 
 /**
  * 桌宠窗口 (label: pet, 由 ?window=pet 分流进来)
@@ -51,6 +29,8 @@ function pickAction(p: PetMeta, category: string): PetAction {
  * 配置真值在主窗口的 pet store, 这里是纯受控端: mount 后 emit pet_ready 握手要配置,
  * 自身产生的变更 (滚轮缩放/拖动位置/右键切角色) 一律 emit 回主窗口落盘再推回来。
  * 这样避免两个窗口同写一份 localStorage 打架。
+ *
+ * 演什么由 brain.ts 决定: 这里把信号快照 / 舞台事件 / "播完一轮"喂给大脑, 再执行它回的指令。
  */
 export function PetWindow() {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -61,17 +41,16 @@ export function PetWindow() {
   const [zoom, setZoom] = useState(1);
 
   // 帧循环每帧都要读这些值, 但它们变化不该重启循环, 也不该触发重渲染 → 放 ref
-  // idlePlaying/idleNextAt: 空闲发呆与下次开播时刻; fresh: 下一步只重画当前帧、不推进
-  // (换状态 / 换缩放后要立刻画对, 但不该因此跳过一帧)
+  // holdUntil: 停在首帧发呆到这个时刻再开播; fresh: 下一步只重画当前帧、不推进
+  // (换动作 / 换缩放后要立刻画对, 但不该因此跳过一帧)
   const animRef = useRef({
-    state: "idle" as PetState,
-    /** 当前在播的动作; 换状态或忙碌时每轮重挑 */
+    /** 当前在播的动作, 由大脑的 play 指令设置 */
     action: null as PetAction | null,
     frame: 0,
-    idlePlaying: false,
-    idleNextAt: 0,
+    holdUntil: 0,
+    breathe: false,
     fresh: true,
-    /** 朝向与素材相反时水平镜像 (散步转身用, 由大脑设置) */
+    /** 朝向与素材相反时水平镜像 (散步转身用) */
     mirrored: false,
   });
   // 立刻跑一步帧循环 (取消已排好的定时器); 循环挂载前是空函数
@@ -82,6 +61,47 @@ export function PetWindow() {
   const zoomRef = useRef(1);
   petRef.current = pet;
   zoomRef.current = zoom;
+
+  const brainRef = useRef<Brain | null>(null);
+  // 信号可能在宠物图片加载完、大脑建出来之前就到了, 留着最新一份给大脑开场用
+  const signalsRef = useRef<PetSignals | null>(null);
+  const walkRef = useRef(true);
+
+  // 执行大脑指令。kick=false 用在帧循环内部 (它接着就会画), 免得重入 step
+  const execRef = useRef((cmds: BrainCommand[], kick = true) => {
+    const st = animRef.current;
+    let replay = false;
+    for (const c of cmds) {
+      switch (c.kind) {
+        case "play":
+          st.action = c.action;
+          st.frame = 0;
+          st.fresh = true;
+          st.mirrored = c.mirrored;
+          st.breathe = c.breathe;
+          st.holdUntil = performance.now() + c.holdMs;
+          replay = true;
+          break;
+        case "moveTo":
+          invoke("pet_stage_move_to", { x: c.x, speed: c.speed }).catch(() => {});
+          break;
+        case "stopMove":
+          invoke("pet_stage_stop").catch(() => {});
+          break;
+        case "bubble":
+          showBubble(c.text, c.ms);
+          break;
+        case "badge":
+          setBadge(c.count);
+          break;
+        case "activate":
+          emitTo("main", "pet_activate", { sessionId: c.sessionId } satisfies PetActivate).catch(() => {});
+          break;
+      }
+    }
+    // 定时器可能正睡在发呆里, 换动作要立刻开播
+    if (replay && kick) kickRef.current();
+  });
 
   // --- 图片加载: data URI 交给 Image, onload 直接读真实像素尺寸 ---
   // 全部加载完才渲染, 否则换动作时会闪一下空白
@@ -104,16 +124,56 @@ export function PetWindow() {
       ),
     )
       .then((entries) => {
-        if (!alive) return;
-        animRef.current.action = pickAction(pet, STATE_CATEGORY[animRef.current.state]);
-        animRef.current.frame = 0;
-        setSprites(Object.fromEntries(entries));
+        if (alive) setSprites(Object.fromEntries(entries));
       })
       .catch((e) => console.error("[pet] 加载宠物图片失败", e));
     return () => {
       alive = false;
     };
   }, [pet]);
+
+  // --- 大脑: 图片就绪后按当前包建一个 (换角色就换一个新的, 内驱力本来就不持久化) ---
+  useEffect(() => {
+    if (!pet || !sprites) return;
+    const brain = createBrain({ pet, walk: walkRef.current });
+    brainRef.current = brain;
+    const exec = execRef.current;
+
+    // 散步要知道脚底在哪、工作区多宽; 之后的位置变化由舞台事件里的 foot 带给大脑
+    const refreshGeometry = async (withFoot: boolean) => {
+      try {
+        const mon = await currentMonitor();
+        const s = mon?.scaleFactor ?? 1;
+        if (mon) {
+          const wa = mon.workArea;
+          brain.setGeometry({ left: wa.position.x / s, right: (wa.position.x + wa.size.width) / s });
+        }
+        if (withFoot) {
+          const win = getCurrentWindow();
+          const [pos, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
+          brain.setGeometry({ footX: (pos.x + size.width / 2) / s });
+        }
+      } catch {
+        // 拿不到几何信息就先不散步 (大脑在 footX 未知时不选 walk)
+      }
+    };
+    void refreshGeometry(true);
+
+    exec(brain.start(performance.now(), signalsRef.current));
+    const tick = window.setInterval(() => exec(brain.tick(performance.now())), BRAIN_TICK_MS);
+    const offStage = onStageEvent((e) => {
+      exec(brain.stage(e, performance.now()));
+      // 可能被拖到了另一块屏幕上
+      if (e.kind === "dragEnd" || e.kind === "landed") void refreshGeometry(false);
+    });
+    return () => {
+      window.clearInterval(tick);
+      offStage();
+      brainRef.current = null;
+      // 旧大脑可能正让宠物走着, 别让新大脑接手一个没人管的移动
+      invoke("pet_stage_stop").catch(() => {});
+    };
+  }, [pet, sprites]);
 
   // --- 窗口 = 画布 (比角色大); 角色包围盒上报给舞台线程做命中, 只在角色或缩放变化时报一次 ---
   useEffect(() => {
@@ -156,8 +216,6 @@ export function PetWindow() {
     const schedule = (ms: number) => {
       timer = window.setTimeout(step, Math.max(0, ms));
     };
-    // 呼吸只给"安静待着"的状态: 打招呼、报错这些本身就有大动作, 再叠呼吸反而乱
-    const breathing = (state: PetState) => state === "idle" || state === "busy";
     const paint = (el: HTMLDivElement, p: PetMeta, a: PetAction, frame: number, now: number) => {
       const img = spritesRef.current?.[a.image];
       if (!img) return;
@@ -171,8 +229,16 @@ export function PetWindow() {
         el.style.backgroundSize = `${img.w * z}px ${img.h * z}px`;
       }
       el.style.backgroundPosition = `${-frame * p.frame_width * z}px ${-a.row * p.frame_height * z}px`;
-      // 呼吸跟着换帧一起更新, 不单独增加重绘次数 (透明窗每次重绘都很贵, 见 effects.ts)
-      el.style.transform = bodyTransform(st.mirrored, breathing(st.state) ? breathScale(now) : 1);
+      // 呼吸跟着换帧一起更新, 不单独增加重绘次数 (透明窗每次重绘都很贵, 见 effects.ts)。
+      // 只给"安静待着"的行为 (大脑决定): 挥手、跳这些本身就有大动作, 再叠呼吸反而乱
+      el.style.transform = bodyTransform(st.mirrored, st.breathe ? breathScale(now) : 1);
+    };
+    /** 停在首帧发呆: 只为呼吸换档醒来 (0.8 秒一次), 不呼吸就一觉睡到开播 */
+    const rest = (el: HTMLDivElement, p: PetMeta, a: PetAction, now: number) => {
+      const st = animRef.current;
+      paint(el, p, a, 0, now);
+      const left = st.holdUntil - now;
+      schedule(st.breathe ? Math.min(left, msToNextBreath(now)) : left);
     };
     function step() {
       timer = 0;
@@ -183,51 +249,29 @@ export function PetWindow() {
       if (!p || !el || !st.action) return;
       const now = performance.now();
 
-      // 空闲发呆: 停在首帧不动, 到点了才播一轮完整待机动画, 播完继续发呆。
-      // 一直循环播 idle 会让桌宠显得很聒噪, 真人不在电脑前时它也在不停晃
-      if (st.state === "idle" && !st.idlePlaying) {
-        if (now < st.idleNextAt) {
-          st.fresh = false;
-          paint(el, p, st.action, 0, now);
-          // 发呆期间只为呼吸换档醒来 (0.8 秒一次), 其余时间一直睡到下次开播
-          schedule(Math.min(st.idleNextAt - now, msToNextBreath(now)));
-          return;
-        }
-        st.idlePlaying = true;
-        st.frame = 0;
-        st.fresh = true;
+      if (now < st.holdUntil) {
+        st.fresh = false;
+        rest(el, p, st.action, now);
+        return;
       }
-
-      let stopped = false;
-      const frames = st.action.durations.length;
       if (st.fresh) {
         st.fresh = false;
-      } else if (st.frame >= frames - 1) {
-        if (st.state === "busy") {
-          // 忙碌时每播完一轮在 work 变体里重挑 (允许抽到同一个, 连播两轮反而自然)
-          st.action = pickAction(p, "work");
-          st.frame = 0;
-        } else if (st.state === "idle") {
-          // 待机播完一轮 → 回到发呆, 安排下次开播的时刻
-          st.idlePlaying = false;
-          st.idleNextAt = now + IDLE_REST_MIN_MS + Math.random() * (IDLE_REST_MAX_MS - IDLE_REST_MIN_MS);
-          st.frame = 0;
-        } else if (st.state === "offline") {
-          // 没有会话: 难过一轮后停在末帧 (蹲下不动), 不再排定时器, 等换状态时 kick
-          st.frame = frames - 1;
-          stopped = true;
-        } else {
-          st.frame = 0;
+      } else if (st.frame >= st.action.durations.length - 1) {
+        // 一轮播完: 问大脑下一步 (再来一轮 / 换动作 / 先发会儿呆)。没回 play 就原样从头再播
+        st.frame = 0;
+        const brain = brainRef.current;
+        if (brain) execRef.current(brain.roundEnd(now), false);
+        st.fresh = false;
+        if (now < st.holdUntil) {
+          rest(el, p, st.action, now);
+          return;
         }
       } else {
         st.frame += 1;
       }
 
       paint(el, p, st.action, st.frame, now);
-      if (stopped) return;
-      // 刚播完一轮待机、转入发呆的那一步: 画首帧, 之后只为呼吸换档醒来, 直到下次开播
-      const resting = st.state === "idle" && !st.idlePlaying;
-      schedule(resting ? Math.min(st.idleNextAt - now, msToNextBreath(now)) : st.action.durations[st.frame]);
+      schedule(st.action.durations[st.frame]);
     }
     kickRef.current = () => {
       if (timer) window.clearTimeout(timer);
@@ -251,50 +295,46 @@ export function PetWindow() {
     let disposed = false;
     const unlisten: Array<() => void> = [];
 
-    // listen() 是 async。握手必须等两个监听器都注册完才能发 —— 抢跑的话主窗口的回推
-    // 会打在还没订阅的窗口上直接丢掉 (开窗的 greet 就是这么丢的)
+    // listen() 是 async。握手必须等监听器都注册完才能发 —— 抢跑的话主窗口的回推
+    // 会打在还没订阅的窗口上直接丢掉 (开窗的打招呼就是这么丢的)
     void (async () => {
-      const offState = await listen<{ state: PetState }>("pet_state", (e) => {
-        if (e.payload.state === animRef.current.state) return;
-        const st = animRef.current;
-        st.state = e.payload.state;
-        st.frame = 0;
-        st.fresh = true;
-        // 进新状态立刻挑一个对应类别的动作开播
-        const p = petRef.current;
-        if (p) st.action = pickAction(p, STATE_CATEGORY[st.state]);
-        if (st.state === "idle") {
-          // 刚闲下来先播一轮待机再发呆 —— 直接静止会像卡住了
-          st.idlePlaying = true;
-          st.idleNextAt = 0;
-        }
-        // 定时器可能正睡在发呆里, 换状态要立刻开播
-        kickRef.current();
+      const offSignals = await listen<PetSignals>("pet_signals", (e) => {
+        signalsRef.current = e.payload;
+        const brain = brainRef.current;
+        if (brain) execRef.current(brain.signals(e.payload, performance.now()));
       });
       const offConfig = await listen<PetConfig>(
         "pet_config",
         (e) => {
           setZoom(e.payload.zoom);
           invoke("pet_stage_set_gravity", { on: e.payload.gravity }).catch(() => {});
+          if (e.payload.walk !== walkRef.current) {
+            walkRef.current = e.payload.walk;
+            const brain = brainRef.current;
+            if (brain) execRef.current(brain.setWalk(e.payload.walk, performance.now()));
+          }
           const root = document.documentElement;
           root.dataset.base = e.payload.theme.base;
           for (const [k, v] of Object.entries(e.payload.theme.vars)) root.style.setProperty(`--${k}`, v);
           invoke<PetMeta[]>("list_pets")
             .then((list) => {
               setPets(list);
-              setPet(list.find((p) => p.id === e.payload.petId) ?? list[0] ?? null);
+              const next = list.find((p) => p.id === e.payload.petId) ?? list[0] ?? null;
+              // 每次推配置 (换皮肤、缩放) 都会重拉列表: 内容没变就别换成新对象, 否则会重载图片、
+              // 重建大脑, 宠物正在干的事被打断。按内容比而不是按 id: 导入覆盖同 id 的包要能换上新素材
+              setPet((cur) => (cur && next && JSON.stringify(cur) === JSON.stringify(next) ? cur : next));
             })
             .catch(() => {});
         },
       );
       // StrictMode 会 mount→unmount→mount, 卸载后才 resolve 的监听器要就地退订免得泄漏
       if (disposed) {
-        offState();
+        offSignals();
         offConfig();
         return;
       }
-      unlisten.push(offState, offConfig);
-      // 握手: 主窗口收到后回推 pet_config + 当前 pet_state
+      unlisten.push(offSignals, offConfig);
+      // 握手: 主窗口收到后回推 pet_config + 当前信号快照
       await emitTo("main", "pet_ready", {});
     })();
 
@@ -373,9 +413,12 @@ export function PetWindow() {
                 const bottom = (wa.position.y + wa.size.height) / s;
                 const foot = { x: right - 24 - (pet.frame_width * zoom) / 2, y: bottom, v: 2 as const };
                 const at = windowPosFromFoot(foot, canvasSize(pet.frame_width, pet.frame_height, zoom));
+                // 正走着的话先停, 不然舞台线程下一轮又把窗口推回去
+                invoke("pet_stage_stop").catch(() => {});
                 await getCurrentWindow().setPosition(
                   new PhysicalPosition(Math.round(at.x * s), Math.round(at.y * s)),
                 );
+                brainRef.current?.setGeometry({ footX: foot.x });
                 await emitTo("main", "pet_patch", { pos: foot });
               })();
             },
