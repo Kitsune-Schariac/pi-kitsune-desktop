@@ -104,6 +104,23 @@ export interface PetConfig {
   theme: PetTheme;
 }
 
+/** 主窗口提炼的会话事实快照 (pet_signals 载荷)。只描述"发生了什么", 宠物怎么表现由桌宠侧大脑决定 */
+export interface PetSignals {
+  /** isStreaming 的会话数 */
+  running: number;
+  /** 完成待看, 按完成先后 (at 升序) */
+  pending: { sessionId: string; name: string; at: number }[];
+  /** 有 dialog 类 uiRequests 在等用户的会话 */
+  waiting: { sessionId: string; name: string }[];
+  /** 工具报错计数, 递增即"刚报错" (瞬时事件没法用状态表达) */
+  errorSeq: number;
+}
+
+/** 桌宠 → 主窗口: 呼出主窗口并切到该会话 (pet_activate 载荷) */
+export interface PetActivate {
+  sessionId: string;
+}
+
 /** 皮肤配色: 皮肤是主窗口往自己的 <html> 上内联写 CSS 变量, 桌宠窗口是另一个页面拿不到,
  *  只能由主窗口把气泡用得到的几个变量读出来一起下发 */
 export interface PetTheme {

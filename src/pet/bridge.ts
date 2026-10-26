@@ -2,10 +2,22 @@
 //
 // 只在开启桌宠时由 store/pet.ts 动态 import 并启动, 关闭时整体释放 —— 桌宠关着的时候,
 // 主窗口里一个会话订阅、一个事件监听都不挂。配置的读写仍在 store, 这里只管"桥"。
+//
+// 信号层 (pet_signals) 只提炼事实 —— 几个会话在跑、谁做完了没人看、谁在等审批、有没有刚报错,
+// 宠物据此怎么演由桌宠窗口的大脑决定, 这里不掺任何表现逻辑。
+import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSessionStore, type SessionState } from "../store/session";
 import { useThemeStore } from "../store/theme";
-import { pushConfig, usePetStore, type PetPatch, type PetState } from "../store/pet";
+import {
+  pushConfig,
+  usePetStore,
+  type PetActivate,
+  type PetPatch,
+  type PetSignals,
+  type PetState,
+} from "../store/pet";
 
 // 覆盖态时长: greet 是开窗打招呼, error 是报错后的短暂定格
 const GREET_MS = 2500;
@@ -16,6 +28,11 @@ function aggregate(sessions: Record<string, SessionState>): PetState {
   const list = Object.values(sessions);
   if (list.length === 0) return "offline";
   return list.some((s) => s.isStreaming) ? "busy" : "idle";
+}
+
+/** 气泡里叫得出口的会话名: 会话标题 → 工作目录最后一段 → 兜底 */
+function sessionLabel(s: SessionState): string {
+  return s.sessionName?.trim() || s.cwd.split(/[\\/]/).filter(Boolean).pop() || "会话";
 }
 
 /**
@@ -47,10 +64,59 @@ export async function startBridge(): Promise<() => void> {
     }, ms);
   };
 
-  const offs: Array<() => void> = [];
+  // ---- 信号层 ----
 
-  // 会话状态变化 → 重算并按需推送 (pushState 内部做了值去重)
-  offs.push(useSessionStore.subscribe(() => pushState()));
+  // 待看完成: sessionId → 完成时刻。Map 保持插入序, 即完成先后。
+  // 不能直接用 hasUnread: 它只在"完成时用户没选中该会话"才置位, 用户选中着会话但人不在
+  // (主窗口失焦 / 最小化) 时完成就漏了, 所以这里自己记, hasUnread 只当清除条件之一
+  const pending = new Map<string, number>();
+  let errorSeq = 0;
+  // 人在不在主窗口前: 窗口聚焦 + 页面可见。Windows 下最小化 / 切虚拟桌面时单靠 onFocusChanged
+  // 不一定可靠, visibilityState 兜底, 两个都满足才算在看
+  let winFocused = document.hasFocus();
+  const present = () => winFocused && document.visibilityState === "visible";
+  // 上次推送的快照序列化: 同 pushState, 流式输出期间 store 高频变更, 内容没变就不发
+  let lastSignals = "";
+
+  const pushSignals = (force = false) => {
+    const { sessions, activeSessionId } = useSessionStore.getState();
+    // 移出待看: 会话已关闭; 或人在主窗口前、停在该会话上、未读也已清掉 (= 用户确实看到了)
+    for (const id of [...pending.keys()]) {
+      const s = sessions[id];
+      if (!s || (present() && activeSessionId === id && !s.hasUnread)) pending.delete(id);
+    }
+    const list = Object.values(sessions);
+    const snap: PetSignals = {
+      running: list.filter((s) => s.isStreaming).length,
+      pending: [...pending].map(([sessionId, at]) => ({
+        sessionId,
+        name: sessionLabel(sessions[sessionId]),
+        at,
+      })),
+      waiting: list
+        .filter((s) => s.uiRequests.length > 0)
+        .map((s) => ({ sessionId: s.sessionId, name: sessionLabel(s) })),
+      errorSeq,
+    };
+    const key = JSON.stringify(snap);
+    if (!force && key === lastSignals) return;
+    lastSignals = key;
+    if (import.meta.env.DEV) console.debug("[pet] signals", snap);
+    emitTo("pet", "pet_signals", snap).catch(() => {});
+  };
+
+  const onVisibility = () => pushSignals();
+  document.addEventListener("visibilitychange", onVisibility);
+
+  const offs: Array<() => void> = [() => document.removeEventListener("visibilitychange", onVisibility)];
+
+  // 会话状态变化 → 重算并按需推送 (两边内部都做了去重)
+  offs.push(
+    useSessionStore.subscribe(() => {
+      pushState();
+      pushSignals();
+    }),
+  );
 
   // 换皮肤 → 重推配置, 让气泡跟着换色。applyTheme 先写完 CSS 变量才 set activeSkinId,
   // 所以这里读到的已经是新皮肤的值
@@ -62,17 +128,51 @@ export async function startBridge(): Promise<() => void> {
 
   offs.push(
     ...(await Promise.all([
-      // 工具报错是瞬时事件, store 状态里留不下"刚刚发生"的痕迹, 单独挂一个监听捕获。
-      // 这里只读事件不调 handleEvent, 不会让 session store 双跑 (那是 main.tsx 的活)
+      // 只读事件不调 handleEvent, 不会让 session store 双跑 (那是 main.tsx 的活)
       listen<{ sessionId: string; event: Record<string, unknown> }>("pi_event", (e) => {
-        const ev = e.payload.event;
-        if (ev.type === "tool_execution_end" && ev.isError) setOverride("error", ERROR_MS);
+        const { sessionId, event: ev } = e.payload;
+        // 工具报错是瞬时事件, store 状态里留不下"刚刚发生"的痕迹, 只能在这里捕获
+        if (ev.type === "tool_execution_end" && ev.isError) {
+          errorSeq++;
+          setOverride("error", ERROR_MS);
+          pushSignals();
+        }
+        // 完成判定挂在 agent_settled 而不是 isStreaming 的下降沿: 停止会话 / 进程退出 / detach
+        // 也会把 isStreaming 置 false, 那些不是"做完了"。agent_settled 正是 hasUnread 的置位时机,
+        // 这里判同一组条件再加上"人不在", 与 main.tsx 里 handleEvent 谁先跑都不影响结果
+        if (ev.type === "agent_settled") {
+          const { activeSessionId } = useSessionStore.getState();
+          if (activeSessionId !== sessionId || !present()) {
+            pending.delete(sessionId); // 重复完成按最新时刻排队
+            pending.set(sessionId, Date.now());
+          }
+          pushSignals();
+        }
+      }),
+      getCurrentWindow().onFocusChanged(({ payload }) => {
+        winFocused = payload;
+        pushSignals();
       }),
       // 桌宠窗口挂载完成 → 回推配置与当前状态。开窗瞬间就推的话, 窗口还没挂载完, 事件会丢
       listen("pet_ready", () => {
         pushConfig();
         lastPushed = null; // 强制下一次推送, 让新开的窗口拿到当前态
         setOverride("greet", GREET_MS);
+        pushSignals(true);
+      }),
+      // 单击桌宠 → 呼出主窗口并切到该会话 (等审批的 / 最早做完的)
+      listen<PetActivate>("pet_activate", async (e) => {
+        const { sessionId } = e.payload;
+        pending.delete(sessionId);
+        await invoke("focus_main_window").catch((err) => console.error("[pet] 呼出主窗口失败", err));
+        const store = useSessionStore.getState();
+        const s = store.sessions[sessionId];
+        if (s) {
+          // 与侧边栏点会话同一调用序列: 先切 (秒显缓存), detached 的后台重连
+          store.setActiveSession(sessionId);
+          if (s.detached && s.sessionPath) void store.reattachSession(sessionId, s.cwd, s.sessionPath);
+        }
+        pushSignals();
       }),
       // 桌宠窗口侧的变更回传 (滚轮缩放 / 拖动落点 / 右键切角色或关闭)
       listen<PetPatch>("pet_patch", (e) => usePetStore.getState().applyPatch(e.payload)),

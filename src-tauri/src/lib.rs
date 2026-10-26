@@ -214,6 +214,19 @@ async fn close_pet_window(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 呼出主窗口 (单击桌宠跳到待处理会话)。放在 Rust 侧做, 免得给主窗口的 capability 追加
+/// show / unminimize / set-focus 一串窗口权限; 最小化着直接 set_focus 在 Windows 上不会还原, 所以先 unminimize
+#[tauri::command]
+async fn focus_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    let win = app
+        .get_webview_window("main")
+        .ok_or_else(|| "主窗口不存在".to_string())?;
+    win.show().map_err(|e| format!("显示主窗口失败: {e}"))?;
+    win.unminimize().map_err(|e| format!("还原主窗口失败: {e}"))?;
+    win.set_focus().map_err(|e| format!("聚焦主窗口失败: {e}"))?;
+    Ok(())
+}
+
 // --- 模型配置保存后的预热槽废弃 ---
 
 /// 废弃 warm 预热槽: pi 只在启动时读 models.json / settings.json, 已就绪的预热槽里是旧配置的进程,
@@ -530,7 +543,7 @@ pub fn run() {
             skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
             pets::list_pets, pets::get_pet_asset, pets::open_pets_dir,
             pet_import::inspect_pet_import, pet_import::commit_pet_import, pet_import::discard_pet_import,
-            open_pet_window, close_pet_window,
+            open_pet_window, close_pet_window, focus_main_window,
             pet_stage::pet_stage_set_hitbox, pet_stage::pet_stage_drag, pet_stage::pet_stage_press,
             pet_stage::pet_stage_move_to, pet_stage::pet_stage_stop, pet_stage::pet_stage_set_gravity,
             subagent_fleet::list_fleet_runs, subagent_fleet::read_fleet_run_detail,
