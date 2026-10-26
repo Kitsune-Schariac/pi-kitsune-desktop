@@ -14,6 +14,7 @@ import { onStageEvent, pressDown, startStage } from "./stage";
 import { Bubble, setBadge, showBubble } from "./Bubble";
 import { bodyTransform, breathScale, msToNextBreath, setDangling, squash } from "./effects";
 import { createBrain, type Brain, type BrainCommand } from "./brain";
+import { DebugPanel } from "./DebugPanel";
 
 // 缩放边界: 太小看不清帧, 太大精灵图糊 (2 倍图放到 3 倍已是上限)
 const ZOOM_MIN = 0.5;
@@ -66,6 +67,9 @@ export function PetWindow() {
   // 信号可能在宠物图片加载完、大脑建出来之前就到了, 留着最新一份给大脑开场用
   const signalsRef = useRef<PetSignals | null>(null);
   const walkRef = useRef(true);
+  // 调试面板与时间倍率 (仅 dev 构建的右键菜单里有入口); 倍率换角色重建大脑后要保持
+  const [debugOn, setDebugOn] = useState(false);
+  const timeScaleRef = useRef(1);
 
   // 执行大脑指令。kick=false 用在帧循环内部 (它接着就会画), 免得重入 step
   const execRef = useRef((cmds: BrainCommand[], kick = true) => {
@@ -136,7 +140,10 @@ export function PetWindow() {
   useEffect(() => {
     if (!pet || !sprites) return;
     const brain = createBrain({ pet, walk: walkRef.current });
+    brain.setTimeScale(timeScaleRef.current);
     brainRef.current = brain;
+    // 调参时从 CDP 直接读 debug() / 拨倍率
+    if (import.meta.env.DEV) (window as unknown as { __petBrain?: Brain }).__petBrain = brain;
     const exec = execRef.current;
 
     // 散步要知道脚底在哪、工作区多宽; 之后的位置变化由舞台事件里的 foot 带给大脑
@@ -423,6 +430,26 @@ export function PetWindow() {
               })();
             },
           },
+          ...(import.meta.env.DEV
+            ? [
+                { item: "Separator" as const },
+                {
+                  id: "debug-panel",
+                  text: debugOn ? "● 调试面板" : "　调试面板",
+                  action: () => setDebugOn((v) => !v),
+                },
+                {
+                  id: "debug-time",
+                  text: timeScaleRef.current === 10 ? "● 时间 ×10" : "　时间 ×10",
+                  // 只拨快内驱力与行为节奏, 帧率不变 (大脑的虚拟时钟)
+                  action: () => {
+                    timeScaleRef.current = timeScaleRef.current === 10 ? 1 : 10;
+                    brainRef.current?.setTimeScale(timeScaleRef.current);
+                  },
+                },
+                { item: "Separator" as const },
+              ]
+            : []),
           {
             id: "close",
             text: "关闭桌宠",
@@ -434,7 +461,7 @@ export function PetWindow() {
       });
       await menu.popup();
     },
-    [pets, pet, zoom],
+    [pets, pet, zoom, debugOn],
   );
 
   if (!pet || !sprites) return <div data-pet />;
@@ -475,6 +502,7 @@ export function PetWindow() {
         charW={pet.frame_width * zoom}
         charH={pet.frame_height * zoom}
       />
+      {import.meta.env.DEV && debugOn && <DebugPanel brainRef={brainRef} />}
     </div>
   );
 }
