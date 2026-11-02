@@ -35,7 +35,7 @@ function TreeRow({ entry, depth, openSet, childrenMap, selected, onToggle, onSel
     return (
       <button
         onClick={() => onSelect(entry)}
-        className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition duration-fast ease-out ${
+        className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-meta transition duration-fast ease-out ${
           sel ? "bg-accent-soft text-accent" : "text-fg-2 hover:bg-hover"
         }`}
         style={{ paddingLeft: depth * 14 + 6 }}
@@ -57,7 +57,7 @@ function TreeRow({ entry, depth, openSet, childrenMap, selected, onToggle, onSel
     <div>
       <button
         onClick={() => onToggle(entry.path)}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium text-fg-2 transition duration-fast ease-out hover:bg-hover"
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-meta font-medium text-fg-2 transition duration-fast ease-out hover:bg-hover"
         style={{ paddingLeft: depth * 14 + 4 }}
         title={entry.path}
       >
@@ -155,7 +155,7 @@ export function FileTreePicker({ root, onPick, onDone }: {
 
   return (
     <div className="flex h-60 flex-col">
-      <div className="flex-1 overflow-auto rounded-md border border-line bg-popover p-2">
+      <div className="flex-1 overflow-auto rounded-md border border-line bg-card p-1">
         <TreeRow
           entry={{ name: root.split(/[\\/]/).pop() || root, path: root, is_dir: true, size: null, mtime: null }}
           depth={0}
@@ -167,19 +167,19 @@ export function FileTreePicker({ root, onPick, onDone }: {
         />
       </div>
       {error && (
-        <p className="mt-1 flex items-center gap-1 px-1 text-xs text-err">
+        <p className="mt-1 flex items-center gap-1 px-1 text-meta text-err">
           <AlertCircle className="h-3 w-3" />
           {error}
         </p>
       )}
       <div className="mt-2 flex items-center justify-between">
-        <span className="text-xs text-fg-4">
+        <span className="text-meta text-fg-4">
           已选 {selected.size} 个文件 · 点击文件复选
         </span>
         <button
           onClick={confirm}
           disabled={selected.size === 0}
-          className="rounded-md bg-accent px-3 py-2 text-xs text-on-accent transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--accent)_88%,black)] disabled:opacity-40"
+          className="rounded-md bg-accent px-3 py-2 text-meta text-on-accent transition duration-fast ease-out hover:bg-[color-mix(in_srgb,var(--accent)_88%,black)] disabled:opacity-40"
         >
           添加引用
         </button>

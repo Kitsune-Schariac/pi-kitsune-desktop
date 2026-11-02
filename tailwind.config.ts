@@ -1,30 +1,23 @@
 import type { Config } from "tailwindcss";
 
-// 颜色 token: 语义色阶 (bg / fg / accent / popover ...) 在 index.css 四组风格块里定义,
-// 换主题只需改那四组变量
+// 设计 token 的 Tailwind 映射。颜色值只在 index.css 的日间 / 夜间两组变量里定义,
+// 这里只做 class → var 的映射, 组件里不写任何字面颜色。
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
-    // 字号 10 档 (语义名 + 同值旧别名): 语义名供改版新 UI 使用, 旧别名保 364 处存量 class 零改动。
-    // 非 extend 覆盖: 未列出的档位 (如已删除的 lg=18px) 不再生成, 越界 class 构建即失效
+    // 字号 7 档 (与 index.css 的 --fs-* 同值)。非 extend 覆盖: 没列出的档位不生成, 越界 class 构建即失效。
+    // meta 元信息/角标 · label 标签/次要文字 · body 界面主力 (控件/列表) · lead 阅读正文/卡片标题 ·
+    // head 页面与分区大标题 · num 统计数字 · display 空状态问候/花费
     fontSize: {
-      micro: ["10px", { lineHeight: "1.4", letterSpacing: "0.01em" }],
-      mini: ["11px", { lineHeight: "1.45", letterSpacing: "0.005em" }],
-      label: ["12px", { lineHeight: "1.5", letterSpacing: "0.002em" }],
-      body: ["13px", { lineHeight: "1.55", letterSpacing: "0" }],
-      ui: ["14px", { lineHeight: "1.6", letterSpacing: "-0.003em" }],
-      title: ["15px", { lineHeight: "1.65", letterSpacing: "-0.006em" }],
-      head: ["17px", { lineHeight: "1.45", letterSpacing: "-0.01em" }],
-      num: ["20px", { lineHeight: "1.2", letterSpacing: "-0.014em" }],
-      hero: ["24px", { lineHeight: "1.25", letterSpacing: "-0.018em" }],
-      display: ["28px", { lineHeight: "1.2", letterSpacing: "-0.02em" }],
-      // 旧别名 (与语义档同值, 引用同组配置): xs=mini / sm=body / base=title / 2xl=hero
-      xs: ["11px", { lineHeight: "1.45", letterSpacing: "0.005em" }],
-      sm: ["13px", { lineHeight: "1.55", letterSpacing: "0" }],
-      base: ["15px", { lineHeight: "1.65", letterSpacing: "-0.006em" }],
-      "2xl": ["24px", { lineHeight: "1.25", letterSpacing: "-0.018em" }],
+      meta: ["11px", { lineHeight: "1.5" }],
+      label: ["12px", { lineHeight: "1.55" }],
+      body: ["13px", { lineHeight: "1.6" }],
+      lead: ["15px", { lineHeight: "1.75" }],
+      head: ["18px", { lineHeight: "1.4", letterSpacing: "-0.005em" }],
+      num: ["24px", { lineHeight: "1.2", letterSpacing: "-0.01em" }],
+      display: ["30px", { lineHeight: "1.25", letterSpacing: "-0.015em" }],
     },
-    // 间距阶: 4px 网格整档 (保留 Tailwind 默认 0-96 全部整档, 覆盖掉 .5 半档)
+    // 间距阶: 4px 网格整档 (覆盖掉 Tailwind 默认的 .5 半档)
     spacing: {
       0: "0px",
       1: "4px",
@@ -57,14 +50,17 @@ export default {
       80: "320px",
       96: "384px",
     },
-    // 字体只有两套, 值在 index.css 的 --f-ui / --f-mono (系统字体栈);
-    // 这里映射过去, 让 font-sans / font-mono class 与手写 CSS 用同一份定义
+    // 字体: 全局衬线 (sans 也指向衬线栈, 存量 font-sans class 不会意外切回黑体), 代码用等宽
     fontFamily: {
       sans: ["var(--f-ui)"],
+      serif: ["var(--f-ui)"],
       mono: ["var(--f-mono)"],
     },
+    // 圆角四档: 小件 6 / 控件 8 / 卡片 12 / 大卡与气泡 16
     borderRadius: {
-      sm: "4px",
+      none: "0px",
+      DEFAULT: "6px",
+      sm: "6px",
       md: "8px",
       lg: "12px",
       xl: "16px",
@@ -73,30 +69,30 @@ export default {
     },
     extend: {
       colors: {
-        // 语义 token 映射 (design §2.2): 颜色只走 var, 组件用 bg-pane / text-fg-2 / border-line 这类 class;
-        // 用 color-mix 包一层是为了让 /50 等透明度修饰符继续可用
-        bg: "color-mix(in oklch, var(--bg) calc(<alpha-value> * 100%), transparent)",
-        rail: "color-mix(in oklch, var(--rail) calc(<alpha-value> * 100%), transparent)",
-        pane: "color-mix(in oklch, var(--pane) calc(<alpha-value> * 100%), transparent)",
-        raise: "color-mix(in oklch, var(--raise) calc(<alpha-value> * 100%), transparent)",
-        // 弹层实底 (design §2.2): 与 --raise 同色去 alpha, 浮层叠在正文上不透字
-        popover: "color-mix(in oklch, var(--popover) calc(<alpha-value> * 100%), transparent)",
-        well: "color-mix(in oklch, var(--well) calc(<alpha-value> * 100%), transparent)",
-        hover: "color-mix(in oklch, var(--hover) calc(<alpha-value> * 100%), transparent)",
-        line: "color-mix(in oklch, var(--line) calc(<alpha-value> * 100%), transparent)",
-        "line-2": "color-mix(in oklch, var(--line-2) calc(<alpha-value> * 100%), transparent)",
-        fg: "color-mix(in oklch, var(--fg) calc(<alpha-value> * 100%), transparent)",
-        "fg-2": "color-mix(in oklch, var(--fg-2) calc(<alpha-value> * 100%), transparent)",
-        "fg-3": "color-mix(in oklch, var(--fg-3) calc(<alpha-value> * 100%), transparent)",
-        "fg-4": "color-mix(in oklch, var(--fg-4) calc(<alpha-value> * 100%), transparent)",
-        accent: "color-mix(in oklch, var(--accent) calc(<alpha-value> * 100%), transparent)",
-        "accent-2": "color-mix(in oklch, var(--accent-2) calc(<alpha-value> * 100%), transparent)",
-        "accent-soft": "color-mix(in oklch, var(--accent-soft) calc(<alpha-value> * 100%), transparent)",
-        "on-accent": "color-mix(in oklch, var(--on-accent) calc(<alpha-value> * 100%), transparent)",
-        ok: "color-mix(in oklch, var(--ok) calc(<alpha-value> * 100%), transparent)",
-        err: "color-mix(in oklch, var(--err) calc(<alpha-value> * 100%), transparent)",
+        // 语义 token: color-mix 包一层让 /50 这类透明度修饰符继续可用
+        bg: "color-mix(in srgb, var(--bg) calc(<alpha-value> * 100%), transparent)",
+        rail: "color-mix(in srgb, var(--rail) calc(<alpha-value> * 100%), transparent)",
+        pane: "color-mix(in srgb, var(--pane) calc(<alpha-value> * 100%), transparent)",
+        card: "color-mix(in srgb, var(--card) calc(<alpha-value> * 100%), transparent)",
+        raise: "color-mix(in srgb, var(--raise) calc(<alpha-value> * 100%), transparent)",
+        popover: "color-mix(in srgb, var(--popover) calc(<alpha-value> * 100%), transparent)",
+        well: "color-mix(in srgb, var(--well) calc(<alpha-value> * 100%), transparent)",
+        hover: "color-mix(in srgb, var(--hover) calc(<alpha-value> * 100%), transparent)",
+        line: "color-mix(in srgb, var(--line) calc(<alpha-value> * 100%), transparent)",
+        "line-2": "color-mix(in srgb, var(--line-2) calc(<alpha-value> * 100%), transparent)",
+        fg: "color-mix(in srgb, var(--fg) calc(<alpha-value> * 100%), transparent)",
+        "fg-2": "color-mix(in srgb, var(--fg-2) calc(<alpha-value> * 100%), transparent)",
+        "fg-3": "color-mix(in srgb, var(--fg-3) calc(<alpha-value> * 100%), transparent)",
+        "fg-4": "color-mix(in srgb, var(--fg-4) calc(<alpha-value> * 100%), transparent)",
+        accent: "color-mix(in srgb, var(--accent) calc(<alpha-value> * 100%), transparent)",
+        "accent-2": "color-mix(in srgb, var(--accent-2) calc(<alpha-value> * 100%), transparent)",
+        "accent-soft": "color-mix(in srgb, var(--accent-soft) calc(<alpha-value> * 100%), transparent)",
+        "on-accent": "color-mix(in srgb, var(--on-accent) calc(<alpha-value> * 100%), transparent)",
+        ok: "color-mix(in srgb, var(--ok) calc(<alpha-value> * 100%), transparent)",
+        err: "color-mix(in srgb, var(--err) calc(<alpha-value> * 100%), transparent)",
+        warn: "color-mix(in srgb, var(--warn) calc(<alpha-value> * 100%), transparent)",
       },
-      // 动效阶: 显式时长 + 曲线 (裸 transition 必须补全, 见 design 表四)
+      // 动效阶: 显式时长 + 曲线
       transitionDuration: {
         fast: "120ms",
         base: "200ms",
@@ -106,8 +102,9 @@ export default {
         swift: "cubic-bezier(0.32, 0.72, 0, 1)",
         entrance: "cubic-bezier(0.16, 1, 0.3, 1)",
       },
-      // 阴影: 双层带色相, 值定义在 index.css 的 --shadow-* 变量 (随皮肤切换)
+      // 阴影三档: sm 控件 / md 卡片 / lg 浮层 (值在 index.css, 日间柔影、夜间靠描边)
       boxShadow: {
+        DEFAULT: "var(--shadow-md)",
         sm: "var(--shadow-sm)",
         md: "var(--shadow-md)",
         lg: "var(--shadow-lg)",

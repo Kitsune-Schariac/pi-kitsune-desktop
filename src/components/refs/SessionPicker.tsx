@@ -78,22 +78,22 @@ export function SessionPicker({ onPick, onDone }: {
   return (
     <div className="flex h-72 gap-2">
       {/* 左: 会话列表 */}
-      <div className="w-1/2 overflow-auto rounded-md border border-line bg-popover p-2">
+      <div className="w-1/2 overflow-auto rounded-md border border-line bg-card p-1">
         {!projects ? (
-          <div className="flex h-full items-center justify-center gap-2 text-xs text-fg-4">
+          <div className="flex h-full items-center justify-center gap-2 text-meta text-fg-4">
             <Loader2 className="h-4 w-4 animate-spin" /> 加载中…
           </div>
         ) : (
           projects.map((p) => (
             <div key={p.path} className="mb-1">
-              <div className="px-2 py-1 text-xs font-medium uppercase tracking-wide text-fg-4">
+              <div className="px-2 py-1 text-meta font-medium uppercase tracking-wide text-fg-4">
                 {p.display_name}
               </div>
               {p.sessions.map((s) => (
                 <button
                   key={s.session_path}
                   onClick={() => openSession(p, s)}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition duration-fast ease-out ${
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-meta transition duration-fast ease-out ${
                     selSession?.session_path === s.session_path
                       ? "bg-accent-soft text-accent"
                       : "text-fg-2 hover:bg-hover"
@@ -110,17 +110,17 @@ export function SessionPicker({ onPick, onDone }: {
       </div>
       {/* 右: 消息列表 (单选) */}
       <div className="flex w-1/2 flex-col">
-        <div className="flex-1 overflow-auto rounded-md border border-line bg-popover p-2">
+        <div className="flex-1 overflow-auto rounded-md border border-line bg-card p-1">
           {!selSession ? (
-            <div className="flex h-full items-center justify-center text-xs text-fg-4">
+            <div className="flex h-full items-center justify-center text-meta text-fg-4">
               先选一个会话
             </div>
           ) : !entries ? (
-            <div className="flex h-full items-center justify-center gap-2 text-xs text-fg-4">
+            <div className="flex h-full items-center justify-center gap-2 text-meta text-fg-4">
               <Loader2 className="h-4 w-4 animate-spin" /> 读取消息…
             </div>
           ) : entries.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-xs text-fg-4">
+            <div className="flex h-full items-center justify-center text-meta text-fg-4">
               无消息
             </div>
           ) : (
@@ -130,7 +130,7 @@ export function SessionPicker({ onPick, onDone }: {
                 <button
                   key={e.id}
                   onClick={() => setSelMsg(sel ? null : e)}
-                  className={`mb-1 flex w-full items-start gap-2 rounded-md px-2 py-1 text-left text-xs transition duration-fast ease-out ${
+                  className={`mb-1 flex w-full items-start gap-2 rounded-md px-2 py-1 text-left text-meta transition duration-fast ease-out ${
                     sel ? "bg-accent-soft text-accent" : "text-fg-2 hover:bg-hover"
                   }`}
                 >
@@ -149,13 +149,13 @@ export function SessionPicker({ onPick, onDone }: {
           )}
         </div>
         <div className="mt-2 flex items-center justify-between">
-          <span className="text-xs text-fg-4">
+          <span className="text-meta text-fg-4">
             {selMsg ? "已选 1 条消息" : "点击消息单选"}
           </span>
           <button
             onClick={confirm}
             disabled={!selMsg}
-            className="flex items-center gap-1 rounded-md bg-accent px-3 py-2 text-xs text-on-accent transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--accent)_88%,black)] disabled:opacity-40"
+            className="flex items-center gap-1 rounded-md bg-accent px-3 py-2 text-meta text-on-accent transition duration-fast ease-out hover:bg-[color-mix(in_srgb,var(--accent)_88%,black)] disabled:opacity-40"
           >
             <ChevronRight className="h-3 w-3" />
             添加引用
@@ -163,7 +163,7 @@ export function SessionPicker({ onPick, onDone }: {
         </div>
       </div>
       {error && (
-        <p className="absolute bottom-14 left-3 flex items-center gap-1 text-xs text-err">
+        <p className="absolute bottom-14 left-3 flex items-center gap-1 text-meta text-err">
           <AlertCircle className="h-3 w-3" />
           {error}
         </p>

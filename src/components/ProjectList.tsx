@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { Button, Input } from "./ui";
 import { useProjectsStore, pathEq, type SessionNode, type ProjectNode } from "../store/projects";
 import { useSessionStore, type SessionState } from "../store/session";
 import {
@@ -36,11 +37,11 @@ export function ContextMenu({ x, y, items, onClose }: {
 
   // 视口边缘回弹: 菜单约 160px 宽
   const left = Math.min(x, window.innerWidth - 170);
-  const top = Math.min(y, window.innerHeight - items.length * 36 - 16);
+  const top = Math.min(y, window.innerHeight - items.length * 32 - 16);
 
   return (
     <div
-      className="fixed z-50 min-w-[160px] rounded-md border border-[var(--line)] bg-popover py-1 shadow-[var(--shadow)]"
+      className="popover fixed z-50 min-w-[168px] p-1 view-in-soft"
       style={{ left, top }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -52,13 +53,13 @@ export function ContextMenu({ x, y, items, onClose }: {
             if (!item.disabled) item.onClick();
             onClose();
           }}
-          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-body transition duration-fast ease-out disabled:opacity-40 ${
+          className={`flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-body transition duration-fast ease-out disabled:opacity-40 ${
             item.danger
-              ? "text-[var(--err)] hover:bg-[color-mix(in_oklch,var(--err)_14%,transparent)]"
-              : "text-[var(--fg)] hover:bg-[var(--hover)]"
+              ? "text-err hover:bg-[color-mix(in_srgb,var(--err)_10%,transparent)]"
+              : "text-fg-2 hover:bg-hover hover:text-fg"
           }`}
         >
-          {item.icon && <item.icon className="h-4 w-4" />}
+          {item.icon && <item.icon className="h-[14px] w-[14px]" />}
           {item.label}
         </button>
       ))}
@@ -106,7 +107,7 @@ type FlatHit =
   | { kind: "open"; p: ProjectNode; sid: string; s: SessionState };
 
 // 会话行 (树模式 + 拍平模式共用): 单行紧凑 (padding 5px 8px ≈ 27px 高), 无前置图标,
-// 右侧状态三态 (工作中狐火 / 完成未读 accent 圆点 / 默认时间); 选中底色 ≠ 活跃。最近视图
+// 右侧状态三态 (工作中呼吸点 / 完成未读实心圆点 / 默认时间); 选中底色 ≠ 活跃。最近视图
 // 前置项目徽标 (leading), 树模式不传。hover 删除钮绝对定位于右侧状态位之上, 行高零变化
 function SessionRow({
   title,
@@ -133,10 +134,10 @@ function SessionRow({
 }) {
   return (
     <div
-      className={`sess-row group relative flex cursor-pointer items-center gap-2 rounded-md py-[5px] pl-2 pr-2 text-body transition duration-fast ease-out ${
+      className={`sess-row group relative flex cursor-pointer items-center gap-2 rounded-md h-8 px-2 text-body transition duration-fast ease-out ${
         isActive
           ? "sel font-medium"
-          : "text-[var(--fg-2)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+          : "text-fg-2 hover:bg-hover hover:text-fg"
       }`}
       onClick={onOpen}
       onContextMenu={(e) => {
@@ -151,14 +152,14 @@ function SessionRow({
       {/* 右侧状态位: 常驻占位保布局稳定, hover 时淡出让位给删除钮 */}
       <span className="flex shrink-0 items-center justify-center pl-1 transition-opacity duration-fast ease-out group-hover:opacity-0">
         {right === "spinner" ? (
-          // 运行中符号: 狐火 (替代转圈图标)
-          <span className="flame" aria-hidden />
+          // 运行中符号: 呼吸圆点 (全站统一的运行态)
+          <span className="live-dot" aria-hidden />
         ) : right === "dot" ? (
-          <span className="h-[5.5px] w-[5.5px] rounded-full bg-[var(--accent)] shadow-[0_0_5px_color-mix(in_oklch,var(--accent)_55%,transparent)]" />
+          <span className="h-[6px] w-[6px] rounded-full bg-fg" />
         ) : right === null ? (
-          <span className="text-mini text-[var(--fg-4)]">新会话</span>
+          <span className="text-meta text-fg-4">新会话</span>
         ) : (
-          <span className="text-label tabular-nums text-[var(--fg-3)]">{right}</span>
+          <span className="text-label tabular-nums text-fg-3">{right}</span>
         )}
       </span>
       {/* hover 浮现删除钮: 绝对定位在右侧状态位上方, 不进流式布局 */}
@@ -167,7 +168,7 @@ function SessionRow({
           e.stopPropagation();
           onDelete();
         }}
-        className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--fg-4)] opacity-0 transition duration-fast ease-out hover:text-[var(--err)] group-hover:opacity-100"
+        className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-fg-4 opacity-0 transition duration-fast ease-out hover:text-err group-hover:opacity-100"
         title="删除会话"
       >
         <Trash2 className="h-3 w-3" />
@@ -220,13 +221,13 @@ export function ProjectList({
   const [tempOpen, setTempOpen] = useState(() => localStorage.getItem(TEMP_GROUP_KEY) === "1");
 
   if (!loaded) {
-    return <div className="px-4 py-6 text-body text-[var(--fg-4)]">加载中…</div>;
+    return <div className="px-4 py-6 text-body text-fg-4">加载中…</div>;
   }
   if (error) {
     return (
-      <div className="px-4 py-6 text-body text-[var(--fg-2)]">
+      <div className="px-4 py-6 text-body text-fg-2">
         <p>{error}</p>
-        <button onClick={loadProjects} className="mt-2 text-[var(--accent)] hover:underline">
+        <button onClick={loadProjects} className="mt-2 text-fg underline-offset-2 hover:underline">
           重试
         </button>
       </div>
@@ -293,7 +294,7 @@ export function ProjectList({
 
   if (projects.length === 0 && uniqueVirtual.length === 0) {
     return (
-      <div className="px-4 py-6 text-body text-[var(--fg-4)]">
+      <div className="px-4 py-6 text-body text-fg-4">
         {mode === "recent" ? "还没有任何会话。在对话区开始第一段对话即可。" : "暂无项目。在对话区选择项目即可开始。"}
       </div>
     );
@@ -484,7 +485,7 @@ export function ProjectList({
       >
         {/* 项目行: hover 按钮绝对定位不参与流式布局 (0b31a75 防行高跳动的延续) */}
         <div
-          className="group relative flex cursor-pointer items-center gap-2 rounded-md py-[5px] pl-2 pr-2 text-body transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+          className="group relative flex cursor-pointer items-center gap-2 rounded-md h-8 px-2 text-body transition duration-fast ease-out hover:bg-hover hover:text-fg"
           onClick={() => toggleProject(p.path)}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -503,19 +504,19 @@ export function ProjectList({
           }}
         >
           {p.expanded ? (
-            <ChevronDown className="h-4 w-4 shrink-0 text-[var(--fg-3)] transition duration-fast ease-out group-hover:text-[var(--accent)]" />
+            <ChevronDown className="h-4 w-4 shrink-0 text-fg-3 transition duration-fast ease-out group-hover:text-fg" />
           ) : (
-            <ChevronRight className="h-4 w-4 shrink-0 text-[var(--fg-3)] transition duration-fast ease-out group-hover:text-[var(--accent)]" />
+            <ChevronRight className="h-4 w-4 shrink-0 text-fg-3 transition duration-fast ease-out group-hover:text-fg" />
           )}
-          <FolderOpen className="h-4 w-4 shrink-0 text-[var(--fg-3)] transition duration-fast ease-out group-hover:text-[var(--accent)]" />
+          <FolderOpen className="h-4 w-4 shrink-0 text-fg-3 transition duration-fast ease-out group-hover:text-fg" />
           <span
-            className="min-w-0 flex-1 truncate font-medium text-[var(--fg-2)] transition duration-fast ease-out group-hover:pr-8 group-hover:text-[var(--fg)]"
+            className="min-w-0 flex-1 truncate font-medium text-fg-2 transition duration-fast ease-out group-hover:pr-8 group-hover:text-fg"
             title={p.path}
           >
             {p.display_name}
           </span>
           {/* 会话计数: hover 淡出让位给操作钮 */}
-          <span className="shrink-0 pr-1 font-mono text-micro text-[var(--fg-4)] transition-opacity duration-fast ease-out group-hover:opacity-0">
+          <span className="shrink-0 pr-1 text-label tabular-nums text-fg-4 transition-opacity duration-fast ease-out group-hover:opacity-0">
             {p.sessions.length}
           </span>
           {/* 浮现操作钮 (绝对定位, 不撑高行) */}
@@ -525,7 +526,7 @@ export function ProjectList({
                 e.stopPropagation();
                 handleNewSession(p.path);
               }}
-              className="rounded p-1 text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+              className="rounded p-1 text-fg-3 transition duration-fast ease-out hover:bg-hover hover:text-fg"
               title="新建会话"
             >
               <Plus className="h-3 w-3" />
@@ -535,7 +536,7 @@ export function ProjectList({
                 e.stopPropagation();
                 isVirtual ? stopAllCwdSessions(p.path) : removeProject(p.path);
               }}
-              className="rounded p-1 text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--err)]"
+              className="rounded p-1 text-fg-3 transition duration-fast ease-out hover:bg-hover hover:text-err"
               title="移除项目"
             >
               <X className="h-3 w-3" />
@@ -585,7 +586,7 @@ export function ProjectList({
             {p.sessions.length > p.visibleCount && (
               <button
                 onClick={() => loadMore(p.path)}
-                className="w-full rounded-md py-1 pl-2 text-left text-mini text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+                className="w-full rounded-md py-1 pl-2 text-left text-meta text-fg-3 transition duration-fast ease-out hover:bg-hover hover:text-fg"
               >
                 显示更多 ({p.sessions.length - p.visibleCount})…
               </button>
@@ -641,7 +642,7 @@ export function ProjectList({
       {searching && (
         <div className="space-y-1 px-1 py-1">
           {flatHits.length === 0 ? (
-            <div className="px-3 py-4 text-mini text-[var(--fg-4)]">无匹配会话</div>
+            <div className="px-3 py-4 text-meta text-fg-4">无匹配会话</div>
           ) : (
             flatHits.map((hit) => renderFlatRow(hit))
           )}
@@ -652,7 +653,7 @@ export function ProjectList({
       {!searching && mode === "recent" && (
         <div className="flex flex-col">
           {recentGroups.length === 0 ? (
-            <div className="px-3 py-4 text-mini text-[var(--fg-4)]">暂无会话</div>
+            <div className="px-3 py-4 text-meta text-fg-4">暂无会话</div>
           ) : (
             recentGroups.map((g) => (
               <div key={g.label}>
@@ -678,7 +679,7 @@ export function ProjectList({
           {recentSorted.length > recentLimit && (
             <button
               onClick={() => setRecentLimit((n) => n + RECENT_PAGE)}
-              className="w-full rounded-md py-1 pl-2 text-left text-mini text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+              className="w-full rounded-md py-1 pl-2 text-left text-meta text-fg-3 transition duration-fast ease-out hover:bg-hover hover:text-fg"
             >
               显示更多 ({recentSorted.length - recentLimit})…
             </button>
@@ -692,7 +693,7 @@ export function ProjectList({
           {mainEntries.map((entry) => renderProjectNode(entry, entry.storeIndex >= 0))}
           {tempEntries.length > 0 && (
             // 临时目录组 (design §6): UUID / AppData 下的项目收进底部, 默认折叠, 展开态持久化
-            <div className="mt-3 border-t border-dashed border-[var(--line-2)] pt-2">
+            <div className="mt-3 border-t border-dashed border-line-2 pt-2">
               <button
                 onClick={() => {
                   setTempOpen((v) => {
@@ -703,7 +704,7 @@ export function ProjectList({
                     return next;
                   });
                 }}
-                className="flex h-[30px] w-full cursor-pointer items-center gap-2 rounded-md px-2 text-body text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg-2)]"
+                className="flex h-[30px] w-full cursor-pointer items-center gap-2 rounded-md px-2 text-body text-fg-3 transition duration-fast ease-out hover:bg-hover hover:text-fg-2"
                 title="临时目录（自动收起，不参与排序）"
               >
                 {tempOpen ? (
@@ -711,8 +712,8 @@ export function ProjectList({
                 ) : (
                   <ChevronRight className="h-4 w-4 shrink-0" />
                 )}
-                <span className="min-w-0 flex-1 truncate text-left text-[var(--fg-4)]">临时目录</span>
-                <span className="shrink-0 pr-1 font-mono text-micro text-[var(--fg-4)]">
+                <span className="min-w-0 flex-1 truncate text-left text-fg-4">临时目录</span>
+                <span className="shrink-0 pr-1 text-label tabular-nums text-fg-4">
                   {tempEntries.length}
                 </span>
               </button>
@@ -726,30 +727,21 @@ export function ProjectList({
 
       {/* 重命名输入: 会话行内联编辑 */}
       {renamingPath && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20">
-          <div className="w-72 rounded-md border border-[var(--line)] bg-popover p-4 shadow-[var(--shadow)]">
-            <p className="mb-2 text-body font-semibold text-[var(--fg)]">重命名会话</p>
-            <input
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30">
+          <div className="w-80 rounded-xl border border-line bg-popover p-5 shadow-lg view-in-soft">
+            <p className="mb-3 text-lead font-semibold text-fg">重命名会话</p>
+            <Input
               autoFocus
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submitRename()}
-              className="w-full rounded-md border border-[var(--line-2)] bg-[var(--well)] px-3 py-2 text-body text-[var(--fg)] outline-none placeholder:text-[var(--fg-4)] focus:border-[var(--accent)]"
               placeholder="会话名称"
             />
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                onClick={() => setRenamingPath(null)}
-                className="rounded-md px-3 py-2 text-body text-[var(--fg-2)] transition duration-fast ease-out hover:bg-[var(--hover)]"
-              >
-                取消
-              </button>
-              <button
-                onClick={submitRename}
-                className="rounded-md bg-[var(--accent)] px-3 py-2 text-body font-semibold text-[var(--on-accent)] transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--accent)_88%,black)]"
-              >
+            <div className="mt-4 flex justify-end gap-2">
+              <Button onClick={() => setRenamingPath(null)}>取消</Button>
+              <Button variant="primary" onClick={submitRename}>
                 确定
-              </button>
+              </Button>
             </div>
           </div>
         </div>

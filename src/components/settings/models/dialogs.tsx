@@ -11,7 +11,7 @@ import {
   type JsonObject,
   type ProbeResult,
 } from "../../../store/modelsConfig";
-import { Button, Input, Segmented } from "../../ui";
+import { Button, Checkbox, Input, Segmented } from "../../ui";
 import { API_MAIN, Badge, hostOf, probeHint, useEscapeLayer } from "./shared";
 
 /**
@@ -45,17 +45,17 @@ export function DialogShell({
       <div
         role="dialog"
         aria-modal="true"
-        className="view-in-soft flex max-h-[min(640px,calc(100%-32px))] w-[min(560px,100%)] flex-col rounded-lg border border-[var(--line-2)] bg-[var(--popover)] shadow-[var(--shadow)]"
+        className="view-in-soft flex max-h-[min(640px,calc(100%-32px))] w-[min(560px,100%)] flex-col rounded-lg border border-line-2 bg-popover shadow-lg"
       >
-        <div className="flex shrink-0 items-start gap-3 border-b border-[var(--line)] py-3 pl-5 pr-3">
+        <div className="flex shrink-0 items-start gap-3 border-b border-line py-3 pl-5 pr-3">
           <div className="min-w-0 flex-1">
-            <div className="text-title font-semibold text-[var(--fg)]">{title}</div>
-            {subtitle && <div className="mt-1 break-all text-mini text-[var(--fg-4)]">{subtitle}</div>}
+            <div className="text-lead font-semibold text-fg">{title}</div>
+            {subtitle && <div className="mt-1 break-all text-meta text-fg-4">{subtitle}</div>}
           </div>
           <button
             onClick={onClose}
             title="关闭 (Esc)"
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[var(--fg-3)] transition-colors duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-fg-3 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
           >
             <X className="h-4 w-4" />
           </button>
@@ -63,7 +63,7 @@ export function DialogShell({
         {tools && <div className="flex shrink-0 items-center gap-2 px-5 pb-2 pt-3">{tools}</div>}
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1">{children}</div>
         {footer && (
-          <div className="flex shrink-0 items-center gap-2 border-t border-[var(--line)] py-3 pl-5 pr-4">{footer}</div>
+          <div className="flex shrink-0 items-center gap-2 border-t border-line py-3 pl-5 pr-4">{footer}</div>
         )}
       </div>
     </div>
@@ -84,7 +84,7 @@ export function DialogSearch({
 }) {
   return (
     <div className="relative min-w-0 flex-1">
-      <Search className="pointer-events-none absolute left-2 top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-[var(--fg-4)]" />
+      <Search className="pointer-events-none absolute left-2 top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-fg-4" />
       <Input
         autoFocus
         value={value}
@@ -101,7 +101,7 @@ export function DialogSearch({
 
 function StateBlock({ children }: { children: ReactNode }) {
   return (
-    <div className="grid place-content-center justify-items-center gap-2 px-4 py-12 text-center text-label text-[var(--fg-3)]">
+    <div className="grid place-content-center justify-items-center gap-2 px-4 py-12 text-center text-label text-fg-3">
       {children}
     </div>
   );
@@ -149,7 +149,7 @@ export function FetchModelsDialog({ pid, onClose }: { pid: string; onClose: () =
     return (
       <DialogShell title={title} subtitle={<span className="font-mono">GET {base}/models</span>} onClose={onClose}>
         <StateBlock>
-          <LoaderCircle className="h-4 w-4 animate-spin text-[var(--accent)]" />
+          <LoaderCircle className="h-4 w-4 animate-spin text-accent" />
           正在请求远端模型列表…
         </StateBlock>
       </DialogShell>
@@ -175,8 +175,8 @@ export function FetchModelsDialog({ pid, onClose }: { pid: string; onClose: () =
         }
       >
         <StateBlock>
-          <CircleAlert className="h-4 w-4 text-[var(--err)]" />
-          <span className="break-all font-semibold text-[var(--fg)]">{result.message ?? "请求失败"}</span>
+          <CircleAlert className="h-4 w-4 text-err" />
+          <span className="break-all font-semibold text-fg">{result.message ?? "请求失败"}</span>
           <span>{probeHint(result)}</span>
         </StateBlock>
       </DialogShell>
@@ -233,7 +233,7 @@ export function FetchModelsDialog({ pid, onClose }: { pid: string; onClose: () =
       }
       footer={
         <>
-          <span className="min-w-0 flex-1 text-mini text-[var(--fg-3)]">
+          <span className="min-w-0 flex-1 text-meta text-fg-3">
             已选 {checked.size} 个 · 有同名定义的沿用参数, 其余只写 id
           </span>
           <Button size="sm" disabled={!fresh.length} onClick={() => setChecked(new Set(fresh))}>
@@ -252,23 +252,22 @@ export function FetchModelsDialog({ pid, onClose }: { pid: string; onClose: () =
           const added = have.has(id);
           const src = added ? null : findModelSource(doc, id, pid);
           return (
-            <label key={id} className={`${ROW} ${added ? "" : "cursor-pointer hover:bg-[var(--hover)]"}`}>
-              <input
-                type="checkbox"
+            <label key={id} className={`${ROW} ${added ? "" : "cursor-pointer hover:bg-hover"}`}>
+              <Checkbox
                 checked={added || checked.has(id)}
                 disabled={added}
                 onChange={() => toggle(id)}
-                className="h-4 w-4 shrink-0 accent-[var(--accent)] disabled:opacity-40"
+                ariaLabel={id}
               />
-              <span className="min-w-0 flex-1 truncate font-mono text-label text-[var(--fg)]" title={id}>
+              <span className="min-w-0 flex-1 truncate font-mono text-label text-fg" title={id}>
                 {id}
               </span>
               {added ? (
                 <Badge>已添加</Badge>
               ) : src ? (
-                <span className="truncate text-mini text-[var(--fg-4)]">沿用 {src.pid} 的参数</span>
+                <span className="truncate text-meta text-fg-4">沿用 {src.pid} 的参数</span>
               ) : (
-                <span className="truncate text-mini text-[var(--warn)]">无参考, 需补参数</span>
+                <span className="truncate text-meta text-warn">无参考, 需补参数</span>
               )}
             </label>
           );
@@ -307,7 +306,7 @@ export function CopyToDialog({ pid, mid, onClose }: { pid: string; mid: string; 
       onClose={onClose}
       footer={
         <>
-          <span className="flex-1 text-mini text-[var(--fg-3)]">已选 {checked.size} 个供应商</span>
+          <span className="flex-1 text-meta text-fg-3">已选 {checked.size} 个供应商</span>
           <Button size="sm" onClick={onClose}>
             取消
           </Button>
@@ -323,15 +322,10 @@ export function CopyToDialog({ pid, mid, onClose }: { pid: string; mid: string; 
         targets.map((o) => {
           const exists = modelsOf(doc, o).some((m) => m.id === mid);
           return (
-            <label key={o} className={`${ROW} cursor-pointer hover:bg-[var(--hover)]`}>
-              <input
-                type="checkbox"
-                checked={checked.has(o)}
-                onChange={() => toggle(o)}
-                className="h-4 w-4 shrink-0 accent-[var(--accent)]"
-              />
-              <span className="shrink-0 font-mono text-label text-[var(--fg)]">{o}</span>
-              <span className="min-w-0 flex-1 truncate text-mini text-[var(--fg-4)]">
+            <label key={o} className={`${ROW} cursor-pointer hover:bg-hover`}>
+              <Checkbox checked={checked.has(o)} onChange={() => toggle(o)} ariaLabel={o} />
+              <span className="shrink-0 font-mono text-label text-fg">{o}</span>
+              <span className="min-w-0 flex-1 truncate text-meta text-fg-4">
                 {hostOf(providerOf(doc, o).baseUrl)}
               </span>
               {exists && <Badge tone="warn">已有同名 · 将覆盖</Badge>}
@@ -376,7 +370,7 @@ export function NewProviderDialog({ onClose }: { onClose: () => void }) {
   };
   const field = (label: ReactNode, input: ReactNode) => (
     <label className="flex flex-col gap-1">
-      <span className="flex items-center gap-2 text-label text-[var(--fg-3)]">{label}</span>
+      <span className="flex items-center gap-2 text-label text-fg-3">{label}</span>
       {input}
     </label>
   );
@@ -402,7 +396,7 @@ export function NewProviderDialog({ onClose }: { onClose: () => void }) {
       <div className="flex flex-col gap-3 px-2 pb-1 pt-3" onKeyDown={onEnter}>
         {field(
           <>
-            ID<span className="text-mini text-[var(--fg-4)]">在模型选择器里显示</span>
+            ID<span className="text-meta text-fg-4">在模型选择器里显示</span>
           </>,
           <Input
             autoFocus
@@ -417,7 +411,7 @@ export function NewProviderDialog({ onClose }: { onClose: () => void }) {
         )}
         {field(
           <>
-            地址<span className="font-mono text-mini text-[var(--fg-4)]">baseUrl</span>
+            地址<span className="font-mono text-meta text-fg-4">baseUrl</span>
           </>,
           <Input
             className="font-mono"
@@ -431,7 +425,7 @@ export function NewProviderDialog({ onClose }: { onClose: () => void }) {
         )}
         {field(
           <>
-            密钥<span className="text-mini text-[var(--fg-4)]">推荐写成 $ENV_VAR, 明文会存在 models.json 里</span>
+            密钥<span className="text-meta text-fg-4">推荐写成 $ENV_VAR, 明文会存在 models.json 里</span>
           </>,
           <Input
             className="font-mono"
@@ -445,13 +439,13 @@ export function NewProviderDialog({ onClose }: { onClose: () => void }) {
           />,
         )}
         <div className="flex flex-col gap-1">
-          <span className="text-label text-[var(--fg-3)]">接口类型</span>
+          <span className="text-label text-fg-3">接口类型</span>
           <div>
             <Segmented value={api} onChange={setApi} options={API_MAIN} />
           </div>
         </div>
         {err && (
-          <span className="inline-flex items-center gap-2 text-mini text-[var(--err)]">
+          <span className="inline-flex items-center gap-2 text-meta text-err">
             <CircleAlert className="h-3 w-3" />
             {err}
           </span>

@@ -118,8 +118,8 @@ export function StepDetail({
           {seconds != null && <span>{formatDuration(seconds)}</span>}
           {diffStat && (
             <span>
-              <b className="tl-plus">+{diffStat.add}</b>
-              {diffStat.del > 0 && <i className="tl-minus">−{diffStat.del}</i>}
+              <b className="diff-plus">+{diffStat.add}</b>
+              {diffStat.del > 0 && <i className="diff-minus">−{diffStat.del}</i>}
             </span>
           )}
         </div>

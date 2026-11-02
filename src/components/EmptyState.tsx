@@ -61,18 +61,17 @@ export function EmptyState() {
   return (
     <div className="empty-root">
       <h1 className="empty-greeting">{greeting()}</h1>
-      <p className="empty-sub mt-3 text-ui text-fg-3">选择项目，开始与 pi 对话</p>
+      <p className="mt-3 text-lead text-fg-3">选择项目，开始与 pi 对话</p>
       {recent.length > 0 && (
-        <div className="empty-recent">
-          {/* 分组小标题复用会话列表最近视图的 .sess-grp */}
-          <div className="sess-grp">最近会话</div>
+        <div className="empty-recent card">
+          <div className="px-3 pb-1 pt-2 text-label text-fg-4">最近会话</div>
           {recent.map(({ project, session }) => {
             const title = session.preview.split("\n")[0].trim() || session.file_name;
             return (
               <button
                 key={session.session_path}
                 onClick={() => void openSession(project.path, session)}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-[5px] text-left text-body text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg"
+                className="flex h-9 w-full items-center gap-3 rounded-md px-3 text-left text-body text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg"
                 title={`${project.display_name} · ${title}`}
               >
                 <span
@@ -84,7 +83,7 @@ export function EmptyState() {
                   {abbr(project.display_name)}
                 </span>
                 <span className="min-w-0 flex-1 truncate">{title}</span>
-                <span className="shrink-0 font-mono text-mini tabular-nums text-fg-4">
+                <span className="shrink-0 text-label tabular-nums text-fg-4">
                   {formatRecentTime(sessionRank(session))}
                 </span>
               </button>

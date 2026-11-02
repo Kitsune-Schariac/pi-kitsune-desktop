@@ -6,6 +6,7 @@ import {
   Brain, Bot,
 } from "lucide-react";
 import { StatsFilterBar, projectLabel } from "./StatsFilterBar";
+import { Badge, Button, EmptyHint } from "../ui";
 import {
   resolveQueryBounds,
   useStatsFilterStore,
@@ -119,17 +120,17 @@ function TurnWaterfall({ turns }: { turns: SessionBehaviorResult["turns"] }) {
           : null;
         return (
           <div key={t.idx} className="group relative flex items-center gap-2">
-            <span className="w-8 shrink-0 text-right text-xs tabular-nums text-[var(--fg-4)]">
+            <span className="w-8 shrink-0 text-right text-meta tabular-nums text-fg-4">
               #{t.idx + 1}
             </span>
-            <div className="h-[9px] flex-1 rounded-sm bg-[var(--well)]">
+            <div className="h-[10px] flex-1 rounded-[3px] bg-well">
               <div
-                className={`h-full rounded-sm transition-[width] duration-500 ease-out ${
+                className={`h-full rounded-[3px] transition-[width] duration-500 ease-out ${
                   danger
-                    ? "bg-[color-mix(in_oklch,var(--err)_80%,transparent)] group-hover:bg-[var(--err)]"
+                    ? "bg-err/80 group-hover:bg-err"
                     : warn
-                      ? "bg-[color-mix(in_oklch,var(--warn)_80%,transparent)] group-hover:bg-[var(--warn)]"
-                      : "bg-[color-mix(in_oklch,var(--accent)_65%,transparent)] group-hover:bg-[var(--accent)]"
+                      ? "bg-warn/80 group-hover:bg-warn"
+                      : "bg-fg/30 group-hover:bg-fg"
                 }`}
                 style={{
                   width: mounted ? `${ratio}%` : "0%",
@@ -138,24 +139,24 @@ function TurnWaterfall({ turns }: { turns: SessionBehaviorResult["turns"] }) {
                 }}
               />
             </div>
-            <span className="w-14 shrink-0 text-xs tabular-nums text-[var(--fg-3)]">
+            <span className="w-14 shrink-0 text-meta tabular-nums text-fg-3">
               {fmtDuration(t.durationMs)}
             </span>
-            {/* 自定义 tooltip: 实底 --raise + 细边 (皮肤体系铁律: 禁用毛玻璃) */}
-            <div className="pointer-events-none absolute left-10 top-full z-20 mt-1 hidden w-52 rounded-md border border-[var(--line)] bg-[var(--raise)] p-2 text-xs leading-relaxed text-[var(--fg-2)] shadow-lg group-hover:block">
-              <div className="mb-1 font-medium text-[var(--fg)]">
+            {/* 自定义 tooltip: 浮层卡片 (实底, 不用毛玻璃) */}
+            <div className="popover pointer-events-none absolute left-10 top-full z-20 mt-1 hidden w-56 p-3 text-label leading-relaxed text-fg-2 group-hover:block">
+              <div className="mb-1 font-medium text-fg">
                 第 {t.idx + 1} 轮 · {fmtDuration(t.durationMs)}
               </div>
               <div>工具调用 {t.toolCalls} 次{t.toolErrors > 0 ? ` (${t.toolErrors} 失败)` : ""}</div>
               {t.tools.length > 0 && (
-                <div className="text-[var(--fg-4)]">
+                <div className="text-fg-4">
                   {t.tools.map(([n, c]) => `${n}×${c}`).join(" · ")}
                 </div>
               )}
               {thinking !== null && <div>thinking 占比 {thinking}%</div>}
-              {t.retries > 0 && <div className="text-[var(--err)]">自动重试 {t.retries} 次</div>}
-              {t.errors > 0 && <div className="text-[var(--err)]">错误 {t.errors} 次</div>}
-              <div className="mt-1 text-[var(--fg-4)]">
+              {t.retries > 0 && <div className="text-err">自动重试 {t.retries} 次</div>}
+              {t.errors > 0 && <div className="text-err">错误 {t.errors} 次</div>}
+              <div className="mt-1 text-fg-4">
                 {t.startTs ? new Date(t.startTs).toLocaleString("zh-CN") : "无时间戳"}
               </div>
             </div>
@@ -177,20 +178,20 @@ function ThinkingRing({ ratio }: { ratio: number | null }) {
         <circle cx="42" cy="42" r={R} fill="none" strokeWidth="8" className="[stroke:var(--line-2)]" />
         <circle
           cx="42" cy="42" r={R} fill="none" strokeWidth="8" strokeLinecap="round"
-          className="[stroke:var(--accent)] transition-[stroke-dashoffset] duration-700 ease-out"
+          className="[stroke:var(--fg)] transition-[stroke-dashoffset] duration-700 ease-out"
           strokeDasharray={C}
           strokeDashoffset={C * (1 - pct)}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         {ratio === null ? (
-          <span className="text-xs text-[var(--fg-4)]">无数据</span>
+          <span className="text-meta text-fg-4">无数据</span>
         ) : (
           <>
-            <span className="text-num font-semibold tabular-nums text-[var(--fg)]">
+            <span className="text-num font-semibold tabular-nums text-fg">
               {Math.round(pct * 100)}%
             </span>
-            <span className="text-xs text-[var(--fg-4)]">thinking</span>
+            <span className="text-meta text-fg-4">thinking</span>
           </>
         )}
       </div>
@@ -208,13 +209,13 @@ function SummaryCard({
 }) {
   const display = useCountUp(value, animate);
   return (
-    <div className="rounded-lg border border-[var(--line)] bg-[var(--raise)] p-3 transition-shadow-sm duration-fast ease-out hover:shadow-md">
-      <div className="mb-1 flex items-center gap-1 text-xs text-[var(--fg-4)]">
-        <Icon className="h-4 w-4 text-[var(--accent)]" />
+    <div className="card p-4">
+      <div className="mb-2 flex items-center gap-2 text-label text-fg-3">
+        <Icon className="h-[14px] w-[14px] text-fg-4" />
         {label}
       </div>
-      <div className="text-num font-light tabular-nums text-[var(--fg)]">{format(display)}</div>
-      {foot && <div className="mt-1 text-xs text-[var(--fg-4)]">{foot}</div>}
+      <div className="text-num font-medium tabular-nums text-fg">{format(display)}</div>
+      <div className="mt-1 h-[18px] truncate text-label text-fg-4">{foot ?? ""}</div>
     </div>
   );
 }
@@ -271,38 +272,35 @@ export function BehaviorStatsPanel() {
   // ==================== 会话钻取视图 ====================
   if (drillPath) {
     return (
-      <div className="space-y-5 p-6">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setDrillPath(null)}
-            className="flex items-center gap-1 rounded-md border border-[var(--line)] bg-[var(--raise)] px-2 py-2 text-xs text-[var(--fg-2)] transition duration-fast ease-out hover:border-[var(--line-2)] hover:bg-[var(--hover)]"
-          >
-            <ArrowLeft className="h-4 w-4" />
+      <div className="mx-auto max-w-[1200px] space-y-6 px-8 py-8">
+        <div className="flex items-center gap-3">
+          <Button size="sm" onClick={() => setDrillPath(null)}>
+            <ArrowLeft className="h-[14px] w-[14px]" />
             返回
-          </button>
-          {drillLoading && <Loader2 className="h-4 w-4 animate-spin text-[var(--accent)]" />}
+          </Button>
+          {drillLoading && <Loader2 className="h-4 w-4 animate-spin text-fg-3" />}
           {drill && (
-            <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--fg-3)]">
+            <div className="flex min-w-0 items-center gap-2 text-body text-fg-3">
               {drill.isSubagent && (
-                <span className="flex items-center gap-1 rounded-sm bg-[var(--hover)] px-2 py-1 text-xs text-[var(--fg-3)]" title="嵌套 run 目录下的 subagent 会话">
+                <Badge title="嵌套 run 目录下的 subagent 会话">
                   <Bot className="h-3 w-3" />
                   subagent
-                </span>
+                </Badge>
               )}
-              <span className="font-mono text-[var(--fg-4)]">{drill.sessionId.slice(0, 8)}</span>
+              <span className="font-mono text-fg-4">{drill.sessionId.slice(0, 8)}</span>
               <span className="truncate" title={drill.project}>{projectLabel(drill.project)}</span>
             </div>
           )}
         </div>
         {drillError && (
-          <p className="flex items-center gap-1 text-xs text-[var(--err)]">
+          <p className="flex items-center gap-1 text-meta text-err">
             <AlertCircle className="h-4 w-4" /> {drillError}
           </p>
         )}
         {drill && (
           <>
             {/* 会话汇总 chips */}
-            <div className="flex flex-wrap gap-2 text-xs">
+            <div className="flex flex-wrap gap-2 text-label">
               {[
                 { icon: MessagesSquare, text: `${drill.summary.turns} 轮` },
                 { icon: Wrench, text: `${drill.summary.toolCalls} 次工具` },
@@ -313,34 +311,34 @@ export function BehaviorStatsPanel() {
               ].map(({ icon: Icon, text }) => (
                 <span
                   key={text}
-                  className="flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--raise)] px-3 py-2 text-[var(--fg-2)]"
+                  className="flex h-8 items-center gap-2 rounded-full border border-line bg-card px-3 text-fg-2 shadow-sm"
                 >
-                  <Icon className="h-4 w-4 text-[var(--accent)]" />
+                  <Icon className="h-[14px] w-[14px] text-fg-4" />
                   {text}
                 </span>
               ))}
             </div>
 
             {/* 轮耗时瀑布 */}
-            <section className="rounded-lg border border-[var(--line)] bg-[var(--raise)] p-4">
+            <section className="card p-4">
               <div className="mb-3 flex items-baseline justify-between">
-                <h3 className="text-sm font-medium text-[var(--fg)]">轮耗时瀑布</h3>
-                <div className="flex items-center gap-3 text-xs text-[var(--fg-4)]">
+                <h3 className="text-lead font-semibold text-fg">轮耗时瀑布</h3>
+                <div className="flex items-center gap-3 text-meta text-fg-4">
                   <span className="flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-sm bg-[color-mix(in_oklch,var(--accent)_65%,transparent)]" />正常
+                    <span className="inline-block h-2 w-2 rounded-[2px] bg-fg/30" />正常
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-sm bg-[color-mix(in_oklch,var(--warn)_80%,transparent)]" />工具失败
+                    <span className="inline-block h-2 w-2 rounded-[2px] bg-warn/80" />工具失败
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-sm bg-[color-mix(in_oklch,var(--err)_80%,transparent)]" />错误/重试
+                    <span className="inline-block h-2 w-2 rounded-[2px] bg-err/80" />错误/重试
                   </span>
                 </div>
               </div>
               {drill.turns.length > 0 ? (
                 <TurnWaterfall turns={drill.turns} />
               ) : (
-                <p className="py-6 text-center text-xs text-[var(--fg-4)]">该会话没有轮记录</p>
+                <p className="py-6 text-center text-meta text-fg-4">该会话没有轮记录</p>
               )}
             </section>
 
@@ -362,16 +360,10 @@ export function BehaviorStatsPanel() {
   const sessions = data?.sessions ?? [];
 
   return (
-    <div className="space-y-6 p-6">
-      {/* 加载/错误状态条 (大标题已由设置窗页头承担, 这里不再重复渲染 h2) */}
-      {(loading || error) && (
-        <div className="flex items-center gap-2">
-          {loading && <Loader2 className="h-4 w-4 animate-spin text-[var(--accent)]" />}
-          {error && (
-            <span className="flex items-center gap-1 text-mini text-[var(--err)]">
-              <AlertCircle className="h-4 w-4" /> {error}
-            </span>
-          )}
+    <div className="mx-auto max-w-[1200px] space-y-6 px-8 py-8">
+      {error && (
+        <div className="flex items-center gap-2 text-body text-err">
+          <AlertCircle className="h-4 w-4" /> {error}
         </div>
       )}
 
@@ -379,7 +371,7 @@ export function BehaviorStatsPanel() {
 
       {/* 汇总卡片 */}
       {summary && (
-        <div className="grid grid-cols-4 gap-2">
+        <div className={`grid grid-cols-4 gap-4 transition-opacity duration-base ${loading ? "opacity-50" : ""}`}>
           <SummaryCard icon={MessagesSquare} label="轮数" value={summary.turns} animate={!loading}
             foot={`${summary.sessions} 个会话`} />
           <SummaryCard icon={Wrench} label="工具调用" value={summary.toolCalls} animate={!loading}
@@ -394,21 +386,21 @@ export function BehaviorStatsPanel() {
             format={fmtDuration}
             foot={summary.sessions > 0 ? `${fmtDuration(Math.round(summary.durationMs / summary.sessions))} / 会话` : undefined} />
           {/* thinking 占比卡: 环图嵌卡, 跨两列 */}
-          <div className="col-span-2 flex items-center gap-4 rounded-lg border border-[var(--line)] bg-[var(--raise)] p-3 transition-shadow-sm duration-fast ease-out hover:shadow-md">
+          <div className="card col-span-2 flex items-center gap-5 p-4">
             <ThinkingRing ratio={summary.thinkingRatio} />
             <div className="min-w-0">
-              <div className="mb-1 flex items-center gap-1 text-xs text-[var(--fg-4)]">
-                <Brain className="h-4 w-4 text-[var(--accent)]" />
+              <div className="mb-2 flex items-center gap-2 text-label text-fg-3">
+                <Brain className="h-[14px] w-[14px] text-fg-4" />
                 thinking 占比
               </div>
               {summary.thinkingRatio === null ? (
-                <div className="text-sm text-[var(--fg-4)]">该范围会话均无 thinking 数据</div>
+                <div className="text-body text-fg-4">该范围会话均无 thinking 数据</div>
               ) : (
-                <div className="text-xs leading-relaxed text-[var(--fg-3)]">
+                <div className="text-body leading-relaxed text-fg-3">
                   thinking {fmt(summary.thinkingChars)} 字符
                   <br />
                   正文 {fmt(summary.textChars)} 字符
-                  <span className="ml-1 text-[var(--fg-4)]">(字符口径)</span>
+                  <span className="ml-1 text-fg-4">(字符口径)</span>
                 </div>
               )}
             </div>
@@ -418,15 +410,15 @@ export function BehaviorStatsPanel() {
 
       {/* 按天趋势: grouped 双系列 (轮数 / 工具调用) */}
       {byDay.length > 0 && (
-        <section className="rounded-lg border border-[var(--line)] bg-[var(--raise)] p-4">
+        <section className="card p-4">
           <div className="mb-3 flex items-baseline justify-between">
-            <h3 className="text-sm font-medium text-[var(--fg)]">按天趋势</h3>
-            <div className="flex items-center gap-3 text-xs text-[var(--fg-4)]">
+            <h3 className="text-lead font-semibold text-fg">按天趋势</h3>
+            <div className="flex items-center gap-3 text-meta text-fg-4">
               <span className="flex items-center gap-1">
-                <span className="inline-block h-2 w-2 rounded-sm bg-[var(--accent)]" />轮数
+                <span className="inline-block h-2 w-2 rounded-[2px] bg-fg/80" />轮数
               </span>
               <span className="flex items-center gap-1">
-                <span className="inline-block h-2 w-2 rounded-sm bg-[color-mix(in_oklch,var(--accent-2)_70%,transparent)]" />工具调用
+                <span className="inline-block h-2 w-2 rounded-[2px] bg-fg/25" />工具调用
               </span>
               <span title="轮与工具调用量纲差一个数量级, 共用刻度会把轮数压成一条线">各自缩放</span>
               <span>{byDay[0].date} ~ {byDay[byDay.length - 1].date}</span>
@@ -438,7 +430,7 @@ export function BehaviorStatsPanel() {
             const maxTurns = Math.max(...byDay.map((d) => d.turns), 1);
             const maxTools = Math.max(...byDay.map((d) => d.toolCalls), 1);
             return (
-              <div className="flex h-28 items-end gap-[3px]">
+              <div className="flex h-32 items-end gap-1 border-b border-line">
                 {byDay.map((d) => (
                   <div
                     key={d.date}
@@ -448,11 +440,11 @@ export function BehaviorStatsPanel() {
                     title={`${d.date} · ${d.turns} 轮 · ${d.toolCalls} 次工具${d.retries > 0 ? ` · ${d.retries} 次重试` : ""}${d.compactions > 0 ? ` · ${d.compactions} 次压缩` : ""}`}
                   >
                     <div
-                      className="flex-1 rounded-t-sm bg-[color-mix(in_oklch,var(--accent)_80%,transparent)] transition duration-fast ease-out hover:bg-[var(--accent)]"
+                      className="flex-1 rounded-t-[3px] bg-fg/80 transition duration-fast ease-out hover:bg-fg"
                       style={{ height: `${Math.max((d.turns / maxTurns) * 100, d.turns > 0 ? 3 : 0)}%` }}
                     />
                     <div
-                      className="flex-1 rounded-t-sm bg-[color-mix(in_oklch,var(--accent-2)_70%,transparent)] transition duration-fast ease-out hover:bg-[var(--accent-2)]"
+                      className="flex-1 rounded-t-[3px] bg-fg/25 transition duration-fast ease-out hover:bg-fg/50"
                       style={{ height: `${Math.max((d.toolCalls / maxTools) * 100, d.toolCalls > 0 ? 3 : 0)}%` }}
                     />
                   </div>
@@ -468,9 +460,9 @@ export function BehaviorStatsPanel() {
         <div className="grid grid-cols-2 gap-4">
           {toolDist.length > 0 && <ToolDistChart dist={toolDist} title="工具分布" />}
           {slowTurns.length > 0 && (
-            <section className="rounded-lg border border-[var(--line)] bg-[var(--raise)] p-4">
-              <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-[var(--fg)]">
-                <Hourglass className="h-4 w-4 text-[var(--accent)]" />
+            <section className="card p-4">
+              <h3 className="mb-3 flex items-center gap-2 text-lead font-semibold text-fg">
+                <Hourglass className="h-4 w-4 text-fg-4" />
                 最慢轮次
               </h3>
               <div className="space-y-2">
@@ -478,21 +470,21 @@ export function BehaviorStatsPanel() {
                   <button
                     key={`${s.path}-${s.turnIdx}`}
                     onClick={() => setDrillPath(s.path)}
-                    className="group flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs transition duration-fast ease-out hover:bg-[var(--hover)]"
+                    className="group flex h-9 w-full items-center gap-3 rounded-md px-2 text-left text-body transition duration-fast ease-out hover:bg-hover"
                     title={`钻取会话: ${s.fileName}`}
                   >
                     <span className={`w-5 shrink-0 text-center font-semibold tabular-nums ${
-                      i === 0 ? "text-[var(--err)]" : i < 3 ? "text-[var(--warn)]" : "text-[var(--fg-4)]"
+                      i === 0 ? "text-err" : i < 3 ? "text-warn" : "text-fg-4"
                     }`}>
                       {i + 1}
                     </span>
-                    <span className="w-16 shrink-0 font-medium tabular-nums text-[var(--fg)]">
+                    <span className="w-16 shrink-0 font-medium tabular-nums text-fg">
                       {fmtDuration(s.durationMs)}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-[var(--fg-3)]" title={s.project}>
+                    <span className="min-w-0 flex-1 truncate text-fg-3" title={s.project}>
                       {projectLabel(s.project)} · 第 {s.turnIdx + 1} 轮
                     </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-[var(--fg-4)] transition duration-fast ease-out group-hover:text-[var(--accent)]" />
+                    <ChevronRight className="h-4 w-4 shrink-0 text-fg-4 transition duration-fast ease-out group-hover:text-fg" />
                   </button>
                 ))}
               </div>
@@ -503,28 +495,28 @@ export function BehaviorStatsPanel() {
 
       {/* 会话明细 (点击行钻取) */}
       {sessions.length > 0 && (
-        <section className="rounded-lg border border-[var(--line)] bg-[var(--raise)]">
-          <h3 className="border-b border-[var(--line)] px-4 py-3 text-sm font-medium text-[var(--fg)]">
+        <section className="card overflow-hidden">
+          <h3 className="border-b border-line px-4 py-3 text-lead font-semibold text-fg">
             会话明细 ({sessions.length})
           </h3>
           <div className="max-h-72 overflow-y-auto">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-[var(--well)] text-left text-[var(--fg-4)]">
+            <table className="w-full text-body">
+              <thead className="sticky top-0 z-[1] bg-well text-left text-label text-fg-3">
                 <tr>
                   {["时间", "项目", "轮数", "工具", "耗时", "thinking", "重试", "压缩", ""].map((h) => (
-                    <th key={h} className="whitespace-nowrap px-3 py-2 font-medium">{h}</th>
+                    <th key={h} className="whitespace-nowrap px-3 py-2 font-medium first:pl-4">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--line)] text-[var(--fg-2)]">
+              <tbody className="divide-y divide-line text-fg-2">
                 {sessions.map((s) => (
                   <tr
                     key={s.path}
                     onClick={() => setDrillPath(s.path)}
-                    className="cursor-pointer transition duration-fast ease-out hover:bg-[var(--hover)]"
+                    className="cursor-pointer transition duration-fast ease-out hover:bg-hover"
                     title={`钻取会话: ${s.fileName}`}
                   >
-                    <td className="whitespace-nowrap px-3 py-2 tabular-nums text-[var(--fg-3)]">
+                    <td className="whitespace-nowrap py-2 pl-4 pr-3 tabular-nums text-fg-3">
                       {s.timestamp
                         ? new Date(s.timestamp).toLocaleString("zh-CN", {
                             month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
@@ -533,7 +525,7 @@ export function BehaviorStatsPanel() {
                     </td>
                     <td className="max-w-[150px] truncate px-3 py-2">
                       <span className="flex items-center gap-1" title={s.project}>
-                        {s.isSubagent && <Bot className="h-3 w-3 shrink-0 text-[var(--fg-4)]" />}
+                        {s.isSubagent && <Bot className="h-3 w-3 shrink-0 text-fg-4" />}
                         <span className="truncate">{projectLabel(s.project)}</span>
                       </span>
                     </td>
@@ -541,7 +533,7 @@ export function BehaviorStatsPanel() {
                     <td className="px-3 py-2 tabular-nums">
                       {s.toolCalls}
                       {s.toolErrors > 0 && (
-                        <span className="ml-1 text-[var(--warn)]" title={`${s.toolErrors} 次工具失败`}>
+                        <span className="ml-1 text-warn" title={`${s.toolErrors} 次工具失败`}>
                           ({s.toolErrors} 败)
                         </span>
                       )}
@@ -549,15 +541,15 @@ export function BehaviorStatsPanel() {
                     <td className="whitespace-nowrap px-3 py-2 tabular-nums">{fmtDuration(s.durationMs)}</td>
                     <td className="px-3 py-2 tabular-nums">
                       {s.thinkingRatio === null
-                        ? <span className="text-[var(--fg-4)]">无数据</span>
+                        ? <span className="text-fg-4">无数据</span>
                         : `${Math.round(s.thinkingRatio * 100)}%`}
                     </td>
                     <td className="px-3 py-2 tabular-nums">
-                      {s.retries > 0 ? <span className="text-[var(--err)]">{s.retries}</span> : 0}
+                      {s.retries > 0 ? <span className="text-err">{s.retries}</span> : 0}
                     </td>
                     <td className="px-3 py-2 tabular-nums">{s.compactions}</td>
                     <td className="px-2 py-2">
-                      <ChevronRight className="h-4 w-4 text-[var(--fg-4)]" />
+                      <ChevronRight className="h-4 w-4 text-fg-4" />
                     </td>
                   </tr>
                 ))}
@@ -569,9 +561,7 @@ export function BehaviorStatsPanel() {
 
       {/* 空态 */}
       {!loading && !error && summary && summary.turns === 0 && (
-        <p className="rounded-lg border border-dashed border-[var(--line-2)] px-4 py-10 text-center text-sm text-[var(--fg-4)]">
-          该筛选范围内暂无行为数据
-        </p>
+        <EmptyHint title="该筛选范围内暂无行为数据" />
       )}
     </div>
   );
@@ -586,30 +576,28 @@ function ToolDistChart({ dist, title }: { dist: { name: string; count: number }[
   const max = Math.max(...rows.map((d) => d.count), 1);
   const grand = dist.reduce((s, d) => s + d.count, 0);
   return (
-    <section className="rounded-lg border border-[var(--line)] bg-[var(--raise)] p-4">
-      <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-[var(--fg)]">
-        <Wrench className="h-4 w-4 text-[var(--accent)]" />
+    <section className="card p-4">
+      <h3 className="mb-3 flex items-center gap-2 text-lead font-semibold text-fg">
+        <Wrench className="h-4 w-4 text-fg-4" />
         {title}
       </h3>
       <div className="space-y-2">
         {rows.map((d) => (
           <div key={d.name} className="group flex items-center gap-2" title={rest.length > 0 && d.name === "其它" ? `含 ${rest.map((r) => `${r.name}×${r.count}`).join("、")}` : undefined}>
-            <span className={`w-20 shrink-0 truncate text-right text-xs ${d.name === "其它" ? "text-[var(--fg-4)]" : "text-[var(--fg-2)]"}`}>
+            <span className={`w-20 shrink-0 truncate text-right font-mono text-label ${d.name === "其它" ? "text-fg-4" : "text-fg-2"}`}>
               {d.name}
             </span>
-            <div className="h-4 flex-1 rounded-sm bg-[var(--well)]">
+            <div className="h-3 flex-1 rounded-[3px] bg-well">
               <div
-                className={`h-full rounded-sm transition-[width,background-color] duration-500 ease-out ${
-                  d.name === "其它"
-                    ? "bg-[color-mix(in_oklch,var(--fg-4)_60%,transparent)]"
-                    : "bg-[color-mix(in_oklch,var(--accent)_70%,transparent)] group-hover:bg-[var(--accent)]"
+                className={`h-full rounded-[3px] transition-[width,background-color] duration-500 ease-out ${
+                  d.name === "其它" ? "bg-fg-4/40" : "bg-fg/30 group-hover:bg-fg"
                 }`}
                 style={{ width: `${Math.max((d.count / max) * 100, 2)}%` }}
               />
             </div>
-            <span className="w-16 shrink-0 text-xs tabular-nums text-[var(--fg-3)]">
+            <span className="w-20 shrink-0 text-label tabular-nums text-fg-3">
               {fmt(d.count)}
-              <span className="ml-1 text-xs text-[var(--fg-4)]">
+              <span className="ml-1 text-meta text-fg-4">
                 {Math.round((d.count / grand) * 100)}%
               </span>
             </span>

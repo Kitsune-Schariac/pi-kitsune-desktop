@@ -5,7 +5,7 @@ import type { ProbeResult } from "../../../store/modelsConfig";
 
 /** 行内文字链接 (收起 / 去挑选 / 在 JSON 中编辑 …) */
 export const LINK =
-  "whitespace-nowrap text-label text-[var(--accent)] underline-offset-[3px] hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline";
+  "whitespace-nowrap text-label text-accent underline-offset-[3px] hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline";
 
 /** 常用接口类型 (本机 17 个供应商只用到前两种), 以分段控件平铺 */
 export const API_MAIN = [
@@ -67,10 +67,10 @@ export function probeHint(r: ProbeResult): string {
 }
 
 const BADGE_TONE = {
-  neutral: "border-[var(--line-2)] text-[var(--fg-3)]",
-  accent: "border-[color-mix(in_oklch,var(--accent)_45%,transparent)] text-[var(--accent)]",
-  warn: "border-[color-mix(in_oklch,var(--warn)_55%,transparent)] text-[var(--warn)]",
-  err: "border-[color-mix(in_oklch,var(--err)_55%,transparent)] text-[var(--err)]",
+  neutral: "border-line-2 text-fg-3",
+  accent: "border-[color-mix(in_srgb,var(--accent)_45%,transparent)] text-accent",
+  warn: "border-[color-mix(in_srgb,var(--warn)_55%,transparent)] text-warn",
+  err: "border-[color-mix(in_srgb,var(--err)_55%,transparent)] text-err",
 } as const;
 
 export function Badge({
@@ -87,7 +87,7 @@ export function Badge({
   return (
     <span
       title={title}
-      className={`inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-[6px] border px-2 text-mini ${BADGE_TONE[tone]} ${className}`}
+      className={`inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-[6px] border px-2 text-meta ${BADGE_TONE[tone]} ${className}`}
     >
       {children}
     </span>
@@ -110,8 +110,8 @@ export function IconButton({
     <button
       title={title}
       onClick={onClick}
-      className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-[var(--fg-3)] transition-colors duration-fast ease-out hover:bg-[var(--hover)] ${
-        danger ? "hover:text-[var(--err)]" : "hover:text-[var(--fg)]"
+      className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-fg-3 transition-colors duration-fast ease-out hover:bg-hover ${
+        danger ? "hover:text-err" : "hover:text-fg"
       }`}
     >
       {children}
@@ -122,7 +122,7 @@ export function IconButton({
 /** 字段下方的红字错误 */
 export function FieldError({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-2 text-mini text-[var(--err)]">
+    <span className="inline-flex items-center gap-2 text-meta text-err">
       <CircleAlert className="h-3 w-3 shrink-0" />
       {children}
     </span>

@@ -75,11 +75,11 @@ export async function startBridge(): Promise<() => void> {
   // 会话状态变化 → 重算并按需推送 (pushSignals 内部做了去重)
   offs.push(useSessionStore.subscribe(() => pushSignals()));
 
-  // 换皮肤 → 重推配置, 让气泡跟着换色。applyTheme 先写完 CSS 变量才 set activeSkinId,
-  // 所以这里读到的已经是新皮肤的值
+  // 切日间/夜间 → 重推配置, 让气泡跟着换色。setMode 先写完 data-base 才 set resolved,
+  // 所以这里读到的已经是新配色的值
   offs.push(
     useThemeStore.subscribe((s, prev) => {
-      if (s.activeSkinId !== prev.activeSkinId) pushConfig();
+      if (s.resolved !== prev.resolved) pushConfig();
     }),
   );
 

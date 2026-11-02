@@ -103,9 +103,9 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
   }), [filtered, active, onExecute]);
 
   return (
-    <div className="absolute bottom-full left-0 z-50 mb-1 w-[420px] rounded-lg border border-line bg-popover p-2 shadow-[var(--shadow)]">
+    <div className="popover absolute bottom-full left-0 z-50 mb-2 w-[440px] p-1 view-in-soft">
       <div className="flex items-center justify-between px-2 pb-1">
-        <span className="text-mini text-fg-4">命令 · ↑↓ 选择, Enter 执行</span>
+        <span className="text-meta text-fg-4">命令 · ↑↓ 选择, Enter 执行</span>
         <button
           onClick={onClose}
           className="rounded-sm p-1 text-fg-4 transition duration-fast ease-out hover:bg-hover hover:text-fg-2"
@@ -116,20 +116,20 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
       </div>
 
       {remoteError && (
-        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-[color-mix(in_oklch,var(--err)_10%,transparent)] px-2 py-2 text-mini text-err">
+        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-[color-mix(in_srgb,var(--err)_10%,transparent)] px-2 py-2 text-meta text-err">
           <AlertCircle className="h-3 w-3 shrink-0" />
           pi 命令加载失败, 仅显示本地命令
         </p>
       )}
       {!sessionId && !remoteError && (
-        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-well px-2 py-2 text-mini text-fg-4">
+        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-well px-2 py-2 text-meta text-fg-4">
           打开会话后可用 pi 扩展/技能/模板命令
         </p>
       )}
 
       <div className="max-h-72 overflow-auto">
         {filtered.length === 0 ? (
-          <div className="flex h-24 items-center justify-center gap-2 text-mini text-fg-4">
+          <div className="flex h-24 items-center justify-center gap-2 text-meta text-fg-4">
             {remote === null && sessionId ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" /> 加载 pi 命令…
@@ -148,7 +148,7 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
                 onClick={() => confirmPick(it)}
                 onMouseEnter={() => setActive(i)}
                 disabled={it.disabled}
-                className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-mini transition duration-fast ease-out ${
+                className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-meta transition duration-fast ease-out ${
                   it.disabled
                     ? "opacity-40"
                     : sel
@@ -162,10 +162,10 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
                   <span className={`block truncate font-medium ${sel ? "text-fg" : "text-fg-2"}`}>
                     /{it.name}
                   </span>
-                  <span className="block truncate text-mini text-fg-4">{it.description}</span>
+                  <span className="block truncate text-meta text-fg-4">{it.description}</span>
                 </span>
                 <span
-                  className={`shrink-0 rounded-sm px-2 py-1 text-mini ${
+                  className={`shrink-0 rounded-sm px-2 py-1 text-meta ${
                     it.source === "local"
                       ? "bg-well text-fg-3"
                       : "bg-accent-soft text-accent"

@@ -36,7 +36,7 @@ pi 本身是一个很好的终端编码 agent，但一旦同时开几个项目�
 
 ### 对话
 
-- **流式渲染**：实时消费 `text_delta` / `thinking` / `toolcall` 事件流，GFM Markdown + Shiki 语法高亮，时间线按轮次与步骤分组，检查器可下钻每一步的工具调用详情。
+- **流式渲染**：实时消费 `text_delta` / `thinking` / `toolcall` 事件流，GFM Markdown + Shiki 语法高亮，以对话气泡呈现，连续工具调用收进可折叠的步骤卡片，检查器可下钻每一步的工具调用详情。
 - **中途插话 / 停止后续写**：agent 运行中排队 steer 指导消息，停止后排队 followUp；队列以 pi 的 `queue_update` 事件为准，不做乐观插入。
 - **附件**：直接粘贴或拖入图片与文件。图片以像素发给视觉模型，文本文件走路径引用由 agent 按需读取，超大图片自动退回路径模式。
 - **@ 引用**：引用文件、目录、其他会话、skill。Windows 上可接入 Everything（`es.exe`）做毫秒级搜索。
@@ -61,7 +61,7 @@ pi 本身是一个很好的终端编码 agent，但一旦同时开几个项目�
 
 ### 个性化
 
-- **纯色主题**：内置 8 套按颜色命名的主题（默认「雪白」），oklch 色阶，切换带淡入淡出。可以自己写皮肤包。
+- **日间 / 夜间**：只有白底与黑底两套配色，可跟随系统；全局统一衬线字体（内置 Noto Serif SC）、阴影卡片与同一套控件。
 - **桌面宠物**：透明置顶小窗，按全部会话的聚合状态播放帧动画（待机 / 打招呼 / 思考 / 执行工具 / 报错 / 离线），可拖动、滚轮缩放、右键换角色。宠物包同样可以自制。
 
 ## 安装
@@ -129,9 +129,9 @@ pi-kitsune-desktop/
 │   ├── pet/                     # 桌宠窗口独立渲染入口
 │   ├── components/
 │   │   ├── shell/               #   外壳：侧轨、会话区、检查器
-│   │   ├── timeline/            #   对话时间线
+│   │   ├── timeline/            #   对话视图 (气泡 + 步骤卡片)
 │   │   ├── inspector/           #   会话概览、步骤详情
-│   │   ├── settings/            #   设置窗：模型、主题、统计、桌宠
+│   │   ├── settings/            #   设置窗：模型、外观、统计、桌宠
 │   │   ├── panels/              #   skills / packages 面板
 │   │   ├── refs/                #   @ 引用相关弹层
 │   │   └── *SidebarPanel.tsx    #   Git / 舰队 / Trellis 面板
@@ -154,41 +154,12 @@ pi-kitsune-desktop/
 │   │   ├── local_path.rs        # 会话内路径解析与文件查看
 │   │   ├── search.rs            # @ 引用 Everything 加速
 │   │   ├── capture.rs           # 屏幕截图
-│   │   ├── skins.rs / pets.rs   # 皮肤包 / 宠物包扫描
-│   ├── resources/skins/         # 内置主题
+│   │   ├── pets.rs              # 宠物包扫描
 │   └── resources/pets/          # 内置宠物包目录
 └── bump-version.mjs             # 版本号同步脚本
 ```
 
 </details>
-
-## 自制皮肤
-
-皮肤包放在 `~/.pi-kitsune/skins/<skin-id>/`，id 与内置主题冲突时内置优先。
-
-```
-<skin-id>/
-├── skin.json        # 必需：元信息 + 色阶 + 浅/深方向
-└── override.css     # 可选：样式覆盖（选择器建议带 [data-theme] 前缀防串扰）
-```
-
-```json
-{
-  "id": "white",
-  "name": "雪白 · 亮",
-  "author": "Pi Kitsune",
-  "version": "1.0",
-  "base": "light",
-  "colors": {
-    "bg": "oklch(100% 0 0)",
-    "fg": "oklch(20% 0 0)",
-    "accent": "oklch(22% 0 0)"
-  },
-  "override": "override.css"
-}
-```
-
-`colors` 里每个 key 都会写成 `:root` 上的 `--<key>` 变量，没声明的项按 `base` 方向回落到默认值。设置页的预览是按配色绘制的骨架缩略图，不需要预览图。可用的变量名参考 [`src-tauri/resources/skins/`](src-tauri/resources/skins/) 下的内置主题。
 
 ## 自制桌宠
 
@@ -243,7 +214,7 @@ Pi Kitsune 是一个**完全开源**的项目：
   2. 跟着周围代码的风格写：命名习惯、注释密度、目录约定保持一致；注释写「为什么这么做」，而不是复述代码。
   3. 提交前确认 `npm run build`（TypeScript 类型检查 + 前端构建）和 `cargo check`（在 `src-tauri/` 下）都能通过。
   4. 提交信息用 `feat:` / `fix:` / `chore:` 等前缀，一句话说清改了什么。
-- **分享皮肤与宠物**：欢迎投稿。请确保素材是你原创或有权分发的，**不接受未授权的版权角色或商标素材**。
+- **分享宠物**：欢迎投稿。请确保素材是你原创或有权分发的，**不接受未授权的版权角色或商标素材**。
 
 ## 许可
 

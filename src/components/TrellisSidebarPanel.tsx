@@ -80,16 +80,16 @@ function TaskStatusDot({ status }: { status: string }) {
   const t = (status || "").toLowerCase();
   if (t === "in_progress" || t === "in-progress") {
     return (
-      <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--accent)] animate-pulse" />
+      <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent animate-pulse" />
     );
   }
   if (t === "planning") {
-    return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--fg-3)]" />;
+    return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-fg-3" />;
   }
   if (t === "completed" || t === "done") {
-    return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--fg-4)]" />;
+    return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-fg-4" />;
   }
-  return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--line-2)]" />;
+  return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-line-2" />;
 }
 
 interface Props {
@@ -142,22 +142,22 @@ export function TrellisSidebarPanel({ cwd, onClose }: Props) {
     <>
         {view.kind === "list" ? (
           // list header: 标题 + 计数 + 归档切换 + 刷新 + 收起
-          <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
+          <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <div className="flex min-w-0 items-center gap-2">
-              <ListTree className="h-4 w-4 shrink-0 text-[var(--fg-2)]" />
-              <span className="text-title font-medium">任务</span>
+              <ListTree className="h-4 w-4 shrink-0 text-fg-2" />
+              <span className="text-lead font-medium">任务</span>
               {visibleTasks.length > 0 && (
-                <span className="text-mini text-[var(--fg-3)]">· {visibleTasks.length}</span>
+                <span className="text-meta text-fg-3">· {visibleTasks.length}</span>
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {archiveCount > 0 && (
                 <button
                   onClick={() => setShowArchived(!showArchived)}
-                  className={`flex items-center gap-1 rounded-md px-2 py-1 text-mini transition duration-fast ease-out ${
+                  className={`flex items-center gap-1 rounded-md px-2 py-1 text-meta transition duration-fast ease-out ${
                     showArchived
-                      ? "bg-[var(--well)] text-[var(--fg-2)]"
-                      : "text-[var(--fg-3)] hover:bg-[var(--hover)] hover:text-[var(--fg-2)]"
+                      ? "bg-well text-fg-2"
+                      : "text-fg-3 hover:bg-hover hover:text-fg-2"
                   }`}
                   title={showArchived ? "隐藏归档任务" : `显示归档任务 (${archiveCount})`}
                 >
@@ -168,7 +168,7 @@ export function TrellisSidebarPanel({ cwd, onClose }: Props) {
               <button
                 onClick={() => load(cwd)}
                 disabled={loading}
-                className="rounded-md p-1 text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg-2)] disabled:opacity-40"
+                className="rounded-md p-1 text-fg-3 transition duration-fast ease-out hover:bg-hover hover:text-fg-2 disabled:opacity-40"
                 title="刷新"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -176,7 +176,7 @@ export function TrellisSidebarPanel({ cwd, onClose }: Props) {
               {onClose && (
                 <button
                   onClick={onClose}
-                  className="rounded-md p-1 text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg-2)]"
+                  className="rounded-md p-1 text-fg-3 transition duration-fast ease-out hover:bg-hover hover:text-fg-2"
                   title="收起"
                 >
                   <X className="h-4 w-4" />
@@ -186,10 +186,10 @@ export function TrellisSidebarPanel({ cwd, onClose }: Props) {
           </div>
         ) : (
           // detail header: ‹ 返回 + 状态灯 + 标题 (+ 归档标记)
-          <div className="flex items-center gap-2 border-b border-[var(--line)] px-3 py-2">
+          <div className="flex items-center gap-2 border-b border-line px-3 py-2">
             <button
               onClick={() => setView({ kind: "list" })}
-              className="flex items-center rounded-md p-1 text-[var(--fg-2)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+              className="flex items-center rounded-md p-1 text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg"
               title="返回 (Esc)"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -197,11 +197,11 @@ export function TrellisSidebarPanel({ cwd, onClose }: Props) {
             {detailTask && (
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 <TaskStatusDot status={detailTask.status} />
-                <span className="truncate text-title font-medium" title={detailTask.title}>
+                <span className="truncate text-lead font-medium" title={detailTask.title}>
                   {detailTask.title}
                 </span>
                 {detailTask.is_archived && (
-                  <span className="flex shrink-0 items-center gap-1 text-mini text-[var(--fg-3)]">
+                  <span className="flex shrink-0 items-center gap-1 text-meta text-fg-3">
                     <Archive className="h-3 w-3" />
                     归档
                   </span>
@@ -217,16 +217,16 @@ export function TrellisSidebarPanel({ cwd, onClose }: Props) {
             lastError ? (
               // 快照读取失败: 降级红条 + 空态文案 (R3: 不把失败渲染成崩溃)
               <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
-                <AlertCircle className="h-8 w-8 text-[var(--err)]" />
-                <p className="text-body text-[var(--err)]">{lastError}</p>
-                <p className="text-mini text-[var(--fg-3)]">读取 Trellis 任务失败</p>
+                <AlertCircle className="h-8 w-8 text-err" />
+                <p className="text-body text-err">{lastError}</p>
+                <p className="text-meta text-fg-3">读取 Trellis 任务失败</p>
               </div>
             ) : !exists ? (
               // 无 Trellis 项目 (R3): 安静空态, 不报错。药丸本就不显示, 此处是直接开面板的兜底
               <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
-                <ListTree className="h-12 w-12 rounded-full border border-dashed border-[var(--line-2)] p-3 text-[var(--fg-3)]" />
-                <p className="text-body text-[var(--fg-3)]">此项目未使用 Trellis</p>
-                <p className="text-mini text-[var(--fg-3)]">项目 .trellis/ 目录不存在</p>
+                <ListTree className="h-12 w-12 rounded-full border border-dashed border-line-2 p-3 text-fg-3" />
+                <p className="text-body text-fg-3">此项目未使用 Trellis</p>
+                <p className="text-meta text-fg-3">项目 .trellis/ 目录不存在</p>
               </div>
             ) : loading && tasks.length === 0 ? (
               <Hint icon={<Loader2 className="h-4 w-4 animate-spin" />} text="加载中…" />
@@ -275,7 +275,7 @@ function TaskNode({
         onOpen={onOpen}
       />
       {node.children.length > 0 && (
-        <div className="ml-3 border-l-2 border-[var(--line)] pl-1">
+        <div className="ml-3 border-l-2 border-line pl-1">
           {node.children.map((c) => (
             <TaskNode
               key={c.task.dir}
@@ -307,30 +307,30 @@ function TaskRow({
     <button
       onClick={() => onOpen(task.dir)}
       style={{ paddingLeft: `${depth * 4}px` }}
-      className={`flex w-full items-center gap-2 py-2 pr-3 text-left transition duration-fast ease-out hover:bg-[var(--hover)] ${
+      className={`flex w-full items-center gap-2 py-2 pr-3 text-left transition duration-fast ease-out hover:bg-hover ${
         isCurrent
-          ? "border-l-2 border-[color-mix(in_oklch,var(--accent)_45%,transparent)] bg-[var(--well)]"
+          ? "border-l-2 border-[color-mix(in_srgb,var(--accent)_45%,transparent)] bg-well"
           : "border-l-2 border-transparent"
       } ${task.is_archived ? "opacity-60" : ""}`}
       title={`${task.title}${task.description ? `\n${task.description}` : ""}`}
     >
       <TaskStatusDot status={task.status} />
       <span
-        className={`min-w-0 flex-1 truncate text-mini ${
-          isCurrent ? "font-medium text-[var(--fg)]" : "text-[var(--fg-2)]"
+        className={`min-w-0 flex-1 truncate text-meta ${
+          isCurrent ? "font-medium text-fg" : "text-fg-2"
         }`}
       >
         {task.title}
       </span>
       {isCurrent && (
-        <span className="shrink-0 rounded-full border border-[color-mix(in_oklch,var(--accent)_45%,transparent)] px-2 py-px text-mini font-medium text-[var(--accent-2)]">
+        <span className="shrink-0 rounded-full border border-[color-mix(in_srgb,var(--accent)_45%,transparent)] px-2 py-px text-meta font-medium text-accent-2">
           活动
         </span>
       )}
       {task.priority && (
         <span
-          className={`shrink-0 text-mini tabular-nums ${
-            task.priority === "P1" ? "font-medium text-[var(--accent-2)]" : "text-[var(--fg-3)]"
+          className={`shrink-0 text-meta tabular-nums ${
+            task.priority === "P1" ? "font-medium text-accent-2" : "text-fg-3"
           }`}
         >
           {task.priority}
@@ -338,16 +338,16 @@ function TaskRow({
       )}
       {assigneeInitial && (
         <span
-          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--hover)] text-mini text-[var(--fg-2)]"
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-hover text-meta text-fg-2"
           title={task.assignee}
         >
           {assigneeInitial}
         </span>
       )}
       {docCount > 0 && (
-        <span className="flex shrink-0 items-center gap-1 text-[var(--fg-3)]" title={`${docCount} 个规划产物`}>
+        <span className="flex shrink-0 items-center gap-1 text-fg-3" title={`${docCount} 个规划产物`}>
           <FileText className="h-3 w-3" />
-          <span className="text-mini tabular-nums">{docCount}</span>
+          <span className="text-meta tabular-nums">{docCount}</span>
         </span>
       )}
     </button>
@@ -395,21 +395,21 @@ function TaskDetail({ cwd, task }: { cwd: string; task: TrellisTaskSummary }) {
   return (
     <div className="flex flex-col">
       {/* 元信息条 */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-[var(--line)] px-4 py-2 text-mini text-[var(--fg-2)]">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-4 py-2 text-meta text-fg-2">
         {task.status && <span>{statusLabel(task.status)}</span>}
         {meta.map((m) => (
           <span key={m} className="flex items-center gap-2">
-            <span className="text-[var(--fg-3)]">·</span>
+            <span className="text-fg-3">·</span>
             <span className="truncate tabular-nums" title={m}>{m}</span>
           </span>
         ))}
-        <span className="ml-auto flex items-center gap-1 truncate font-mono text-[var(--fg-3)]" title={task.dir}>
+        <span className="ml-auto flex items-center gap-1 truncate font-mono text-fg-3" title={task.dir}>
           <Archive className="h-3 w-3 shrink-0" />
           {task.dir}
         </span>
       </div>
       {/* 产物 tab: 有则亮, 无则置灰标「未创建」 (轻量任务合法状态, 非错误) */}
-      <div className="flex items-center gap-1 border-b border-[var(--line)] px-3 py-2">
+      <div className="flex items-center gap-1 border-b border-line px-3 py-2">
         {DOC_ORDER.map((d) => {
           const available = docAvailable(task, d);
           const active = tab === d;
@@ -418,17 +418,17 @@ function TaskDetail({ cwd, task }: { cwd: string; task: TrellisTaskSummary }) {
               key={d}
               onClick={() => available && setTab(d)}
               disabled={!available}
-              className={`rounded-md px-2 py-1 text-mini transition duration-fast ease-out ${
+              className={`rounded-md px-2 py-1 text-meta transition duration-fast ease-out ${
                 active
-                  ? "bg-[var(--well)] font-medium text-[var(--fg)]"
+                  ? "bg-well font-medium text-fg"
                   : available
-                    ? "text-[var(--fg-2)] hover:bg-[var(--hover)] hover:text-[var(--fg-2)]"
-                    : "cursor-not-allowed text-[var(--fg-3)]"
+                    ? "text-fg-2 hover:bg-hover hover:text-fg-2"
+                    : "cursor-not-allowed text-fg-3"
               }`}
               title={available ? `查看 ${DOC_META[d].file}` : `${DOC_META[d].file} 未创建`}
             >
               {DOC_META[d].label}
-              {!available && <span className="ml-1 text-mini">未创建</span>}
+              {!available && <span className="ml-1 text-meta">未创建</span>}
             </button>
           );
         })}
@@ -436,7 +436,7 @@ function TaskDetail({ cwd, task }: { cwd: string; task: TrellisTaskSummary }) {
       {/* 文档内容: 加载 / 错误 / 未创建 / Markdown 四态 */}
       <div className="flex-1">
         {docError ? (
-          <p className="px-4 py-6 text-body text-[var(--err)]">{docError}</p>
+          <p className="px-4 py-6 text-body text-err">{docError}</p>
         ) : docLoading ? (
           <Hint icon={<Loader2 className="h-4 w-4 animate-spin" />} text="加载中…" />
         ) : !tab ? (
@@ -473,7 +473,7 @@ function statusLabel(status: string): string {
 // 列表空态与加载提示, 复用于多分支降级路径
 function Hint({ icon, text }: { icon?: ReactNode; text: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 px-4 py-10 text-body text-[var(--fg-3)]">
+    <div className="flex items-center justify-center gap-2 px-4 py-10 text-body text-fg-3">
       {icon}
       {text}
     </div>

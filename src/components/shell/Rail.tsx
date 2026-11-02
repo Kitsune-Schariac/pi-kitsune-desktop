@@ -7,7 +7,7 @@ import type { SettingsSection } from "../settings/SettingsWindow";
 /**
  * 图标轨 (框架 C 第一列): 会话开关会话列表, Skill / Package 开抽屉,
  * 统计 / 桌宠 / 设置直接打开设置窗的对应分区。
- * 激活态 = 左缘竖条 (见 index.css .rail-btn)。
+ * 激活态 = 卡片底 + 小阴影 (见 index.css .rail-btn)。
  */
 export function Rail({
   onOpenPanel,
@@ -21,7 +21,8 @@ export function Rail({
 
   return (
     <nav
-      className="shell-rail flex w-[52px] shrink-0 flex-col items-center gap-1 py-2"
+      // 上内边距 6px: 36px 的首个按钮正好居中在 48px 列头那条线上, 与旁边列头横向对齐
+      className="shell-rail flex w-[52px] shrink-0 flex-col items-center gap-1 pb-2 pt-[6px]"
       aria-label="主导航"
     >
       <button

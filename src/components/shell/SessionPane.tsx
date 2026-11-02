@@ -5,14 +5,15 @@ import { ProjectList } from "../ProjectList";
 import { useResizableWidth } from "../../hooks/useResizableWidth";
 import { useSessionStore } from "../../store/session";
 import { useUiStore, type SessionListMode } from "../../store/ui";
+import { Segmented } from "../ui";
 
-const LIST_MODES: { key: SessionListMode; label: string }[] = [
-  { key: "recent", label: "最近" },
-  { key: "projects", label: "项目" },
+const LIST_MODES: { value: SessionListMode; label: string }[] = [
+  { value: "recent", label: "最近" },
+  { value: "projects", label: "项目" },
 ];
 
 /**
- * 会话列表 (框架 C 第二列): 搜索 + 新建入口 + 「最近 / 项目」分段 + 列表体 + 会话库路径小字。
+ * 会话列表 (第二列): 列头 (搜索 + 新建) + 「最近 / 项目」分段 + 列表体 + 会话库路径小字。
  * 收起与拖拽调宽由 paneOpen / 右缘手柄控制。
  * 列表体 (最近 / 项目两视图) 都走 ProjectList, 打开 / 删除 / 菜单逻辑单源。
  */
@@ -70,8 +71,9 @@ export function SessionPane() {
     >
       {/* 内层锁死展开宽度: 收起动画压缩外框时内容不跟着变形 (只被裁切) */}
       <div className="flex h-full flex-col" style={{ width }}>
-        <div className="flex gap-2 px-3 pb-2 pt-3">
-          <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--well)] px-2 text-[var(--fg-4)] transition-colors duration-fast ease-out focus-within:border-[color-mix(in_oklch,var(--accent)_45%,transparent)]">
+        {/* 列头: 与主区 / 检查器同高 (--bar-h), 底线横向贯通 */}
+        <div className="bar gap-2 px-3">
+          <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-line bg-card px-2 text-fg-4 shadow-sm transition duration-fast ease-out focus-within:border-fg-3 focus-within:shadow-[var(--shadow-sm),0_0_0_3px_var(--accent-soft)]">
             <Search className="h-[14px] w-[14px] shrink-0" />
             <input
               ref={searchRef}
@@ -85,16 +87,16 @@ export function SessionPane() {
               }}
               placeholder="搜索会话或项目"
               aria-label="搜索会话"
-              className="min-w-0 flex-1 bg-transparent text-label text-[var(--fg)] outline-none placeholder:text-[var(--fg-4)]"
+              className="min-w-0 flex-1 bg-transparent text-body text-fg outline-none placeholder:text-fg-4"
             />
-            <kbd className="shrink-0 rounded-sm border border-[var(--line-2)] px-1 font-mono text-micro text-[var(--fg-4)]">
+            <kbd className="grid h-5 min-w-5 shrink-0 place-items-center rounded-[4px] bg-well px-1 font-mono text-meta text-fg-4 shadow-[inset_0_0_0_1px_var(--line)]">
               /
             </kbd>
           </label>
           <button
             onClick={handleAddProject}
             disabled={adding}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-[var(--line)] text-[var(--fg-3)] transition-colors duration-fast ease-out hover:border-[color-mix(in_oklch,var(--accent)_40%,transparent)] hover:text-[var(--accent)] disabled:opacity-40"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-line bg-card text-fg-3 shadow-sm transition duration-fast ease-out hover:border-line-2 hover:text-fg disabled:opacity-40"
             title="新建会话 (选择目录)"
             aria-label="新建会话"
           >
@@ -102,32 +104,30 @@ export function SessionPane() {
           </button>
         </div>
 
-        {/* 最近 / 项目分段: 下划线页签 (index.css .sess-seg) */}
-        <div className="sess-seg" role="tablist">
-          {LIST_MODES.map(({ key, label }) => (
-            <button
-              key={key}
-              role="tab"
-              aria-selected={listMode === key}
-              onClick={() => setListMode(key)}
-            >
-              {label}
-            </button>
-          ))}
+        {/* 最近 / 项目: 分段控件 (全站视图切换统一用 Segmented) */}
+        <div className="px-3 pb-1 pt-3">
+          <Segmented
+            fill
+            size="sm"
+            value={listMode}
+            options={LIST_MODES}
+            onChange={setListMode}
+            ariaLabel="会话列表视图"
+          />
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col">
           <ProjectList searchQuery={query} mode={listMode} />
           {/* 搜索模式提示: 全局拍平, 不按项目分组 (原 Sidebar 行为; 最近视图本就跨项目, 无需提示) */}
           {query.trim() !== "" && listMode === "projects" && (
-            <div className="px-4 py-1 text-mini leading-relaxed text-[var(--fg-4)]">
+            <div className="px-4 py-1 text-meta leading-relaxed text-fg-4">
               搜索中：会话不按项目分组
             </div>
           )}
         </div>
 
         {/* 会话数据库路径弱化为小字 (改版稿保留项) */}
-        <div className="flex shrink-0 items-center gap-1 border-t border-[var(--line)] px-4 py-2 text-micro text-[var(--fg-4)]">
+        <div className="flex h-10 shrink-0 items-center gap-2 border-t border-line px-4 text-meta text-fg-4">
           <Database className="h-3 w-3 shrink-0" />
           <span className="truncate" title="会话文件存放位置">
             ~/.pi/agent/sessions
@@ -143,7 +143,7 @@ export function SessionPane() {
       >
         <div
           className={`absolute inset-y-0 left-1/2 w-[3px] -translate-x-1/2 rounded-full transition-colors duration-fast ${
-            dragging ? "bg-[var(--accent)]" : "bg-transparent group-hover:bg-[var(--line-2)]"
+            dragging ? "bg-fg-3" : "bg-transparent group-hover:bg-line-2"
           }`}
         />
       </div>

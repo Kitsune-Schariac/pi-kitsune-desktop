@@ -327,7 +327,7 @@ export function PetWindow() {
             .then((list) => {
               setPets(list);
               const next = list.find((p) => p.id === e.payload.petId) ?? list[0] ?? null;
-              // 每次推配置 (换皮肤、缩放) 都会重拉列表: 内容没变就别换成新对象, 否则会重载图片、
+              // 每次推配置 (切日间/夜间、缩放) 都会重拉列表: 内容没变就别换成新对象, 否则会重载图片、
               // 重建大脑, 宠物正在干的事被打断。按内容比而不是按 id: 导入覆盖同 id 的包要能换上新素材
               setPet((cur) => (cur && next && JSON.stringify(cur) === JSON.stringify(next) ? cur : next));
             })

@@ -207,9 +207,9 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
   const fileCount = firstSkill === -1 ? candidates.length : firstSkill;
 
   return (
-    <div className="absolute bottom-full left-0 z-50 mb-1 w-[460px] rounded-lg border border-line bg-popover p-2 shadow-[var(--shadow)]">
+    <div className="popover absolute bottom-full left-0 z-50 mb-2 w-[460px] p-1 view-in-soft">
       <div className="flex items-center justify-between px-2 pb-1">
-        <span className="text-xs text-fg-4">引用文件或技能 · ↑↓ 选择, Enter 确认</span>
+        <span className="text-meta text-fg-4">引用文件或技能 · ↑↓ 选择, Enter 确认</span>
         <button
           onClick={onClose}
           className="rounded-sm p-1 text-fg-4 transition duration-fast ease-out hover:bg-hover hover:text-fg-2"
@@ -220,20 +220,20 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
       </div>
 
       {error && (
-        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-[color-mix(in_oklch,var(--err)_10%,transparent)] px-2 py-2 text-xs text-err">
+        <p className="mx-2 mb-1 flex items-center gap-1 rounded-md bg-[color-mix(in_srgb,var(--err)_10%,transparent)] px-2 py-2 text-meta text-err">
           <AlertCircle className="h-3 w-3 shrink-0" />
           {error}
         </p>
       )}
 
       {loading ? (
-        <div className="flex h-28 items-center justify-center gap-2 text-xs text-fg-4">
+        <div className="flex h-28 items-center justify-center gap-2 text-meta text-fg-4">
           <Loader2 className="h-4 w-4 animate-spin" /> {searching ? "搜索中…" : "扫描项目文件…"}
         </div>
       ) : (
         <div className="max-h-72 overflow-auto">
           {candidates.length === 0 ? (
-            <div className="flex h-28 items-center justify-center text-xs text-fg-4">
+            <div className="flex h-28 items-center justify-center text-meta text-fg-4">
               {!root ? "无项目可扫描, 请先在上方选择项目" : "没有匹配的文件或技能"}
             </div>
           ) : (
@@ -243,14 +243,14 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
               return (
                 <div key={c.path}>
                   {(i === 0 || i === firstSkill) && (
-                    <div className="px-2 pb-1 pt-2 text-xs font-medium text-fg-4">
+                    <div className="px-2 pb-1 pt-2 text-meta font-medium text-fg-4">
                       {isFile ? `文件 · ${fileCount}` : "技能"}
                     </div>
                   )}
                   <button
                     onClick={() => { setActive(i); pick(c); }}
                     onMouseEnter={() => setActive(i)}
-                    className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs transition duration-fast ease-out ${
+                    className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-meta transition duration-fast ease-out ${
                       sel ? "bg-accent-soft" : "hover:bg-hover"
                     }`}
                     title={c.path}
@@ -264,7 +264,7 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
                       <span className={`block truncate font-medium ${sel ? "text-fg" : "text-fg-2"}`}>
                         {c.title}
                       </span>
-                      <span className="block truncate text-xs text-fg-4">{c.sub}</span>
+                      <span className="block truncate text-meta text-fg-4">{c.sub}</span>
                     </span>
                   </button>
                 </div>

@@ -12,7 +12,6 @@ mod pets;
 mod provider_probe;
 mod session_fs;
 mod settings_config;
-mod skins;
 mod subagent_fleet;
 mod token_stats;
 mod trellis_tasks;
@@ -540,7 +539,6 @@ pub fn run() {
             attach::read_clipboard_attachments, attach::resolve_attachment_paths,
             token_stats::get_token_stats,
             behavior_stats::get_behavior_stats, behavior_stats::get_session_behavior,
-            skins::list_skins, skins::get_skin_asset, skins::open_skins_dir,
             pets::list_pets, pets::get_pet_asset, pets::open_pets_dir,
             pet_import::inspect_pet_import, pet_import::commit_pet_import, pet_import::discard_pet_import,
             open_pet_window, close_pet_window, focus_main_window,

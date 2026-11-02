@@ -212,10 +212,10 @@ const REHYPE_OPTIONS: Options["remarkRehypeOptions"] = {
 };
 
 // memo 保证流式更新时只有文本变化的条目重新解析, 其余条目跳过重渲染
-// 订阅 activeBase 仅用于在皮肤 base 变化时触发重渲染 (shiki 主题由 highlighter 模块自行维护),
+// 订阅 resolved 仅用于在日间/夜间切换时触发重渲染 (shiki 主题由 highlighter 模块自行维护),
 // 不再在渲染期间赋值任何主题可变量 —— 消除原 Markdown.tsx:81 的渲染期副作用
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
-  useThemeStore((s) => s.activeBase);
+  useThemeStore((s) => s.resolved);
   return (
     <div className="markdown-body">
       <ReactMarkdown

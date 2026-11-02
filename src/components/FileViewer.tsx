@@ -35,7 +35,7 @@ export function FileViewer() {
 
 function FileViewerDialog({ path, line }: { path: string; line: number | null }) {
   const close = useUiStore((s) => s.closeViewer);
-  const base = useThemeStore((s) => s.activeBase);
+  const base = useThemeStore((s) => s.resolved);
   const [file, setFile] = useState<TextFile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -59,7 +59,7 @@ function FileViewerDialog({ path, line }: { path: string; line: number | null })
     const lang = langFromFilename(path);
     if (!lang || lines.length > HL_MAX_LINES || text.length > HL_MAX_CHARS) return null;
     return highlightLines(text, lang);
-    // base 参与依赖: 切皮肤后按新主题重新取色 (highlighter 缓存 key 已含主题)
+    // base 参与依赖: 切日间/夜间后按新主题重新取色 (highlighter 缓存 key 已含主题)
   }, [path, text, lines.length, base]);
 
   // 内容就绪后滚到目标行; 行号越界时夹到最后一行
@@ -70,7 +70,7 @@ function FileViewerDialog({ path, line }: { path: string; line: number | null })
   }, [file, line, lines.length]);
 
   const iconBtn =
-    "grid h-7 w-7 shrink-0 place-items-center rounded-md text-[var(--fg-3)] transition-colors duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]";
+    "grid h-7 w-7 shrink-0 place-items-center rounded-md text-fg-3 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg";
 
   return (
     <div
@@ -84,12 +84,12 @@ function FileViewerDialog({ path, line }: { path: string; line: number | null })
         role="dialog"
         aria-modal="true"
         aria-label={name}
-        className="view-in-soft flex h-[min(85vh,900px)] w-[min(1100px,100%)] flex-col overflow-hidden rounded-lg border border-[var(--line-2)] bg-[var(--popover)] shadow-[var(--shadow)]"
+        className="view-in-soft flex h-[min(85vh,900px)] w-[min(1100px,100%)] flex-col overflow-hidden rounded-xl border border-line bg-popover shadow-lg"
       >
-        <div className="flex shrink-0 items-start gap-2 border-b border-[var(--line)] py-3 pl-5 pr-3">
+        <div className="flex shrink-0 items-start gap-2 border-b border-line py-3 pl-5 pr-3">
           <div className="min-w-0 flex-1">
-            <div className="truncate text-title font-semibold text-[var(--fg)]">{name}</div>
-            <div className="mt-1 truncate font-mono text-mini text-[var(--fg-4)]" title={path}>
+            <div className="truncate text-lead font-semibold text-fg">{name}</div>
+            <div className="mt-1 truncate font-mono text-meta text-fg-4" title={path}>
               {path}
             </div>
           </div>
@@ -107,7 +107,7 @@ function FileViewerDialog({ path, line }: { path: string; line: number | null })
 
         {/* 四态: 错误 / 加载 / 空文件 / 内容 */}
         {error ? (
-          <div className="grid flex-1 place-content-center justify-items-center gap-2 text-label text-[var(--err)]">
+          <div className="grid flex-1 place-content-center justify-items-center gap-2 text-label text-err">
             <AlertCircle className="h-4 w-4" />
             {error}
           </div>
@@ -116,7 +116,7 @@ function FileViewerDialog({ path, line }: { path: string; line: number | null })
             <Loader2 className="h-4 w-4 animate-spin text-accent" />
           </div>
         ) : file.content === "" ? (
-          <div className="grid flex-1 place-items-center text-label text-[var(--fg-4)]">空文件</div>
+          <div className="grid flex-1 place-items-center text-label text-fg-4">空文件</div>
         ) : (
           <div ref={scrollRef} className="fv-scroll min-h-0 flex-1 overflow-auto">
             <div className="fv-code">
@@ -135,13 +135,13 @@ function FileViewerDialog({ path, line }: { path: string; line: number | null })
         )}
 
         {file && (
-          <div className="flex shrink-0 items-center gap-2 border-t border-[var(--line)] px-5 py-2 text-mini tabular-nums text-[var(--fg-4)]">
+          <div className="flex shrink-0 items-center gap-2 border-t border-line px-5 py-2 text-meta tabular-nums text-fg-4">
             <span>{lines.length.toLocaleString()} 行</span>
             <span>·</span>
             <span>{formatSize(file.size)}</span>
             <span>·</span>
             <span>{file.encoding}</span>
-            {file.truncated && <span className="text-[var(--warn)]">· 文件过大, 仅显示前 1 MB</span>}
+            {file.truncated && <span className="text-warn">· 文件过大, 仅显示前 1 MB</span>}
             {!html && (lines.length > HL_MAX_LINES || text.length > HL_MAX_CHARS) && (
               <span>· 文件较大, 未做语法高亮</span>
             )}

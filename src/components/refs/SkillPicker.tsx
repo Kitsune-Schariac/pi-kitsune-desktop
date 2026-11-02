@@ -43,17 +43,17 @@ export function SkillPicker({ onPick, onDone }: {
     onDone();
   };
 
-  if (error) return <p className="flex items-center gap-1 p-4 text-xs text-err"><AlertCircle className="h-4 w-4" />{error}</p>;
+  if (error) return <p className="flex items-center gap-1 p-4 text-meta text-err"><AlertCircle className="h-4 w-4" />{error}</p>;
 
   return (
     <div className="flex h-72 flex-col">
-      <div className="flex-1 overflow-auto rounded-md border border-line bg-popover p-2">
+      <div className="flex-1 overflow-auto rounded-md border border-line bg-card p-1">
         {!skills ? (
-          <div className="flex h-full items-center justify-center gap-2 text-xs text-fg-4">
+          <div className="flex h-full items-center justify-center gap-2 text-meta text-fg-4">
             <Loader2 className="h-4 w-4 animate-spin" /> 加载中…
           </div>
         ) : skills.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-xs text-fg-4">
+          <div className="flex h-full items-center justify-center text-meta text-fg-4">
             未发现已安装的 skill
           </div>
         ) : (
@@ -63,7 +63,7 @@ export function SkillPicker({ onPick, onDone }: {
               <button
                 key={s.path}
                 onClick={() => toggle(s.path)}
-                className={`mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition duration-fast ease-out ${
+                className={`mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-meta transition duration-fast ease-out ${
                   sel ? "bg-accent-soft text-accent" : "text-fg-2 hover:bg-hover"
                 }`}
                 title={s.description}
@@ -80,11 +80,11 @@ export function SkillPicker({ onPick, onDone }: {
         )}
       </div>
       <div className="mt-2 flex items-center justify-between">
-        <span className="text-xs text-fg-4">已选 {selected.size} 个技能</span>
+        <span className="text-meta text-fg-4">已选 {selected.size} 个技能</span>
         <button
           onClick={confirm}
           disabled={selected.size === 0}
-          className="rounded-md bg-accent px-3 py-2 text-xs text-on-accent transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--accent)_88%,black)] disabled:opacity-40"
+          className="rounded-md bg-accent px-3 py-2 text-meta text-on-accent transition duration-fast ease-out hover:bg-[color-mix(in_srgb,var(--accent)_88%,black)] disabled:opacity-40"
         >
           添加引用
         </button>

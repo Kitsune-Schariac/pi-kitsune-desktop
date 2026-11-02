@@ -154,11 +154,11 @@ export function ModelsPanel() {
   );
 
   return (
-    <div ref={rootRef} className="relative flex h-full min-h-0 flex-col bg-[var(--bg)]">
-      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] pl-6 pr-4">
+    <div ref={rootRef} className="relative flex h-full min-h-0 flex-col bg-bg">
+      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-line pl-6 pr-4">
         <div className="flex min-w-0 items-center gap-2">
-          <FileJson className="h-4 w-4 shrink-0 text-[var(--fg-4)]" />
-          <span className="truncate font-mono text-label text-[var(--fg-3)]" title={path || undefined}>
+          <FileJson className="h-4 w-4 shrink-0 text-fg-4" />
+          <span className="truncate font-mono text-label text-fg-3" title={path || undefined}>
             {path || "~/.pi/agent/models.json"}
           </span>
           {parseError ? (
@@ -200,7 +200,7 @@ export function ModelsPanel() {
       </header>
 
       {saveError && (
-        <div className="flex shrink-0 items-start gap-2 border-b border-[var(--line)] bg-[var(--well)] px-6 py-2 text-label text-[var(--err)]">
+        <div className="flex shrink-0 items-start gap-2 border-b border-line bg-well px-6 py-2 text-label text-err">
           <CircleAlert className="mt-[2px] h-4 w-4 shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="break-all">{saveError}</p>
@@ -217,7 +217,7 @@ export function ModelsPanel() {
       {loaded && <DefaultsBar />}
 
       {loading && !loaded ? (
-        <div className="flex flex-1 items-center justify-center gap-2 text-label text-[var(--fg-3)]">
+        <div className="flex flex-1 items-center justify-center gap-2 text-label text-fg-3">
           <LoaderCircle className="h-4 w-4 animate-spin" />
           正在读取配置…
         </div>
@@ -226,26 +226,26 @@ export function ModelsPanel() {
         // 绝不能以空配置覆盖用户的坏文件 —— 那份文件里可能有 GUI 看不懂但 pi 认的配置。
         <div className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-2xl">
-            <div className="flex items-start gap-2 rounded-lg border border-[var(--err)] bg-[var(--raise)] p-4">
-              <CircleAlert className="mt-[2px] h-4 w-4 shrink-0 text-[var(--err)]" />
+            <div className="flex items-start gap-2 rounded-lg border border-err bg-card p-4">
+              <CircleAlert className="mt-[2px] h-4 w-4 shrink-0 text-err" />
               <div className="min-w-0 space-y-2">
-                <p className="text-body font-semibold text-[var(--err)]">models.json 无法解析, 已禁用全部编辑</p>
-                <p className="break-all font-mono text-label text-[var(--err)]">{parseError}</p>
-                <p className="text-label leading-relaxed text-[var(--fg-3)]">
+                <p className="text-body font-semibold text-err">models.json 无法解析, 已禁用全部编辑</p>
+                <p className="break-all font-mono text-label text-err">{parseError}</p>
+                <p className="text-label leading-relaxed text-fg-3">
                   请在外部编辑器修复后点击「重新加载」。为保护你的配置, 此状态下不会覆盖原文件。
                 </p>
               </div>
             </div>
-            <p className="mt-3 break-all font-mono text-label text-[var(--fg-3)]">{path}</p>
+            <p className="mt-3 break-all font-mono text-label text-fg-3">{path}</p>
           </div>
         </div>
       ) : !doc ? (
         loaded && (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-            <FileJson className="h-8 w-8 text-[var(--fg-4)]" />
+            <FileJson className="h-8 w-8 text-fg-4" />
             <div>
-              <p className="text-body text-[var(--fg-2)]">尚未创建 models.json</p>
-              <p className="mt-1 break-all font-mono text-label text-[var(--fg-3)]">{path}</p>
+              <p className="text-body text-fg-2">尚未创建 models.json</p>
+              <p className="mt-1 break-all font-mono text-label text-fg-3">{path}</p>
             </div>
             <Button variant="primary" onClick={createInitialDoc}>
               <Plus className="h-4 w-4" />
@@ -272,15 +272,15 @@ export function ModelsPanel() {
       {(undo || notice) && (
         <div
           role="status"
-          className="view-in-soft absolute bottom-7 left-1/2 z-[60] flex max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-3 rounded-lg border border-[var(--line-2)] bg-[var(--popover)] py-2 pl-4 pr-2 text-body text-[var(--fg)] shadow-[var(--shadow)]"
+          className="view-in-soft absolute bottom-7 left-1/2 z-[60] flex max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-3 rounded-lg border border-line-2 bg-popover py-2 pl-4 pr-2 text-body text-fg shadow-lg"
         >
           {undo ? (
             <>
-              <Info className="h-4 w-4 shrink-0 text-[var(--fg-3)]" />
+              <Info className="h-4 w-4 shrink-0 text-fg-3" />
               <span className="min-w-0 truncate">{undo.label}, 保存前都能撤销</span>
               <button
                 onClick={undoLast}
-                className="inline-flex shrink-0 items-center gap-1 text-label text-[var(--accent)] underline-offset-[3px] hover:underline"
+                className="inline-flex shrink-0 items-center gap-1 text-label text-accent underline-offset-[3px] hover:underline"
               >
                 <Undo2 className="h-3 w-3" />
                 撤销删除
@@ -288,7 +288,7 @@ export function ModelsPanel() {
             </>
           ) : (
             <>
-              <CircleCheck className="h-4 w-4 shrink-0 text-[var(--ok)]" />
+              <CircleCheck className="h-4 w-4 shrink-0 text-ok" />
               <span className="min-w-0 truncate" title={notice ?? undefined}>
                 {notice}
               </span>
@@ -297,7 +297,7 @@ export function ModelsPanel() {
           <button
             onClick={undo ? dismissUndo : dismissNotice}
             title="关闭"
-            className="grid h-6 w-6 shrink-0 place-items-center rounded-sm text-[var(--fg-3)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-sm text-fg-3 hover:bg-hover hover:text-fg"
           >
             <X className="h-[14px] w-[14px]" />
           </button>

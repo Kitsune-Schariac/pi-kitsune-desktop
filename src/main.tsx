@@ -3,12 +3,13 @@ import ReactDOM from "react-dom/client";
 import { listen } from "@tauri-apps/api/event";
 import App from "./App";
 import { useSessionStore } from "./store/session";
+import { useThemeStore } from "./store/theme";
+// 全局衬线字体 (Noto Serif SC 可变字重, 拉丁 + 中文同一套字形): 本地打包, 按 unicode-range 分片按需加载
+import "@fontsource-variable/noto-serif-sc";
 import "./index.css";
 
-// 主题属性由 theme.ts 的 init/applyTheme 写入; 这里先补默认方向 (与 DEFAULT_SKIN_ID=white 一致的亮色),
-// 避免皮肤列表异步返回前首帧没有任何 token / 方向属性
-const rootEl = document.documentElement;
-rootEl.dataset.base = "light";
+// 首帧就写好明暗 (store 构造时已读出持久化偏好), 避免先闪一帧白底
+document.documentElement.dataset.base = useThemeStore.getState().resolved;
 
 // 同一份 bundle 服务两个窗口, 按 query 分流。桌宠窗口由 Rust 侧
 // open_pet_window 以 index.html?window=pet 打开
