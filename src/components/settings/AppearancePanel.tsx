@@ -100,10 +100,10 @@ export function AppearancePanel() {
 
       <Section title="字体与字号" desc="全局统一，不随配色变化。">
         <Card>
-          <SettingRow title="正文与标题" desc="内置 Noto Serif SC 衬线体，中英文同一套字形，无需另行安装">
-            <span className="text-lead text-fg">永和九年 Aa</span>
+          <SettingRow title="界面与正文" desc="无衬线：英文与数字用内置 Inter（接近苹果 SF），中文用系统黑体（苹方 / 微软雅黑）">
+            <span className="text-lead text-fg">永和九年 Aa 123</span>
           </SettingRow>
-          <SettingRow title="代码与路径" desc="系统等宽字体 (Cascadia Mono / Consolas)">
+          <SettingRow title="代码与路径" desc="系统等宽字体 (SF Mono / Cascadia Mono / Consolas)">
             <span className="font-mono text-body text-fg-2">const pi = 3.14</span>
           </SettingRow>
           <SettingRow title="字号档位" desc="11 / 12 / 13 / 15 / 18 / 24 / 30，全站只用这七档">

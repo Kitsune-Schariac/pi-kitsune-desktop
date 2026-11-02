@@ -17,7 +17,8 @@
    设计系统 (唯一来源)
    - 配色只有两套: 日间 = 白, 夜间 = 黑。中性灰阶无色相, 强调色就是墨色 (日间黑 / 夜间白);
      语义色 (成功 / 错误 / 警告) 是界面里仅有的彩色。
-   - 字体: 全局一套衬线 (Noto Serif SC, 拉丁与中文同源字形), 代码与路径用等宽。
+   - 字体: 苹果式无衬线。拉丁用内置 Inter (字形接近 SF Pro), 中文走系统黑体
+     (macOS 苹方 / Windows 微软雅黑 UI); 代码与路径用等宽。字距随字号收紧, 与 SF 的字距表同向。
    - 字号 7 档 / 圆角 4 档 / 阴影 3 档 / 间距 4px 网格; 所有列头统一 --bar-h 高, 分隔线横向贯通。
    - 层级: 页面底 (--bg) → 侧栏 (--pane) → 卡片 (--card, 带阴影) → 浮层 (--popover, 大阴影)。
    ============================================================ */
@@ -30,9 +31,13 @@
   --fs-num: 24px;
   --fs-display: 30px;
 
-  --f-ui: "Noto Serif SC Variable", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", serif;
-  /* 等宽栈接回衬线: Cascadia/Consolas 没有中文字形, 不显式接会逐字回退到宋体 */
-  --f-mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, "JetBrains Mono", "Noto Serif SC Variable", monospace;
+  /* macOS 直接用系统字 (SF Pro + 苹方, 苹果原生观感); 其余平台拉丁落到内置 Inter,
+     中文按「苹方 → 鸿蒙黑体 / MiSans (若装了) → 微软雅黑 UI」依次回退 */
+  --f-ui: -apple-system, BlinkMacSystemFont, "Inter Variable", "Inter", "PingFang SC", "HarmonyOS Sans SC",
+    "MiSans", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  /* 等宽栈必须显式接中文黑体: Cascadia/Consolas 没有中文字形, 不接会逐字回退到宋体 */
+  --f-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, Menlo, "PingFang SC",
+    "Microsoft YaHei UI", monospace;
 
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-in: cubic-bezier(0.16, 1, 0.3, 1);
@@ -125,17 +130,18 @@ body {
 
 body {
   margin: 0;
-  font-family: var(--f-ui), "Symbols Nerd Font Mono", serif;
+  font-family: var(--f-ui), "Symbols Nerd Font Mono", sans-serif;
   /* 未显式套字号档的元素统一落 body 13px, 而不是浏览器默认 16px */
   font-size: var(--fs-body);
   line-height: 1.6;
   color: var(--fg);
-  font-feature-settings: "tnum" 1;
+  /* 不全局开 tnum: Inter 的 tnum 连连字符 / 冒号也改成等宽, 「pi-kitsune」会被拉开。
+     流式跳动的数字 (统计、计时、用量) 在组件上单独加 tabular-nums */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* 表单控件默认不继承字体, 显式拉回衬线 (否则按钮 / 输入框会落成系统黑体) */
+/* 表单控件默认不继承字体, 显式拉回界面字体栈 */
 button,
 input,
 select,
@@ -366,7 +372,7 @@ html:has([data-pet]) #root {
   border-radius: 20px;
   background: var(--bubble);
   font-size: var(--fs-lead);
-  line-height: 1.7;
+  line-height: 1.65;
   color: var(--fg);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -413,12 +419,12 @@ html:has([data-pet]) #root {
 
 .ai-reply {
   font-size: var(--fs-lead);
-  line-height: 1.8;
+  line-height: 1.75;
   color: var(--fg);
 }
 .ai-reply strong,
 .ai-reply b {
-  font-weight: 650;
+  font-weight: 600;
 }
 .ai-reply pre,
 .ai-reply code {
@@ -512,6 +518,7 @@ html:has([data-pet]) #root {
   color: var(--fg);
 }
 .think-len {
+  font-variant-numeric: tabular-nums;
   color: var(--fg-4);
 }
 .chev {
@@ -593,6 +600,7 @@ html:has([data-pet]) #root {
   color: var(--err);
 }
 .steps-dur {
+  font-variant-numeric: tabular-nums;
   flex: none;
   margin-left: auto;
   font-size: var(--fs-label);
@@ -851,8 +859,9 @@ html:has([data-pet]) #root {
 }
 .empty-greeting {
   font-size: var(--fs-display);
-  font-weight: 500;
-  line-height: 1.35;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.022em;
   color: var(--fg);
   text-align: center;
 }
@@ -1179,10 +1188,12 @@ html:has([data-pet]) #root {
   color: var(--fg-4);
 }
 .ov-cost {
+  font-variant-numeric: tabular-nums;
   margin-top: 4px;
   font-size: var(--fs-display);
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.15;
+  letter-spacing: -0.022em;
   color: var(--fg);
 }
 .ov-cost small {
@@ -1216,8 +1227,10 @@ html:has([data-pet]) #root {
   background: var(--card);
 }
 .ov-v {
+  font-variant-numeric: tabular-nums;
   font-size: var(--fs-head);
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: -0.012em;
   line-height: 1.3;
   color: var(--fg);
 }
@@ -1278,6 +1291,7 @@ html:has([data-pet]) #root {
   background: var(--fg-2);
 }
 .ov-bar-v {
+  font-variant-numeric: tabular-nums;
   text-align: right;
   color: var(--fg-3);
 }
@@ -1312,7 +1326,7 @@ html:has([data-pet]) #root {
    Markdown
    ============================================================ */
 .markdown-body {
-  line-height: 1.8;
+  line-height: 1.75;
   word-break: break-word;
   overflow-wrap: break-word;
 }
@@ -1329,7 +1343,7 @@ html:has([data-pet]) #root {
 .markdown-body h5,
 .markdown-body h6 {
   margin: 1.2em 0 0.5em;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.4;
   color: var(--fg);
 }

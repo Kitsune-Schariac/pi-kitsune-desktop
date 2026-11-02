@@ -4,8 +4,9 @@ import { listen } from "@tauri-apps/api/event";
 import App from "./App";
 import { useSessionStore } from "./store/session";
 import { useThemeStore } from "./store/theme";
-// 全局衬线字体 (Noto Serif SC 可变字重, 拉丁 + 中文同一套字形): 本地打包, 按 unicode-range 分片按需加载
-import "@fontsource-variable/noto-serif-sc";
+// 拉丁字形用内置 Inter (可变字重, 接近 SF Pro), 按 unicode-range 分片只加载用到的那片;
+// 中文不打包, 走系统黑体 (苹方 / 微软雅黑 UI), 见 index.css --f-ui
+import "@fontsource-variable/inter";
 import "./index.css";
 
 // 首帧就写好明暗 (store 构造时已读出持久化偏好), 避免先闪一帧白底

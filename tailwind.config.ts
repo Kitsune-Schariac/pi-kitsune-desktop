@@ -9,13 +9,14 @@ export default {
     // meta 元信息/角标 · label 标签/次要文字 · body 界面主力 (控件/列表) · lead 阅读正文/卡片标题 ·
     // head 页面与分区大标题 · num 统计数字 · display 空状态问候/花费
     fontSize: {
-      meta: ["11px", { lineHeight: "1.5" }],
-      label: ["12px", { lineHeight: "1.55" }],
-      body: ["13px", { lineHeight: "1.6" }],
-      lead: ["15px", { lineHeight: "1.75" }],
-      head: ["18px", { lineHeight: "1.4", letterSpacing: "-0.005em" }],
-      num: ["24px", { lineHeight: "1.2", letterSpacing: "-0.01em" }],
-      display: ["30px", { lineHeight: "1.25", letterSpacing: "-0.015em" }],
+      // 字距随字号变化 (与 SF Pro 的字距表同向): 小字略放开保清晰, 大字收紧显精致
+      meta: ["11px", { lineHeight: "1.5", letterSpacing: "0.01em" }],
+      label: ["12px", { lineHeight: "1.5", letterSpacing: "0.005em" }],
+      body: ["13px", { lineHeight: "1.55", letterSpacing: "0" }],
+      lead: ["15px", { lineHeight: "1.65", letterSpacing: "-0.006em" }],
+      head: ["18px", { lineHeight: "1.4", letterSpacing: "-0.012em" }],
+      num: ["24px", { lineHeight: "1.2", letterSpacing: "-0.02em" }],
+      display: ["30px", { lineHeight: "1.2", letterSpacing: "-0.022em" }],
     },
     // 间距阶: 4px 网格整档 (覆盖掉 Tailwind 默认的 .5 半档)
     spacing: {
@@ -50,10 +51,9 @@ export default {
       80: "320px",
       96: "384px",
     },
-    // 字体: 全局衬线 (sans 也指向衬线栈, 存量 font-sans class 不会意外切回黑体), 代码用等宽
+    // 字体只有两套: 界面无衬线 (苹果式) / 代码等宽, 值在 index.css 的 --f-ui / --f-mono
     fontFamily: {
       sans: ["var(--f-ui)"],
-      serif: ["var(--f-ui)"],
       mono: ["var(--f-mono)"],
     },
     // 圆角: 控件 10 / 卡片 16 / 大卡与弹窗 20 / 输入卡 24; 嵌套时内圆角 = 外圆角 − 内边距

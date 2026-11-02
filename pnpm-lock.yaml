@@ -8,9 +8,9 @@ importers:
 
   .:
     dependencies:
-      '@fontsource-variable/noto-serif-sc':
-        specifier: 5.3.1
-        version: 5.3.1
+      '@fontsource-variable/inter':
+        specifier: 5.3.0
+        version: 5.3.0
       '@tauri-apps/api':
         specifier: ^2.0.0
         version: 2.11.1
@@ -318,8 +318,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@fontsource-variable/noto-serif-sc@5.3.1':
-    resolution: {integrity: sha512-aIHcBaL13QctVaJFeT6wqfgO9Rq/cNtD5g2ob4ze59fYPYwacGthnIrHBe83kDpMEB/k6VGtGc6fS99RImcoSQ==}
+  '@fontsource-variable/inter@5.3.0':
+    resolution: {integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -1614,7 +1614,7 @@ snapshots:
   '@esbuild/win32-x64@0.25.12':
     optional: true
 
-  '@fontsource-variable/noto-serif-sc@5.3.1': {}
+  '@fontsource-variable/inter@5.3.0': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:

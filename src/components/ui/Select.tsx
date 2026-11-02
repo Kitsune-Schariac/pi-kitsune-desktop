@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 
-// 下拉原语: 自绘触发钮 + 浮层菜单 (不再用原生 <select>, 弹出列表也走卡片 + 阴影 + 衬线)。
+// 下拉原语: 自绘触发钮 + 浮层菜单 (不再用原生 <select>, 弹出列表也走卡片 + 阴影, 字体与界面一致)。
 // 菜单挂到 body (fixed 定位), 不会被设置页各栏的 overflow 裁掉; 滚动 / 缩放窗口即收起。
 // 键盘: 触发钮上 ↓ / Enter / 空格展开; 菜单里 ↑↓ 移动、Enter 选中、Esc / Tab 收起。
 

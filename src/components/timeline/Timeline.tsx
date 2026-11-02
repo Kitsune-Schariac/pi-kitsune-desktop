@@ -114,7 +114,7 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
     });
   }, [entries, activeSessionId]);
 
-  // 内容在条目不变的情况下也会长高: 衬线字体按需加载完成后换字重排、Shiki 异步高亮替换代码块、
+  // 内容在条目不变的情况下也会长高: 网页字体按需加载完成后换字重排、Shiki 异步高亮替换代码块、
   // 图片解码。跟随中 (在底部) 时随之贴底, 否则打开历史会话会停在离底部一截的位置, 最后一段压在输入卡下
   const colRef = useRef<HTMLDivElement>(null);
   const hasEntries = entries.length > 0;
