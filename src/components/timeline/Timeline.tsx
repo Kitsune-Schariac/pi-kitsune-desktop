@@ -6,11 +6,11 @@ import { buildTimeline } from "../../lib/timeline";
 import { TurnView } from "./TurnView";
 
 /**
- * 时间线 (框架 C 第三列主区): entries → 轮 → prompt / reply / steps / notice。
+ * 会话区 (对话形式, 主区): entries → 轮 → 用户气泡 + AI 块 (回复 / 步骤卡片 / 通知)。
  * 滚动与自动跟随: 距底 < 80px 视为跟随中, 用户上滑即暂停; 只有「用户自己发的消息」
  * 和「切会话」会重新打开跟随 (流式期间的工具/回复/通知条目一律不抢跟随权, 否则上翻会被拽回底部)。
- * 「在时间线定位」订阅 ui.locateStepSeq: 目标步骤行滚到视口中央并闪烁。
- * 「回到最新」按钮: 上滑离开底部时浮在文字列右下方, 点击恢复跟随; 期间有新条目时带一个 accent 小点。
+ * 「在会话中定位」订阅 ui.locateStepSeq: 目标步骤行滚到视口中央并闪烁。
+ * 「回到最新」按钮: 上滑离开底部时浮在输入卡上方居中, 点击恢复跟随; 期间有新条目时带一个小点。
  */
 export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
   const entries = useSessionStore((s) => {
@@ -114,6 +114,31 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
     });
   }, [entries, activeSessionId]);
 
+  // 内容在条目不变的情况下也会长高: 网页字体按需加载完成后换字重排、Shiki 异步高亮替换代码块、
+  // 图片解码。跟随中 (在底部) 时随之贴底, 否则打开历史会话会停在离底部一截的位置, 最后一段压在输入卡下
+  const colRef = useRef<HTMLDivElement>(null);
+  const hasEntries = entries.length > 0;
+  useEffect(() => {
+    const col = colRef.current;
+    const el = containerRef.current;
+    if (!col || !el) return;
+    const ro = new ResizeObserver(() => {
+      if (!autoScrollRef.current || smoothJumpRef.current) return;
+      followingRef.current = true;
+      el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(col);
+    return () => ro.disconnect();
+  }, [hasEntries]);
+
+  // 输入卡长高 (统计行 / 排队条出现、多行输入) 会加大底部留白: 跟随中同样补一次贴底
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !autoScrollRef.current || smoothJumpRef.current) return;
+    followingRef.current = true;
+    el.scrollTop = el.scrollHeight;
+  }, [inputBarH]);
+
   const flashTimerRef = useRef<number | null>(null);
   // 「在时间线定位」: 信号递增 → 找选中步骤行 → 滚到中央 + 闪烁。
   // 选中 id 从 getState 读: 选中本身不该触发滚动, 只有显式定位信号才滚
@@ -134,11 +159,11 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
       }
       el.scrollIntoView({ block: "center", behavior: "smooth" });
       // 强制重开闪烁动画: 移除 class → 读 offsetWidth 触发 reflow → 再加回
-      el.classList.remove("tl-flash");
+      el.classList.remove("chat-flash");
       void el.offsetWidth;
-      el.classList.add("tl-flash");
+      el.classList.add("chat-flash");
       if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
-      flashTimerRef.current = window.setTimeout(() => el.classList.remove("tl-flash"), 1400);
+      flashTimerRef.current = window.setTimeout(() => el.classList.remove("chat-flash"), 1400);
     };
     raf = requestAnimationFrame(tryScroll);
     return () => {
@@ -159,15 +184,15 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
         ref={containerRef}
         onScroll={handleScroll}
         // overflow-x-hidden 兜底: 任何子元素意外撑宽都不能让时间线横向滚动 (定位时 scrollIntoView 会连带横滚把正文切掉)
-        className="tl-scroll h-full overflow-y-auto overflow-x-hidden"
+        className="chat-scroll h-full overflow-y-auto overflow-x-hidden"
         // 底部 padding = 输入卡高 + bottom-4(16px) + 间隔 24px: 滚动到底消息停在卡片上方间隔处,
         // 滚动过程中消息可平滑滑入卡片后方, 不会被提前截断
         style={{ paddingBottom: inputBarH + 40 }}
       >
         {entries.length === 0 ? (
-          <div className="py-20 text-center text-label text-[var(--fg-4)]">输入消息开始对话</div>
+          <div className="py-20 text-center text-body text-fg-4">输入消息开始对话</div>
         ) : (
-          <div className="tl-timeline">
+          <div ref={colRef} className="chat-col">
             {turns.map((turn, i) => (
               <TurnView
                 key={turn.id}
@@ -184,18 +209,18 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
         )}
       </div>
       {showJump && (
-        // 水平居中于滚动区 (与输入卡同一中线基准). 底部偏移 = 卡高 + composer-wrap 底 padding 18
-        // + 16 间距 —— inputBarH 只有卡本身高度, 不加 18 按钮会压在输入卡上
-        <div className="tl-jump-layer" style={{ bottom: inputBarH + 34 }}>
+        // 水平居中于滚动区 (与输入卡同一中线基准). 底部偏移 = 卡高 + composer-wrap 底 padding 20
+        // + 16 间距 —— inputBarH 只有卡本身高度, 不加 20 按钮会压在输入卡上
+        <div className="chat-jump-layer" style={{ bottom: inputBarH + 36 }}>
           <button
             type="button"
             onClick={jumpToBottom}
             aria-label="回到最新消息"
             title="回到最新消息"
-            className="tl-jump view-in-soft"
+            className="chat-jump view-in-soft"
           >
             <ArrowDown size={15} strokeWidth={2} />
-            {hasNew && <span className="tl-jump-dot" />}
+            {hasNew && <span className="chat-jump-dot" />}
           </button>
         </div>
       )}

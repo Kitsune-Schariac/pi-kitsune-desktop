@@ -32,7 +32,7 @@ import {
   type ProbeState,
 } from "../../../store/modelsConfig";
 import { formatTokenShort } from "../../../lib/tokenCount";
-import { Button, Input, Segmented, Select } from "../../ui";
+import { Button, Checkbox, Input, Segmented, Select } from "../../ui";
 import { FetchModelsDialog } from "./dialogs";
 import { API_MAIN, API_MORE, Badge, FieldError, IconButton, LINK, hostOf, probeHint, useEscapeLayer } from "./shared";
 
@@ -46,10 +46,10 @@ function keyKindOf(v: string): KeyKind {
 }
 const KEY_KIND_TEXT: Record<KeyKind, string> = { env: "环境变量引用", cmd: "命令取值", raw: "明文密钥", none: "未设置" };
 const KEY_KIND_TONE: Record<KeyKind, string> = {
-  env: "text-[var(--accent)]",
-  cmd: "text-[var(--accent)]",
-  raw: "text-[var(--fg-4)]",
-  none: "text-[var(--warn)]",
+  env: "text-accent",
+  cmd: "text-accent",
+  raw: "text-fg-4",
+  none: "text-warn",
 };
 
 const API_MAIN_VALUES: readonly string[] = API_MAIN.map((o) => o.value);
@@ -112,7 +112,7 @@ export function ProviderPane({
 
   if (!pid || !doc) {
     return (
-      <section className="grid min-h-0 min-w-0 place-content-center justify-items-center gap-3 border-r border-[var(--line)] p-6 text-label text-[var(--fg-3)]">
+      <section className="grid min-h-0 min-w-0 place-content-center justify-items-center gap-3 border-r border-line p-6 text-label text-fg-3">
         在左边选一个供应商
       </section>
     );
@@ -161,9 +161,9 @@ export function ProviderPane({
   };
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-col border-r border-[var(--line)]">
-      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--line)] py-3 pl-4 pr-3">
-        <span className="min-w-0 flex-1 truncate text-title font-semibold text-[var(--fg)]" title={pid}>
+    <section className="flex min-h-0 min-w-0 flex-col border-r border-line">
+      <div className="flex shrink-0 items-center gap-2 border-b border-line py-3 pl-4 pr-3">
+        <span className="min-w-0 flex-1 truncate text-lead font-semibold text-fg" title={pid}>
           {pid}
         </span>
         <IconButton
@@ -182,7 +182,7 @@ export function ProviderPane({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {!isObj(raw) && (
-          <p className="flex items-start gap-2 border-b border-[var(--line)] px-4 py-3 text-mini text-[var(--err)]">
+          <p className="flex items-start gap-2 border-b border-line px-4 py-3 text-meta text-err">
             <CircleAlert className="mt-[2px] h-3 w-3 shrink-0" />
             这个供应商的配置不是对象, pi 无法加载。删除后重新新增, 或在外部编辑器里修正。
           </p>
@@ -191,8 +191,8 @@ export function ProviderPane({
         {/* 连接 */}
         {/* 连接: 默认展开, 但要给模型列表留出首屏 —— 标签放左列、密钥类型标进输入框、
             「其他…」挪到标签行, 展开态比上下排版矮约 120px (1200×800 下仍能看到前几行模型) */}
-        <div className="flex flex-col gap-2 border-b border-[var(--line)] px-4 pb-4 pt-3">
-          <div className="flex items-center justify-between text-label text-[var(--fg-3)]">
+        <div className="flex flex-col gap-2 border-b border-line px-4 pb-4 pt-3">
+          <div className="flex items-center justify-between text-label text-fg-3">
             <span>连接</span>
             <button className={LINK} onClick={() => setConnOpen((v) => !v)}>
               {connOpen ? "收起" : "编辑"}
@@ -202,7 +202,7 @@ export function ProviderPane({
           {connOpen ? (
             <>
               <div className={FIELD_ROW}>
-                <span className="text-label text-[var(--fg-3)]">ID</span>
+                <span className="text-label text-fg-3">ID</span>
                 <Input
                   ref={idInputRef}
                   className="font-mono"
@@ -223,25 +223,25 @@ export function ProviderPane({
                 )}
               </div>
               <div className={FIELD_ROW}>
-                <span className="text-label text-[var(--fg-3)]" title="baseUrl">
+                <span className="text-label text-fg-3" title="baseUrl">
                   地址
                 </span>
                 <Input
                   title="baseUrl"
-                  className={`font-mono ${urlBad ? "!border-[var(--err)]" : ""}`}
+                  className={`font-mono ${urlBad ? "!border-err" : ""}`}
                   value={baseUrl}
                   placeholder="https://api.example.com/v1"
                   onChange={(e) => setProviderField(pid, "baseUrl", e.target.value)}
                 />
                 {urlWarn && (
-                  <span className="col-start-2 flex items-start gap-2 text-mini text-[var(--warn)]">
+                  <span className="col-start-2 flex items-start gap-2 text-meta text-warn">
                     <TriangleAlert className="mt-[2px] h-3 w-3 shrink-0" />
                     {urlWarn}
                   </span>
                 )}
               </div>
               <div className={FIELD_ROW}>
-                <span className="text-label text-[var(--fg-3)]" title="apiKey">
+                <span className="text-label text-fg-3" title="apiKey">
                   密钥
                 </span>
                 <div className="relative">
@@ -259,14 +259,14 @@ export function ProviderPane({
                     <button
                       onClick={() => setShowKey((v) => !v)}
                       title={showKey ? "隐藏明文密钥" : "显示明文密钥"}
-                      className="absolute right-1 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-sm text-[var(--fg-3)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+                      className="absolute right-1 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-sm text-fg-3 hover:bg-hover hover:text-fg"
                     >
                       {showKey ? <EyeOff className="h-[14px] w-[14px]" /> : <Eye className="h-[14px] w-[14px]" />}
                     </button>
                   ) : (
                     kind !== "none" && (
                       <span
-                        className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-mini ${KEY_KIND_TONE[kind]}`}
+                        className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-meta ${KEY_KIND_TONE[kind]}`}
                       >
                         {KEY_KIND_TEXT[kind]}
                       </span>
@@ -275,65 +275,64 @@ export function ProviderPane({
                 </div>
               </div>
               <div className="flex flex-col gap-1">
-                <span className="flex min-w-0 items-center gap-2 text-label text-[var(--fg-3)]">
+                <span className="flex min-w-0 items-center gap-2 text-label text-fg-3">
                   <span className="shrink-0">接口类型</span>
-                  <span className="truncate font-mono text-mini text-[var(--fg-4)]">{apiVal || "未设置"}</span>
+                  <span className="truncate font-mono text-meta text-fg-4">{apiVal || "未设置"}</span>
                   <Select
                     density="sm"
                     title="其他接口类型"
-                    className="ml-auto max-w-[140px]"
+                    className="ml-auto max-w-[160px]"
                     value={apiInMain ? "" : apiVal}
-                    onChange={(e) => {
-                      if (e.target.value) setProviderField(pid, "api", e.target.value);
+                    placeholder="其他…"
+                    onChange={(v) => {
+                      if (v) setProviderField(pid, "api", v);
                     }}
-                  >
-                    <option value="">其他…</option>
-                    {API_MORE.map((v) => (
-                      <option key={v} value={v}>
-                        {v}
-                      </option>
-                    ))}
-                    {/* 手写的非法取值也要能看见 (后端保存时会拒), 不能被下拉静默吞成「其他…」 */}
-                    {apiVal && !apiInMain && !API_MORE_VALUES.includes(apiVal) && (
-                      <option value={apiVal}>{apiVal} (非法)</option>
-                    )}
-                  </Select>
+                    options={[
+                      { value: "", label: "其他…" },
+                      ...API_MORE.map((v) => ({ value: v, label: v })),
+                      // 手写的非法取值也要能看见 (后端保存时会拒), 不能被下拉静默吞成「其他…」
+                      ...(apiVal && !apiInMain && !API_MORE_VALUES.includes(apiVal)
+                        ? [{ value: apiVal, label: `${apiVal} (非法)` }]
+                        : []),
+                    ]}
+                  />
                 </span>
                 <Segmented
+                  size="sm"
+                  fill
                   value={apiInMain ? apiVal : null}
                   options={API_MAIN}
                   onChange={(v) => setProviderField(pid, "api", v)}
-                  className="self-start"
                 />
               </div>
             </>
           ) : (
-            <div className="grid grid-cols-[32px_minmax(0,1fr)] items-center gap-x-2 gap-y-1 rounded-md bg-[var(--well)] px-3 py-2 text-label shadow-[inset_0_0_0_1px_var(--line)]">
-              <span className="text-mini text-[var(--fg-4)]">地址</span>
+            <div className="grid grid-cols-[32px_minmax(0,1fr)] items-center gap-x-2 gap-y-1 rounded-md bg-fg/[0.045] px-3 py-2 text-label">
+              <span className="text-meta text-fg-4">地址</span>
               <span className="flex min-w-0 items-center gap-2">
                 <span
-                  className={`truncate font-mono ${urlBad ? "text-[var(--err)]" : "text-[var(--fg-2)]"}`}
+                  className={`truncate font-mono ${urlBad ? "text-err" : "text-fg-2"}`}
                   title={baseUrl}
                 >
                   {baseUrl.replace(/^https?:\/\//, "") || "未设置"}
                 </span>
                 {urlWarn && (
                   <span title={urlWarn}>
-                    <TriangleAlert className="h-3 w-3 shrink-0 text-[var(--warn)]" />
+                    <TriangleAlert className="h-3 w-3 shrink-0 text-warn" />
                   </span>
                 )}
               </span>
-              <span className="text-mini text-[var(--fg-4)]">密钥</span>
+              <span className="text-meta text-fg-4">密钥</span>
               <span className="flex min-w-0 items-center gap-2">
-                <span className="truncate font-mono text-[var(--fg-2)]">
+                <span className="truncate font-mono text-fg-2">
                   {kind === "raw" ? "••••••••••••" : apiKey || "未设置"}
                 </span>
-                <span className={`ml-auto shrink-0 text-mini ${KEY_KIND_TONE[kind]}`}>
+                <span className={`ml-auto shrink-0 text-meta ${KEY_KIND_TONE[kind]}`}>
                   {kind === "none" ? "" : KEY_KIND_TEXT[kind]}
                 </span>
               </span>
-              <span className="text-mini text-[var(--fg-4)]">接口</span>
-              <span className="truncate text-[var(--fg-2)]" title={apiVal}>
+              <span className="text-meta text-fg-4">接口</span>
+              <span className="truncate text-fg-2" title={apiVal}>
                 {API_MAIN.find((o) => o.value === apiVal)?.label ?? (apiVal || "未设置")}
               </span>
             </div>
@@ -359,14 +358,14 @@ export function ProviderPane({
         </div>
 
         {/* 模型 */}
-        <div className="flex flex-col gap-3 border-b border-[var(--line)] px-4 pb-4 pt-3">
-          <div className="flex items-center justify-between text-label text-[var(--fg-3)]">
+        <div className="flex flex-col gap-3 border-b border-line px-4 pb-4 pt-3">
+          <div className="flex items-center justify-between text-label text-fg-3">
             <span>
-              模型<span className="ml-1 font-mono text-[var(--fg-4)]">{objModels.length}</span>
+              模型<span className="ml-1 font-mono text-fg-4">{objModels.length}</span>
             </span>
             <button
               onClick={() => onAddingChange(true)}
-              className="inline-flex h-6 items-center gap-1 rounded-md px-2 text-label text-[var(--fg-3)] transition-colors duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+              className="inline-flex h-6 items-center gap-1 rounded-md px-2 text-label text-fg-3 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
             >
               <Plus className="h-[14px] w-[14px]" />
               新增
@@ -387,22 +386,22 @@ export function ProviderPane({
                   onClick={() => openModel(mid)}
                   className={`flex flex-col gap-[2px] rounded-md p-2 text-left transition-colors duration-fast ease-out ${
                     on
-                      ? "bg-[var(--accent-soft)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--accent)_45%,transparent)]"
-                      : "hover:bg-[var(--hover)]"
+                      ? "bg-accent-soft shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_45%,transparent)]"
+                      : "hover:bg-hover"
                   }`}
                 >
                   <span className="flex min-w-0 items-center gap-2">
-                    <span className={`truncate font-mono text-label text-[var(--fg)] ${on ? "font-semibold" : ""}`}>
+                    <span className={`truncate font-mono text-label text-fg ${on ? "font-semibold" : ""}`}>
                       {mid}
                     </span>
                     {defaults?.provider === pid && defaults.model === mid && (
-                      <Star className="h-3 w-3 shrink-0 text-[var(--accent)]" aria-label="新会话默认" />
+                      <Star className="h-3 w-3 shrink-0 text-accent" aria-label="新会话默认" />
                     )}
                     {isModelChanged(docBase, pid, m) && (
-                      <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-[var(--warn)]" title="有未保存的改动" />
+                      <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-warn" title="有未保存的改动" />
                     )}
                   </span>
-                  <span className="flex min-w-0 items-center gap-2 text-mini text-[var(--fg-4)]">
+                  <span className="flex min-w-0 items-center gap-2 text-meta text-fg-4">
                     <span className="truncate">{typeof m.name === "string" && m.name ? m.name : "未命名"}</span>
                     <span className="flex-1" />
                     {m.reasoning === true && (
@@ -421,7 +420,7 @@ export function ProviderPane({
               );
             })}
             {rawModels.length === 0 && !adding && (
-              <p className="px-3 py-6 text-center text-label text-[var(--fg-4)]">还没有模型。拉取远端列表最快。</p>
+              <p className="px-3 py-6 text-center text-label text-fg-4">还没有模型。拉取远端列表最快。</p>
             )}
           </div>
         </div>
@@ -430,11 +429,11 @@ export function ProviderPane({
         <div className="flex flex-col gap-3 px-4 pb-4 pt-3">
           <button
             onClick={() => setAdvOpen((v) => !v)}
-            className="flex items-center gap-2 text-left text-label text-[var(--fg-3)] transition-colors duration-fast ease-out hover:text-[var(--fg)]"
+            className="flex items-center gap-2 text-left text-label text-fg-3 transition-colors duration-fast ease-out hover:text-fg"
           >
             {advOpen ? <ChevronDown className="h-[14px] w-[14px]" /> : <ChevronRight className="h-[14px] w-[14px]" />}
             高级
-            <span className="truncate text-mini text-[var(--fg-4)]">鉴权头 · 请求头 · 供应商级兼容 · 内置模型覆盖</span>
+            <span className="truncate text-meta text-fg-4">鉴权头 · 请求头 · 供应商级兼容 · 内置模型覆盖</span>
           </button>
           {advOpen && (
             <>
@@ -474,14 +473,14 @@ export function ProviderPane({
 /** 测试结果行: 只在本次打开面板期间显示, 测的是编辑中的连接信息 */
 function TestLine({ state, have, onPick }: { state: ProbeState; have: string[]; onPick: () => void }) {
   const urlLine = (suffix = "") => (
-    <span className="mt-1 block break-all font-mono text-mini text-[var(--fg-4)]">
+    <span className="mt-1 block break-all font-mono text-meta text-fg-4">
       GET {state.status === "running" ? state.url : state.result.url}
       {suffix}
     </span>
   );
   if (state.status === "running") {
     return (
-      <div className="flex items-start gap-2 rounded-md bg-[var(--well)] px-3 py-2 text-label text-[var(--fg-3)]">
+      <div className="flex items-start gap-2 rounded-md bg-well px-3 py-2 text-label text-fg-3">
         <LoaderCircle className="mt-[2px] h-4 w-4 shrink-0 animate-spin" />
         <span className="min-w-0">
           正在请求
@@ -493,10 +492,10 @@ function TestLine({ state, have, onPick }: { state: ProbeState; have: string[]; 
   const r = state.result;
   if (!r.ok) {
     return (
-      <div className="flex items-start gap-2 rounded-md bg-[var(--well)] px-3 py-2 text-label leading-relaxed text-[var(--fg-2)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--err)_40%,transparent)]">
-        <CircleAlert className="mt-[2px] h-4 w-4 shrink-0 text-[var(--err)]" />
+      <div className="flex items-start gap-2 rounded-md bg-well px-3 py-2 text-label leading-relaxed text-fg-2 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--err)_40%,transparent)]">
+        <CircleAlert className="mt-[2px] h-4 w-4 shrink-0 text-err" />
         <span className="min-w-0">
-          <span className="block break-all font-semibold text-[var(--fg)]">{r.message ?? "连接失败"}</span>
+          <span className="block break-all font-semibold text-fg">{r.message ?? "连接失败"}</span>
           {probeHint(r)}
           {r.url && urlLine(r.status !== null ? ` · ${r.status}` : "")}
         </span>
@@ -509,9 +508,9 @@ function TestLine({ state, have, onPick }: { state: ProbeState; have: string[]; 
   return (
     <div
       title={`GET ${r.url} · ${r.status}`}
-      className="flex items-start gap-2 rounded-md bg-[var(--well)] px-3 py-2 text-label leading-relaxed text-[var(--fg-2)]"
+      className="flex items-start gap-2 rounded-md bg-well px-3 py-2 text-label leading-relaxed text-fg-2"
     >
-      <CircleCheck className="mt-[2px] h-4 w-4 shrink-0 text-[var(--ok)]" />
+      <CircleCheck className="mt-[2px] h-4 w-4 shrink-0 text-ok" />
       <span className="min-w-0">
         连接正常 · <span className="font-mono tabular-nums">{r.elapsed_ms} ms</span> · 远端 {r.models.length} 个模型
         <br />
@@ -520,9 +519,9 @@ function TestLine({ state, have, onPick }: { state: ProbeState; have: string[]; 
             其中 {fresh} 个还没添加, 去挑选
           </button>
         ) : (
-          <span className="text-[var(--fg-3)]">远端模型都已添加</span>
+          <span className="text-fg-3">远端模型都已添加</span>
         )}
-        {r.message && <span className="block text-mini text-[var(--warn)]">{r.message}</span>}
+        {r.message && <span className="block text-meta text-warn">{r.message}</span>}
       </span>
     </div>
   );
@@ -611,7 +610,7 @@ function AddModelBox({
   return (
     <div
       ref={boxRef}
-      className="-mx-2 flex scroll-my-3 flex-col gap-1 rounded-md bg-[var(--well)] p-2 shadow-[inset_0_0_0_1px_var(--line)]"
+      className="-mx-2 flex scroll-my-3 flex-col gap-1 rounded-md bg-fg/[0.045] p-2"
     >
       <Input
         autoFocus
@@ -630,7 +629,7 @@ function AddModelBox({
         <button
           disabled={exists}
           onClick={addBlank}
-          className="flex w-full min-w-0 items-center gap-2 rounded-[6px] px-2 py-1 text-left text-label hover:bg-[var(--hover)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+          className="flex w-full min-w-0 items-center gap-2 rounded-[8px] px-2 py-1 text-left text-label hover:bg-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
         >
           <Plus className="h-[14px] w-[14px] shrink-0" />
           <span className="min-w-0 flex-1 truncate">
@@ -643,14 +642,14 @@ function AddModelBox({
             )}
           </span>
           {!exists && (
-            <span className="rounded-sm border border-[var(--line-2)] px-1 font-mono text-micro text-[var(--fg-4)]">
+            <span className="rounded-sm border border-line-2 px-1 font-mono text-meta text-fg-4">
               Enter
             </span>
           )}
         </button>
       )}
       {suggestions.length > 0 && (
-        <div className="px-2 pt-1 text-mini text-[var(--fg-4)]">
+        <div className="px-2 pt-1 text-meta text-fg-4">
           {query ? "沿用其他供应商里的同名定义" : "其他供应商常用、这里还没有的"}
         </div>
       )}
@@ -658,11 +657,11 @@ function AddModelBox({
         <button
           key={`${s.pid}|${String(s.model.id)}`}
           onClick={() => addFrom(s)}
-          className="flex w-full min-w-0 items-center gap-2 rounded-[6px] px-2 py-1 text-left text-label hover:bg-[var(--hover)]"
+          className="flex w-full min-w-0 items-center gap-2 rounded-[8px] px-2 py-1 text-left text-label hover:bg-hover"
         >
-          <Copy className="h-[14px] w-[14px] shrink-0 text-[var(--fg-4)]" />
+          <Copy className="h-[14px] w-[14px] shrink-0 text-fg-4" />
           <span className="truncate font-mono">{String(s.model.id)}</span>
-          <span className="min-w-0 flex-1 truncate text-mini text-[var(--fg-3)]">
+          <span className="min-w-0 flex-1 truncate text-meta text-fg-3">
             {s.pid} · {formatTokenShort(s.model.contextWindow) || "—"}
             {s.model.reasoning === true ? " · 推理" : ""}
             {cost(s.model)}
@@ -690,9 +689,9 @@ function InvalidModelRow({ value, onDelete }: { value: unknown; onDelete: () => 
     preview = String(value);
   }
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-md p-2 shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--err)_40%,transparent)]">
+    <div className="flex min-w-0 items-center gap-2 rounded-md p-2 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--err)_40%,transparent)]">
       <Badge tone="err">非法项</Badge>
-      <span className="min-w-0 flex-1 truncate font-mono text-mini text-[var(--fg-3)]" title={preview}>
+      <span className="min-w-0 flex-1 truncate font-mono text-meta text-fg-3" title={preview}>
         {preview}
       </span>
       <IconButton title="删除这一项 (保存前可撤销)" danger onClick={onDelete}>
@@ -710,13 +709,13 @@ function AuthHeaderToggle({ value, onChange }: { value: unknown; onChange: (v: t
   const bad = value !== undefined && typeof value !== "boolean";
   return (
     <div className="flex flex-col gap-1">
-      <span className="flex items-center gap-2 text-label text-[var(--fg-3)]">
-        鉴权头<span className="font-mono text-mini text-[var(--fg-4)]">authHeader</span>
+      <span className="flex items-center gap-2 text-label text-fg-3">
+        鉴权头<span className="font-mono text-meta text-fg-4">authHeader</span>
       </span>
       {bad ? (
-        <div className="flex flex-wrap items-center gap-2 text-mini">
+        <div className="flex flex-wrap items-center gap-2 text-meta">
           <Badge tone="err">值异常</Badge>
-          <span className="min-w-0 flex-1 truncate font-mono text-[var(--fg-3)]" title={JSON.stringify(value)}>
+          <span className="min-w-0 flex-1 truncate font-mono text-fg-3" title={JSON.stringify(value)}>
             {JSON.stringify(value)}
           </span>
           <Button size="sm" variant="danger" onClick={() => onChange(null)}>
@@ -724,17 +723,12 @@ function AuthHeaderToggle({ value, onChange }: { value: unknown; onChange: (v: t
           </Button>
         </div>
       ) : (
-        <label className="flex cursor-pointer items-center gap-2 text-label text-[var(--fg-2)]">
-          <input
-            type="checkbox"
-            checked={value === true}
-            onChange={(e) => onChange(e.target.checked ? true : null)}
-            className="h-4 w-4 accent-[var(--accent)]"
-          />
+        <label className="flex cursor-pointer items-center gap-2 text-label text-fg-2">
+          <Checkbox checked={value === true} onChange={(v) => onChange(v ? true : null)} />
           额外发送 <span className="font-mono">Authorization: Bearer</span> 头
         </label>
       )}
-      <span className="text-mini text-[var(--fg-4)]">
+      <span className="text-meta text-fg-4">
         {bad ? "pi 只接受 true / 不写; 这个值会让 pi 加载 models.json 失败, 保存也会被拒绝" : "OpenAI 兼容接口默认就会带这个头, 一般不用开"}
       </span>
     </div>
@@ -789,9 +783,9 @@ function JsonField({
 
   return (
     <label className="flex flex-col gap-1">
-      <span className="flex items-center gap-2 text-label text-[var(--fg-3)]">
+      <span className="flex items-center gap-2 text-label text-fg-3">
         {label}
-        <span className="font-mono text-mini text-[var(--fg-4)]">{jsonKey}</span>
+        <span className="font-mono text-meta text-fg-4">{jsonKey}</span>
       </span>
       <textarea
         value={text}
@@ -815,11 +809,11 @@ function JsonField({
           }
         }}
         onBlur={commit}
-        className={`w-full resize-y rounded-md border bg-[var(--well)] px-2 py-2 font-mono text-label leading-relaxed text-[var(--fg)] outline-none transition-colors duration-fast ease-out placeholder:text-[var(--fg-4)] ${
-          error ? "border-[var(--err)]" : "border-[var(--line)] focus:border-[var(--accent)]"
+        className={`w-full resize-y rounded-md border bg-well px-2 py-2 font-mono text-label leading-relaxed text-fg outline-none transition-colors duration-fast ease-out placeholder:text-fg-4 ${
+          error ? "border-err" : "border-line focus:border-accent"
         }`}
       />
-      {error ? <FieldError>{error}</FieldError> : <span className="text-mini text-[var(--fg-4)]">{hint}</span>}
+      {error ? <FieldError>{error}</FieldError> : <span className="text-meta text-fg-4">{hint}</span>}
     </label>
   );
 }

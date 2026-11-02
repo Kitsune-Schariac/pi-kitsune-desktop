@@ -7,7 +7,7 @@ import { Minus, Square, X } from "lucide-react";
 // import "*.svg" 的写法会被 tsc (noUnusedLocals / 缺模块声明) 拒绝
 const logoUrl = new URL("../assets/logo.svg", import.meta.url).href;
 
-// 自绘标题栏 (无边框窗口): 品牌 (logo + 衬线字标 + 版本) | 拖拽区 | 窗口控制三键。
+// 自绘标题栏 (无边框窗口): 品牌 (logo + 字标 + 版本) | 拖拽区 | 窗口控制三键。
 // - 布局: App 外层纵向 flex 的第一行, 全窗宽固定 36px
 // - 拖拽: 容器整体 data-tauri-drag-region (Tauri 原生拖动), 按钮天然排除
 // - 窗口控制: capability 已放行 core:window:allow-{minimize,toggle-maximize,close,start-dragging}
@@ -26,15 +26,15 @@ export function TitleBar() {
   return (
     <header
       data-tauri-drag-region
-      className="flex h-9 shrink-0 select-none items-center gap-3 border-b border-[var(--line)] bg-[var(--rail)] pl-3"
+      className="flex h-9 shrink-0 select-none items-center gap-3 border-b border-line bg-rail pl-4"
     >
       <span className="flex items-center gap-2">
         <img src={logoUrl} alt="" className="h-4 w-4" aria-hidden />
-        <span className="text-body font-semibold leading-none text-fg">
+        <span className="text-body font-semibold leading-none tracking-wide text-fg">
           Pi Kitsune
         </span>
         {version && (
-          <span className="font-mono text-micro font-normal text-fg-4">v{version}</span>
+          <span className="font-mono text-meta font-normal text-fg-4">v{version}</span>
         )}
       </span>
 
@@ -58,7 +58,7 @@ export function TitleBar() {
         </button>
         <button
           onClick={() => getCurrentWindow().close()}
-          className="grid h-full w-11 place-items-center text-fg-3 transition-colors duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--err)_78%,black)] hover:text-white"
+          className="grid h-full w-11 place-items-center text-fg-3 transition-colors duration-fast ease-out hover:bg-[#c42b1c] hover:text-white"
           aria-label="关闭"
           title="关闭"
         >

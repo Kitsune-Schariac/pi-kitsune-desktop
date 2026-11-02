@@ -44,10 +44,10 @@ function normalizeMap(map: unknown): JsonObject {
 }
 
 const CELL_VALUE: Record<LevelState, string> = {
-  default: "text-[var(--fg-4)]",
-  custom: "font-semibold text-[var(--accent)]",
-  null: "text-[var(--fg-4)] line-through decoration-[var(--fg-4)]",
-  bad: "text-[var(--err)]",
+  default: "text-fg-4",
+  custom: "font-semibold text-accent",
+  null: "text-fg-4 line-through decoration-[var(--fg-4)]",
+  bad: "text-err",
 };
 const NULL_STRIPES = "bg-[repeating-linear-gradient(135deg,transparent_0_5px,var(--hover)_5px_6px)]";
 
@@ -108,7 +108,7 @@ export function ThinkingLevelMap({ pid, mid, model }: { pid: string; mid: string
 
   if (mapBad) {
     return (
-      <span className="flex items-start gap-2 text-mini text-[var(--err)]">
+      <span className="flex items-start gap-2 text-meta text-err">
         <Info className="mt-[2px] h-3 w-3 shrink-0" />
         thinkingLevelMap 不是对象, 只能在 JSON 模式里修正
       </span>
@@ -122,17 +122,17 @@ export function ThinkingLevelMap({ pid, mid, model }: { pid: string; mid: string
     <>
       <div className={`flex flex-col gap-3 ${model.reasoning === true ? "" : "opacity-60"}`}>
         {model.reasoning !== true && (
-          <span className="flex items-start gap-2 text-mini text-[var(--fg-4)]">
+          <span className="flex items-start gap-2 text-meta text-fg-4">
             <Info className="mt-[2px] h-3 w-3 shrink-0" />
             没开「推理」能力, 这组映射不会生效。
           </span>
         )}
         <div className="grid grid-cols-[48px_minmax(0,1fr)] items-center gap-2">
-          <div className="flex flex-col gap-1 py-2 text-right text-mini leading-snug text-[var(--fg-4)]">
+          <div className="flex flex-col gap-1 py-2 text-right text-meta leading-snug text-fg-4">
             <span>pi 档位</span>
             <span>发送</span>
           </div>
-          <div className="grid grid-cols-7 overflow-hidden rounded-md border border-[var(--line)] bg-[var(--well)]">
+          <div className="grid grid-cols-7 overflow-hidden rounded-md border border-line bg-well">
             {THINKING_LEVELS.map((l) => {
               const info = levelInfo(map, l);
               const on = sel === l;
@@ -141,15 +141,15 @@ export function ThinkingLevelMap({ pid, mid, model }: { pid: string; mid: string
                   key={l}
                   title={info.title}
                   onClick={() => setSel(on ? null : l)}
-                  className={`flex min-w-0 flex-col items-center gap-1 border-r border-[var(--line)] px-[2px] py-2 transition-colors duration-fast ease-out last:border-r-0 ${
+                  className={`flex min-w-0 flex-col items-center gap-1 border-r border-line px-[2px] py-2 transition-colors duration-fast ease-out last:border-r-0 ${
                     on
-                      ? "bg-[var(--accent-soft)] shadow-[inset_0_-2px_0_var(--accent)]"
+                      ? "bg-accent-soft shadow-[inset_0_-2px_0_var(--accent)]"
                       : info.st === "null"
-                        ? `${NULL_STRIPES} hover:bg-[var(--hover)]`
-                        : "hover:bg-[var(--hover)]"
+                        ? `${NULL_STRIPES} hover:bg-hover`
+                        : "hover:bg-hover"
                   }`}
                 >
-                  <span className="font-mono text-mini text-[var(--fg-4)]">{l}</span>
+                  <span className="font-mono text-meta text-fg-4">{l}</span>
                   <span className={`max-w-full truncate px-[2px] font-mono text-label ${CELL_VALUE[info.st]}`}>
                     {info.text}
                   </span>
@@ -160,10 +160,10 @@ export function ThinkingLevelMap({ pid, mid, model }: { pid: string; mid: string
         </div>
 
         {sel && selInfo ? (
-          <div className="flex flex-col gap-2 rounded-md bg-[var(--well)] px-3 py-2 shadow-[inset_0_0_0_1px_var(--line)]">
+          <div className="flex flex-col gap-2 rounded-md bg-fg/[0.045] px-3 py-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-label font-semibold text-[var(--fg)]">{sel}</span>
-              <span className="text-label text-[var(--fg-4)]">档发送</span>
+              <span className="font-mono text-label font-semibold text-fg">{sel}</span>
+              <span className="text-label text-fg-4">档发送</span>
               <Segmented
                 size="sm"
                 value={selInfo.st === "bad" ? null : selInfo.st}
@@ -178,7 +178,7 @@ export function ThinkingLevelMap({ pid, mid, model }: { pid: string; mid: string
               <button
                 onClick={() => setSel(null)}
                 title="收起 (Esc)"
-                className="grid h-6 w-6 place-items-center rounded-sm text-[var(--fg-3)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+                className="grid h-6 w-6 place-items-center rounded-sm text-fg-3 hover:bg-hover hover:text-fg"
               >
                 <X className="h-[14px] w-[14px]" />
               </button>
@@ -201,10 +201,10 @@ export function ThinkingLevelMap({ pid, mid, model }: { pid: string; mid: string
                     <button
                       key={v}
                       onClick={() => setModelLevelEntry(pid, mid, sel, v)}
-                      className={`h-6 rounded-[6px] border px-2 font-mono text-mini transition-colors duration-fast ease-out ${
+                      className={`h-6 rounded-full border px-3 font-mono text-meta transition-colors duration-fast ease-out ${
                         selValue === v
-                          ? "border-[color-mix(in_oklch,var(--accent)_45%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                          : "border-[var(--line)] bg-[var(--well)] text-[var(--fg-3)] hover:border-[var(--line-2)] hover:text-[var(--fg)]"
+                          ? "border-[color-mix(in_srgb,var(--accent)_45%,transparent)] bg-accent-soft text-accent"
+                          : "border-line bg-well text-fg-3 hover:border-line-2 hover:text-fg"
                       }`}
                     >
                       {v}
@@ -213,7 +213,7 @@ export function ThinkingLevelMap({ pid, mid, model }: { pid: string; mid: string
                 </div>
               </>
             ) : (
-              <span className="text-mini leading-relaxed text-[var(--fg-4)]">
+              <span className="text-meta leading-relaxed text-fg-4">
                 {selInfo.st === "null"
                   ? "显式声明不支持, 思考档位选择器里隐藏这一档。"
                   : selInfo.st === "bad"
@@ -225,18 +225,18 @@ export function ThinkingLevelMap({ pid, mid, model }: { pid: string; mid: string
             )}
           </div>
         ) : (
-          <div className="flex flex-wrap items-center gap-3 text-mini text-[var(--fg-4)]">
+          <div className="flex flex-wrap items-center gap-3 text-meta text-fg-4">
             <span>点档位修改</span>
             <span className="inline-flex items-center gap-1">
-              <i className="inline-block h-[10px] w-[10px] rounded-[3px] bg-[var(--accent)]" />
+              <i className="inline-block h-[10px] w-[10px] rounded-[3px] bg-accent" />
               自定义
             </span>
             <span className="inline-flex items-center gap-1">
-              <i className="inline-block h-[10px] w-[10px] rounded-[3px] border border-[var(--line-2)]" />
+              <i className="inline-block h-[10px] w-[10px] rounded-[3px] border border-line-2" />
               默认
             </span>
             <span className="inline-flex items-center gap-1">
-              <i className="inline-block h-[10px] w-[10px] rounded-[3px] border border-[var(--line-2)] bg-[repeating-linear-gradient(135deg,transparent_0_2px,var(--fg-4)_2px_3px)]" />
+              <i className="inline-block h-[10px] w-[10px] rounded-[3px] border border-line-2 bg-[repeating-linear-gradient(135deg,transparent_0_2px,var(--fg-4)_2px_3px)]" />
               不支持
             </span>
           </div>
@@ -283,10 +283,10 @@ function PresetRow({
   return (
     <button
       onClick={onApply}
-      className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border px-2 py-1 text-left transition-colors duration-fast ease-out hover:bg-[var(--hover)] ${
+      className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border px-2 py-1 text-left transition-colors duration-fast ease-out hover:bg-hover ${
         current
-          ? "border-[color-mix(in_oklch,var(--accent)_45%,transparent)]"
-          : "border-[var(--line)] hover:border-[var(--line-2)]"
+          ? "border-[color-mix(in_srgb,var(--accent)_45%,transparent)]"
+          : "border-line hover:border-line-2"
       }`}
     >
       <span className="grid grid-cols-7 gap-[2px]">
@@ -296,12 +296,12 @@ function PresetRow({
             <span
               key={l}
               title={info.title}
-              className={`truncate rounded-sm py-[1px] text-center font-mono text-mini ${
+              className={`truncate rounded-sm py-[1px] text-center font-mono text-meta ${
                 info.st === "custom"
-                  ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                  ? "bg-accent-soft text-accent"
                   : info.st === "null"
-                    ? "text-[var(--fg-4)] line-through"
-                    : "text-[var(--fg-4)]"
+                    ? "text-fg-4 line-through"
+                    : "text-fg-4"
               }`}
             >
               {info.text}
@@ -309,7 +309,7 @@ function PresetRow({
           );
         })}
       </span>
-      <span className="whitespace-nowrap text-mini text-[var(--fg-4)]">{note}</span>
+      <span className="whitespace-nowrap text-meta text-fg-4">{note}</span>
     </button>
   );
 }

@@ -1,11 +1,17 @@
 import { ReactNode } from "react";
-import {
-  useStatsFilterStore,
-  type TimeRange,
-} from "../../store/statsFilter";
+import { CalendarRange } from "lucide-react";
+import { useStatsFilterStore, type TimeRange } from "../../store/statsFilter";
+import { Card, DateInput, Segmented, Select } from "../ui";
 
-// Token / 行为 两统计面板共享的筛选栏: 时间快捷 + 自定义起止 + 项目下拉
-// provider/model 等面板私有筛选项经 children 插槽接入, 保证共享部分口径唯一
+const RANGES: { value: TimeRange; label: string }[] = [
+  { value: "today", label: "今天" },
+  { value: "7d", label: "近 7 天" },
+  { value: "30d", label: "近 30 天" },
+  { value: "all", label: "全部" },
+];
+
+// Token / 行为 两统计面板共享的筛选栏 (一张工具卡): 时间快捷 + 自定义起止 + 项目;
+// provider/model 等面板私有筛选项经 children 插槽接入 (传 Select 原语), 保证共享部分口径唯一
 export function StatsFilterBar({
   projects,
   children,
@@ -21,70 +27,36 @@ export function StatsFilterBar({
   const setCustomStart = useStatsFilterStore((s) => s.setCustomStart);
   const setCustomEnd = useStatsFilterStore((s) => s.setCustomEnd);
   const setProject = useStatsFilterStore((s) => s.setProject);
+  // 填了自定义起止时快捷档不再生效, 分段控件显示为无选中
+  const custom = !!(customStart || customEnd);
 
   return (
-    <div className="space-y-2 rounded-lg border border-[var(--line)] bg-[var(--well)] p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {/* 时间快捷 */}
-        <div className="flex overflow-hidden rounded-md border border-[var(--line)] bg-[var(--raise)] text-xs">
-          {(
-            [
-              ["today", "今天"],
-              ["7d", "近 7 天"],
-              ["30d", "近 30 天"],
-              ["all", "全部"],
-            ] as [TimeRange, string][]
-          ).map(([r, label]) => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={`px-3 py-2 transition duration-fast ease-out ${
-                range === r && !customStart && !customEnd
-                  ? "bg-[var(--accent-soft)] font-medium text-[var(--fg)]"
-                  : "text-[var(--fg-3)] hover:bg-[var(--hover)] hover:text-[var(--fg-2)]"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {/* 自定义起止 */}
-        <div className="flex items-center gap-2 text-xs text-[var(--fg-3)]">
-          <input
-            type="date"
-            value={customStart}
-            onChange={(e) => setCustomStart(e.target.value)}
-            className="rounded-md border border-[var(--line)] bg-[var(--raise)] px-2 py-2 text-[var(--fg-2)] outline-none transition duration-fast ease-out focus:border-[var(--accent)]"
-            title="自定义开始日期"
-          />
-          <span>至</span>
-          <input
-            type="date"
-            value={customEnd}
-            onChange={(e) => setCustomEnd(e.target.value)}
-            className="rounded-md border border-[var(--line)] bg-[var(--raise)] px-2 py-2 text-[var(--fg-2)] outline-none transition duration-fast ease-out focus:border-[var(--accent)]"
-            title="自定义结束日期"
-          />
-        </div>
+    <Card className="flex flex-wrap items-center gap-3 px-4 py-3">
+      <Segmented
+        value={custom ? null : range}
+        options={RANGES}
+        onChange={setRange}
+        ariaLabel="时间范围"
+      />
+      <div className="flex items-center gap-2 text-label text-fg-4">
+        <CalendarRange className="h-4 w-4 shrink-0" />
+        <DateInput value={customStart} onChange={setCustomStart} title="自定义开始日期" />
+        <span>至</span>
+        <DateInput value={customEnd} onChange={setCustomEnd} title="自定义结束日期" />
       </div>
-      {/* 项目 + 面板私有扩展位 */}
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <select
-          value={project}
-          onChange={(e) => setProject(e.target.value)}
-          className="max-w-[220px] rounded-md border border-[var(--line)] bg-[var(--raise)] px-2 py-2 text-[var(--fg-2)] outline-none transition duration-fast ease-out focus:border-[var(--accent)]"
-          title="按项目筛选"
-        >
-          <option value="">全部项目</option>
-          {projects.map((p) => (
-            <option key={p} value={p} title={p}>
-              {projectLabel(p)}
-            </option>
-          ))}
-        </select>
-        {children}
-      </div>
-    </div>
+      <span className="mx-1 h-5 w-px bg-line" aria-hidden />
+      <Select
+        value={project}
+        onChange={setProject}
+        title="按项目筛选"
+        className="w-[180px]"
+        options={[
+          { value: "", label: "全部项目" },
+          ...projects.map((p) => ({ value: p, label: projectLabel(p), title: p })),
+        ]}
+      />
+      {children}
+    </Card>
   );
 }
 

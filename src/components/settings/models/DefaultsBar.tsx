@@ -40,26 +40,26 @@ export function DefaultsBar() {
   }
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-2 border-b border-[var(--line)] bg-[var(--pane)] py-2 pl-6 pr-4">
+    <div className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-2 border-b border-line bg-pane py-2 pl-6 pr-4">
       <div className="flex min-w-0 flex-[1_1_320px] items-center gap-3">
-        <span className="whitespace-nowrap text-label text-[var(--fg-3)]">新会话默认</span>
+        <span className="whitespace-nowrap text-label text-fg-3">新会话默认</span>
         <button
           disabled={readOnly}
           onClick={() => setPicking(true)}
           title={readOnly ? "settings.json 不可用, 默认值只读" : "选择新会话默认模型"}
-          className={`flex h-8 min-w-0 max-w-full items-center gap-2 rounded-md border bg-[var(--well)] px-3 transition-colors duration-fast ease-out hover:border-[var(--line-2)] disabled:cursor-not-allowed disabled:opacity-60 ${
-            missing === "gone" ? "border-[var(--err)]" : "border-[var(--line)]"
+          className={`flex h-8 min-w-0 max-w-full items-center gap-2 rounded-md border bg-well px-3 transition-colors duration-fast ease-out hover:border-line-2 disabled:cursor-not-allowed disabled:opacity-60 ${
+            missing === "gone" ? "border-err" : "border-line"
           }`}
         >
-          <Star className="h-[14px] w-[14px] shrink-0 text-[var(--accent)]" />
+          <Star className="h-[14px] w-[14px] shrink-0 text-accent" />
           {provider || model ? (
             <span className="flex min-w-0 items-center gap-1 font-mono text-label">
-              <span className="truncate text-[var(--fg-3)]">{provider || "-"}</span>
-              <span className="text-[var(--fg-4)]">/</span>
-              <span className="truncate font-semibold text-[var(--fg)]">{model || "-"}</span>
+              <span className="truncate text-fg-3">{provider || "-"}</span>
+              <span className="text-fg-4">/</span>
+              <span className="truncate font-semibold text-fg">{model || "-"}</span>
             </span>
           ) : (
-            <span className="text-label text-[var(--fg-4)]">未设置</span>
+            <span className="text-label text-fg-4">未设置</span>
           )}
           {missing === "gone" && <Badge tone="err">已不存在</Badge>}
           {missing === "external" && (
@@ -67,11 +67,11 @@ export function DefaultsBar() {
               不在 models.json
             </Badge>
           )}
-          <ChevronDown className="h-[14px] w-[14px] shrink-0 text-[var(--fg-4)]" />
+          <ChevronDown className="h-[14px] w-[14px] shrink-0 text-fg-4" />
         </button>
       </div>
       <div className="flex max-w-full items-center gap-3 overflow-x-auto">
-        <span className="whitespace-nowrap text-label text-[var(--fg-3)]">默认思考</span>
+        <span className="whitespace-nowrap text-label text-fg-3">默认思考</span>
         <Segmented
           size="sm"
           accent
@@ -87,7 +87,7 @@ export function DefaultsBar() {
           settings.json 不可用
         </Badge>
       ) : (
-        <span className="ml-auto font-mono text-mini text-[var(--fg-4)]" title={settingsPath}>
+        <span className="ml-auto font-mono text-meta text-fg-4" title={settingsPath}>
           settings.json
         </span>
       )}
@@ -149,11 +149,11 @@ function DefaultModelDialog({
       }
     >
       {groups.length === 0 ? (
-        <div className="px-4 py-12 text-center text-label text-[var(--fg-3)]">没有匹配的模型</div>
+        <div className="px-4 py-12 text-center text-label text-fg-3">没有匹配的模型</div>
       ) : (
         groups.map(({ pid, models }) => (
           <div key={pid}>
-            <div className="sticky top-0 z-[1] flex gap-2 bg-[var(--popover)] px-2 pb-1 pt-3 text-mini text-[var(--fg-4)]">
+            <div className="sticky top-0 z-[1] flex gap-2 bg-popover px-2 pb-1 pt-3 text-meta text-fg-4">
               <span className="font-mono">{pid}</span>
               <span className="truncate">{hostOf(providerOf(doc, pid).baseUrl)}</span>
             </div>
@@ -165,19 +165,19 @@ function DefaultModelDialog({
                   key={mid}
                   onClick={() => onPick(pid, mid)}
                   className={`flex w-full min-w-0 items-center gap-3 rounded-md px-2 py-2 text-left transition-colors duration-fast ease-out ${
-                    on ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
+                    on ? "bg-accent-soft" : "hover:bg-hover"
                   }`}
                 >
                   {on ? (
-                    <Star className="h-[14px] w-[14px] shrink-0 text-[var(--accent)]" />
+                    <Star className="h-[14px] w-[14px] shrink-0 text-accent" />
                   ) : (
-                    <Dot className="h-[14px] w-[14px] shrink-0 text-[var(--fg-4)]" />
+                    <Dot className="h-[14px] w-[14px] shrink-0 text-fg-4" />
                   )}
-                  <span className="truncate font-mono text-label text-[var(--fg)]">{mid}</span>
-                  <span className="min-w-0 flex-1 truncate text-mini text-[var(--fg-4)]">
+                  <span className="truncate font-mono text-label text-fg">{mid}</span>
+                  <span className="min-w-0 flex-1 truncate text-meta text-fg-4">
                     {typeof m.name === "string" ? m.name : ""}
                   </span>
-                  <span className="shrink-0 font-mono text-mini text-[var(--fg-4)]">
+                  <span className="shrink-0 font-mono text-meta text-fg-4">
                     {formatTokenShort(m.contextWindow)}
                   </span>
                 </button>

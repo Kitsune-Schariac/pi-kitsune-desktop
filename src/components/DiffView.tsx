@@ -40,16 +40,16 @@ function shortenPath(p: string, max = 56): string {
 // unified patch 渲染组件: 双列行号 + hunk 结构 + 语法高亮 + 主题自适应。
 // 放 components/ 根目录与 ToolCallCard 平级, 后续 Git 面板可直接 import 复用。
 export const DiffView = memo(function DiffView({ patch, cwd }: { patch: string; cwd?: string }) {
-  // 订阅 activeBase: 切皮肤时触发自身重渲染, 并把 base 透传给 HunkRows 让其双侧高亮
+  // 订阅 resolved: 切日间/夜间时触发自身重渲染, 并把 base 透传给 HunkRows 让其双侧高亮
   // useMemo 失效重算 (highlighter 缓存 key 含主题, 新主题下重新高亮, 不命中旧主题缓存)
-  const themeBase = useThemeStore((s) => s.activeBase);
+  const themeBase = useThemeStore((s) => s.resolved);
   const files = useMemo(() => parseUnifiedPatch(patch), [patch]);
 
   // 解析失败 → 降级渲染原始文本, 不白屏 (畸形 patch 不能让整条消息流崩)
   if (!files) {
     return (
       <pre
-        className="mt-2 overflow-auto rounded-sm p-2 text-mini text-fg-2"
+        className="mt-2 overflow-auto rounded-sm p-2 text-meta text-fg-2"
         style={{ background: "var(--well)", border: "1px solid var(--line)" }}
       >
         {patch}
@@ -59,7 +59,7 @@ export const DiffView = memo(function DiffView({ patch, cwd }: { patch: string; 
 
   return (
     <div
-      className="mt-2 max-h-[60vh] overflow-auto rounded-sm text-mini"
+      className="mt-2 max-h-[60vh] overflow-auto rounded-sm text-meta"
       style={{ border: "1px solid var(--line)" }}
     >
       {files.map((file: PatchFile, fi: number) => {
@@ -73,7 +73,7 @@ export const DiffView = memo(function DiffView({ patch, cwd }: { patch: string; 
             style={fi > 0 ? { borderTop: "1px solid var(--line)" } : undefined}
           >
             <div
-              className="truncate px-2 py-1 font-mono text-mini text-fg-3"
+              className="truncate px-2 py-1 font-mono text-meta text-fg-3"
               title={file.newPath}
             >
               {head}
@@ -156,7 +156,7 @@ function HunkRows({
     }
     if (line.noNewline) {
       base +=
-        '<span style="color:var(--fg-4);font-size:var(--fs-micro);margin-left:.25em">no newline</span>';
+        '<span style="color:var(--fg-4);font-size:var(--fs-meta);margin-left:.25em">no newline</span>';
     }
     return base;
   };
@@ -168,7 +168,7 @@ function HunkRows({
     const oldSkip = hunk.oldStart - (prevHunk.oldStart + prevHunk.oldLines);
     rows.push(
       <tr key="sep" style={{ borderTop: "1px solid var(--line)" }}>
-        <td colSpan={4} className="py-1 text-center text-mini text-fg-4">
+        <td colSpan={4} className="py-1 text-center text-meta text-fg-4">
           {oldSkip > 0 ? `⋯ 跳过 ${oldSkip} 行 ⋯` : "⋯"}
         </td>
       </tr>,
@@ -181,7 +181,7 @@ function HunkRows({
       key="head"
       style={{ background: "var(--well)" }}
     >
-      <td colSpan={4} className="px-2 py-1 text-mini text-fg-3">
+      <td colSpan={4} className="px-2 py-1 text-meta text-fg-3">
         {`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`}
       </td>
     </tr>,
@@ -203,7 +203,7 @@ function HunkRows({
         <td colSpan={4} className="py-1">
           <button
             onClick={() => setFolded(false)}
-            className="flex w-full items-center justify-center gap-1 text-mini text-fg-3 transition duration-fast ease-out hover:text-fg"
+            className="flex w-full items-center justify-center gap-1 text-meta text-fg-3 transition duration-fast ease-out hover:text-fg"
           >
             <ChevronDown className="h-3 w-3" />
             展开中间 {foldedCount} 行
@@ -220,7 +220,7 @@ function HunkRows({
 }
 
 // 单行: 双列行号 (增行旧号留空 / 删行新号留空) + +/- 字形前缀 (不让颜色成为唯一信息载体,
-// 低对比皮肤与色觉障碍下仍可辨) + 高亮内容。table 布局让行号列等宽对齐
+// 低对比与色觉障碍下仍可辨) + 高亮内容。table 布局让行号列等宽对齐
 function DiffRow({ line, html }: { line: PatchLine; html: string }) {
   const prefix = line.kind === "add" ? "+" : line.kind === "del" ? "-" : " ";
   const bg =
@@ -257,7 +257,7 @@ export const PlainDiffView = memo(function PlainDiffView({ text }: { text: strin
   const lines = text.split("\n");
   return (
     <pre
-      className="mt-2 max-h-[40vh] overflow-auto rounded-sm p-2 text-mini leading-relaxed"
+      className="mt-2 max-h-[40vh] overflow-auto rounded-sm p-2 text-meta leading-relaxed"
       style={{ background: "var(--well)", border: "1px solid var(--line)" }}
     >
       {lines.map((line, i) => {

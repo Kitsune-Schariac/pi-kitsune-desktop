@@ -16,14 +16,14 @@ export const LANGS = [
 ];
 
 // highlighter 预热: 应用启动即后台加载, 用户看到第一条消息时通常已就绪
-// 双主题预加载: 皮肤 base=dark 时切 github-dark (浅色保持 github-light)
+// 双主题预加载: 夜间模式切 github-dark (浅色保持 github-light)
 let highlighter: Highlighter | null = null;
-// currentTheme 由 theme store 的 activeBase 驱动 (取代原 Markdown.tsx 在渲染期间赋值的副作用)。
+// currentTheme 由 theme store 的 resolved (日间/夜间) 驱动 (取代原 Markdown.tsx 在渲染期间赋值的副作用)。
 // 模块内订阅 store: 任何 set 都会触发, 这里只做一次赋值, 开销可忽略。
 let currentTheme: "github-light" | "github-dark" =
-  useThemeStore.getState().activeBase === "dark" ? "github-dark" : "github-light";
+  useThemeStore.getState().resolved === "dark" ? "github-dark" : "github-light";
 useThemeStore.subscribe((state) => {
-  currentTheme = state.activeBase === "dark" ? "github-dark" : "github-light";
+  currentTheme = state.resolved === "dark" ? "github-dark" : "github-light";
 });
 
 void createHighlighter({ langs: LANGS, themes: ["github-light", "github-dark"] }).then((h) => {
@@ -51,7 +51,7 @@ export function getHighlighter(): Highlighter | null {
 }
 
 // 整块高亮: 返回 shiki codeToHtml 的完整 <pre> HTML (Markdown CodeBlock 用, 逻辑与原实现一致)
-// 缓存 key 必须含主题: 切皮肤后旧主题缓存不命中, 重新高亮 (防缓存串主题)
+// 缓存 key 必须含主题: 切日间/夜间后旧主题缓存不命中, 重新高亮 (防缓存串主题)
 export function highlightToHtml(code: string, lang: string): string | null {
   if (!highlighter) return null;
   const key = `${currentTheme}\u0000${lang}\u0000${code}`;

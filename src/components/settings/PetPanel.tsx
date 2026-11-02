@@ -1,19 +1,11 @@
 import { useState } from "react";
 import { usePetStore } from "../../store/pet";
 import { PetImport, TIER_LABEL } from "./PetImport";
-import { Cat, FolderOpen, RefreshCw } from "lucide-react";
+import { Cat, Check, FolderOpen, RefreshCw } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { Badge, Button, Card, EmptyHint, Section, SettingRow, Slider, Switch } from "../ui";
 
-// 设置分区标题: 与 ThemePanel 同款 (label 档 + 半粗 + 三级文字色, 与检查器 .ov-title 同一口径)
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <h3 className="mb-3 text-label font-semibold text-fg-3">
-      {children}
-    </h3>
-  );
-}
-
-// 桌宠开关 + 角色选择 + 缩放 (设置页「桌宠」tab)
+// 设置 · 桌宠: 开关与活动 (设置行) / 角色 (可选卡片) / 导入
 export function PetPanel() {
   const enabled = usePetStore((s) => s.enabled);
   const pets = usePetStore((s) => s.pets);
@@ -39,51 +31,63 @@ export function PetPanel() {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      <section>
-        <SectionTitle>桌面宠物</SectionTitle>
-        <p className="-mt-1 mb-3 text-body text-[var(--fg-2)]">
-          一个置顶的小窗角色，跟着会话状态换动作：思考、执行工具、报错、待机。
-        </p>
-        <label className="flex cursor-pointer items-center gap-[10px] text-body text-[var(--fg)]">
-          <input
-            type="checkbox"
-            checked={enabled}
-            disabled={pets.length === 0}
-            onChange={(e) => void setEnabled(e.target.checked)}
-            className="h-4 w-4 accent-[var(--accent)]"
-          />
-          启用桌宠
-          {pets.length === 0 && (
-            <span className="text-label text-[var(--fg-4)]">（没有可用的宠物包）</span>
-          )}
-        </label>
-      </section>
-
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <SectionTitle>角色</SectionTitle>
-          <button
-            onClick={onRefresh}
-            disabled={refreshing}
-            className="flex items-center gap-[6px] rounded-md border border-[var(--line)] px-2 py-1 text-label text-[var(--fg-2)] transition duration-fast ease-out hover:border-[var(--line-2)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+    <div className="mx-auto max-w-[880px] space-y-8 px-8 py-8">
+      <Section title="桌面宠物" desc="一个置顶的小窗角色，跟着会话状态换动作：思考、执行工具、报错、待机。">
+        <Card>
+          <SettingRow
+            title="启用桌宠"
+            desc={pets.length === 0 ? "没有可用的宠物包，先在下方导入一个" : "关闭后不挂任何会话监听"}
           >
-            <RefreshCw className={`h-[14px] w-[14px] ${refreshing ? "animate-spin" : ""}`} />
-            刷新列表
-          </button>
-        </div>
+            <Switch
+              checked={enabled}
+              disabled={pets.length === 0}
+              onChange={(v) => void setEnabled(v)}
+              ariaLabel="启用桌宠"
+            />
+          </SettingRow>
+          <SettingRow title="缩放" desc="在桌宠上滚动滚轮也能缩放；左键拖动移动位置，右键出菜单">
+            <Slider
+              className="w-56"
+              min={0.5}
+              max={3}
+              step={0.1}
+              value={zoom}
+              onChange={setZoom}
+              format={(v) => `${v.toFixed(1)}x`}
+              ariaLabel="桌宠缩放"
+            />
+          </SettingRow>
+          <SettingRow title="重力" desc="站在任务栏上，拖到半空松手会掉下来；关掉后放哪停哪">
+            <Switch checked={gravity} onChange={setGravity} ariaLabel="重力" />
+          </SettingRow>
+          <SettingRow title="散步" desc="闲不住时在屏幕底边走来走去；觉得分心就关掉">
+            <Switch checked={walk} onChange={setWalk} ariaLabel="散步" />
+          </SettingRow>
+        </Card>
+      </Section>
 
+      <Section
+        title="角色"
+        action={
+          <>
+            <Button size="sm" variant="subtle" onClick={() => void invoke("open_pets_dir")}>
+              <FolderOpen className="h-[14px] w-[14px]" />
+              打开目录
+            </Button>
+            <Button size="sm" variant="subtle" onClick={() => void onRefresh()} disabled={refreshing}>
+              <RefreshCw className={`h-[14px] w-[14px] ${refreshing ? "animate-spin" : ""}`} />
+              刷新
+            </Button>
+          </>
+        }
+      >
         {pets.length === 0 ? (
-          <div className="rounded-md border border-dashed border-[var(--line)] px-4 py-6 text-center">
-            <Cat className="mx-auto mb-2 h-6 w-6 text-[var(--fg-4)]" />
-            <p className="text-body text-[var(--fg-2)]">还没有宠物包</p>
-            <p className="mt-1 text-label text-[var(--fg-4)]">
-              用下面的「导入宠物」选一个 zip 或文件夹，或直接放进
-              <code className="font-mono">~/.pi-kitsune/pets/&lt;id&gt;/</code>
-            </p>
-          </div>
+          <EmptyHint icon={<Cat className="h-6 w-6" />} title="还没有宠物包">
+            用下面的「导入宠物」选一个 zip 或文件夹，或直接放进
+            <code className="mx-1 font-mono">~/.pi-kitsune/pets/&lt;id&gt;/</code>
+          </EmptyHint>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             {pets.map((p) => {
               const isActive = p.id === petId;
               return (
@@ -91,105 +95,45 @@ export function PetPanel() {
                   key={p.id}
                   onClick={() => setPetId(p.id)}
                   aria-pressed={isActive}
-                  className={`rounded-lg border px-3 py-[10px] text-left transition duration-fast ease-out ${
-                    isActive
-                      ? "border-[var(--accent)] ring-2 ring-[var(--accent-soft)]"
-                      : "border-[var(--line)] hover:border-[var(--line-2)]"
+                  className={`flex items-start gap-3 rounded-lg border bg-card p-4 text-left shadow-md transition duration-fast ease-out ${
+                    isActive ? "border-fg/40 shadow-[var(--shadow-md),0_0_0_4px_var(--accent-soft)]" : "border-edge hover:border-line"
                   }`}
                   title={p.description || p.name}
                 >
-                  <div className="flex items-center gap-2">
-                    <Cat className="h-4 w-4 shrink-0 text-[var(--fg-3)]" />
-                    <span className="truncate text-body text-[var(--fg)]">{p.name}</span>
-                    <span className="ml-auto shrink-0 rounded border border-[var(--line)] px-[5px] text-label text-[var(--fg-3)]">
-                      {TIER_LABEL[p.tier]}
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-fg/[0.045]">
+                    <Cat className="h-4 w-4 text-fg-3" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate text-body font-medium text-fg">{p.name}</span>
+                      <Badge>{TIER_LABEL[p.tier]}</Badge>
                     </span>
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-label text-[var(--fg-4)]">
-                    {p.description || `${p.frame_width}×${p.frame_height}`}
-                  </p>
-                  {p.missing.length > 0 && (
-                    <p className="mt-1 truncate text-label text-[var(--fg-4)]" title={p.missing.join("、")}>
-                      缺：{p.missing.join("、")}
-                    </p>
-                  )}
+                    <span className="mt-1 line-clamp-2 block text-label text-fg-4">
+                      {p.description || `${p.frame_width}×${p.frame_height}`}
+                    </span>
+                    {p.missing.length > 0 && (
+                      <span className="mt-1 block truncate text-label text-fg-4" title={p.missing.join("、")}>
+                        缺：{p.missing.join("、")}
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    className={`grid h-5 w-5 shrink-0 place-items-center rounded-full ${
+                      isActive ? "bg-accent text-on-accent" : "border border-line-2"
+                    }`}
+                  >
+                    {isActive && <Check className="h-3 w-3" strokeWidth={3} />}
+                  </span>
                 </button>
               );
             })}
           </div>
         )}
-      </section>
+      </Section>
 
-      <section>
-        <SectionTitle>大小</SectionTitle>
-        <label className="block">
-          <div className="mb-1 flex items-center justify-between text-label text-[var(--fg-2)]">
-            <span>缩放</span>
-            <span className="tabular-nums text-[var(--fg)]">{zoom.toFixed(1)}x</span>
-          </div>
-          <input
-            type="range"
-            min={0.5}
-            max={3}
-            step={0.1}
-            value={zoom}
-            onChange={(e) => setZoom(Number(e.target.value))}
-            className="w-full cursor-pointer accent-[var(--accent)]"
-          />
-        </label>
-        <p className="mt-[6px] text-label text-[var(--fg-4)]">
-          在桌宠上滚滚轮也能缩放；左键拖动移动位置，右键出菜单。
-        </p>
-      </section>
-
-      <section>
-        <SectionTitle>活动</SectionTitle>
-        <div className="space-y-3">
-          <label className="flex cursor-pointer items-start gap-[10px]">
-            <input
-              type="checkbox"
-              checked={gravity}
-              onChange={(e) => setGravity(e.target.checked)}
-              className="mt-[3px] h-4 w-4 accent-[var(--accent)]"
-            />
-            <span>
-              <span className="block text-body text-[var(--fg)]">重力</span>
-              <span className="block text-label text-[var(--fg-4)]">
-                站在任务栏上，拖到半空松手会掉下来；关掉后放哪停哪。
-              </span>
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-start gap-[10px]">
-            <input
-              type="checkbox"
-              checked={walk}
-              onChange={(e) => setWalk(e.target.checked)}
-              className="mt-[3px] h-4 w-4 accent-[var(--accent)]"
-            />
-            <span>
-              <span className="block text-body text-[var(--fg)]">散步</span>
-              <span className="block text-label text-[var(--fg-4)]">
-                闲不住时在屏幕底边走来走去；觉得分心就关掉。
-              </span>
-            </span>
-          </label>
-        </div>
-      </section>
-
-      <section>
-        <SectionTitle>导入宠物</SectionTitle>
+      <Section title="导入宠物" desc="导入时会自动切帧、按脚底对齐、统一尺寸；旧版 Codex 宠物包也能直接导入。">
         <PetImport />
-      </section>
-
-      <section>
-        <button
-          onClick={() => void invoke("open_pets_dir")}
-          className="flex items-center gap-2 rounded-md border border-[var(--line)] px-3 py-2 text-body text-[var(--fg-2)] transition duration-fast ease-out hover:border-[var(--line-2)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
-        >
-          <FolderOpen className="h-4 w-4" />
-          打开宠物目录
-        </button>
-      </section>
+      </Section>
     </div>
   );
 }

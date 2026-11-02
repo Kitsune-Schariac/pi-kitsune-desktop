@@ -1,41 +1,35 @@
 import { useEffect, useState } from "react";
 import { X, BarChart3, Palette, Activity, Boxes, Cat, type LucideIcon } from "lucide-react";
 import { TokenStatsPanel } from "./TokenStatsPanel";
-import { ThemePanel } from "./ThemePanel";
+import { AppearancePanel } from "./AppearancePanel";
 import { BehaviorStatsPanel } from "./BehaviorStatsPanel";
 import { ModelsPanel } from "./ModelsPanel";
 import { PetPanel } from "./PetPanel";
 
 type TabKey = "theme" | "pet" | "stats" | "behavior" | "models";
 
-/** 设置分区键: Rail 的「统计」「桌宠」入口直接定位到对应分区 */
+/** 设置分区键: Rail 的「统计」「桌宠」「设置」入口直接定位到对应分区 */
 export type SettingsSection = TabKey;
 
-// 导航项结构一致, 用数组 map 渲染; 描述文案同时用于侧栏第二行与内容区 header
-// 图标与文案对齐改版稿设置导航 (setwin-nav-item); 页签大标题走 --fs-head 17px 档
 const NAV_ITEMS: { key: TabKey; icon: LucideIcon; title: string; desc: string }[] = [
-  { key: "theme", icon: Palette, title: "主题", desc: "配色 / 亮暗 / 自定义皮肤" },
-  { key: "pet", icon: Cat, title: "桌宠", desc: "桌面宠物开关 / 角色 / 大小" },
+  { key: "theme", icon: Palette, title: "外观", desc: "日间 / 夜间 / 跟随系统" },
+  { key: "models", icon: Boxes, title: "模型与供应商", desc: "供应商 / 模型 / 新会话默认" },
   { key: "stats", icon: BarChart3, title: "Token 统计", desc: "用量与成本分布" },
   { key: "behavior", icon: Activity, title: "行为统计", desc: "轮次 / 工具 / 思考占比" },
-  { key: "models", icon: Boxes, title: "模型与供应商", desc: "供应商 / 模型 / 新会话默认" },
+  { key: "pet", icon: Cat, title: "桌宠", desc: "桌面宠物开关 / 角色 / 大小" },
 ];
 
-// 设置视图: 覆盖整个窗口的全屏界面 (不是浮在会话上的弹窗)
-// 根容器用 absolute inset-0: App.tsx 里它渲染在 #app-root (fixed inset-0) 内部,
-// 由 app-root 提供定位上下文, 铺满即等于切界面, 且天然盖住侧栏与会话区。
+// 设置视图: 覆盖整个窗口的全屏界面 (渲染在 #app-root 内, absolute inset-0 铺满)。
+// 两栏的头部与主界面各列同高 (--bar-h), 分隔线横向贯通。
 export function SettingsWindow({
   onClose,
   initialSection,
 }: {
   onClose: () => void;
-  /** 打开时定位的分区 (缺省 theme); 由 Rail 的快捷入口传入 */
   initialSection?: SettingsSection;
 }) {
-  // 当前分区 (初始值只在挂载时取一次: 设置窗是卸载重挂载的覆盖层)
   const [tab, setTab] = useState<TabKey>(initialSection ?? "theme");
 
-  // Esc 关闭 (卸载时移除监听)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -48,21 +42,20 @@ export function SettingsWindow({
 
   return (
     <div data-overlay className="setwin absolute inset-0 z-50 flex view-in">
-      {/* 侧栏: 贴边列 (pane 底)。
-          窗口 < 1280 (xl 断点) 收成 64px 图标栏: 默认 1200 宽窗口里 240px 导航会把各页内容区
-          挤到放不下三栏 (模型页) / 双列 (统计页), 说明文字靠 title 提示 */}
-      <aside className="setwin-nav flex w-16 shrink-0 flex-col xl:w-60">
-        <div className="flex h-14 shrink-0 items-center justify-center border-b border-[var(--line)] xl:justify-between xl:px-5">
-          <span className="hidden text-title font-semibold text-[var(--fg)] xl:inline">设置</span>
+      {/* 导航列: 窗口 < 1280 收成 64px 图标栏, 说明文字靠 title 提示 */}
+      <aside className="setwin-nav flex w-16 shrink-0 flex-col xl:w-56">
+        <div className="bar justify-center px-3 xl:justify-between xl:pl-5">
+          <span className="hidden text-lead font-semibold text-fg xl:inline">设置</span>
           <button
             onClick={onClose}
-            className="grid h-7 w-7 place-items-center rounded-md text-[var(--fg-3)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+            className="grid h-8 w-8 place-items-center rounded-md text-fg-3 transition duration-fast ease-out hover:bg-hover hover:text-fg"
             title="关闭 (Esc)"
+            aria-label="关闭设置"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto p-2">
+        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
           {NAV_ITEMS.map(({ key, icon: Icon, title, desc }) => {
             const active = key === tab;
             return (
@@ -70,60 +63,33 @@ export function SettingsWindow({
                 key={key}
                 onClick={() => setTab(key)}
                 aria-current={active ? "page" : undefined}
-                className={`setwin-navitem flex w-full items-start justify-center gap-2 rounded-md px-3 py-2 text-left transition duration-fast ease-out xl:justify-start ${
-                  active ? "on" : ""
+                className={`setwin-navitem flex h-9 w-full items-center justify-center gap-3 rounded-md px-3 text-left text-body xl:justify-start ${
+                  active ? "on font-medium" : ""
                 }`}
                 title={`${title} · ${desc}`}
               >
-                <Icon
-                  className={`mt-1 h-4 w-4 shrink-0 ${
-                    active ? "text-[var(--accent)]" : "text-[var(--fg-4)]"
-                  }`}
-                />
-                <span className="hidden min-w-0 xl:block">
-                  <span
-                    className={`block truncate text-title ${
-                      active ? "font-semibold text-[var(--fg)]" : "text-[var(--fg-2)]"
-                    }`}
-                  >
-                    {title}
-                  </span>
-                  <span
-                    className={`mt-1 block text-mini leading-snug ${
-                      active ? "text-[var(--fg-3)]" : "text-[var(--fg-4)]"
-                    }`}
-                  >
-                    {desc}
-                  </span>
-                </span>
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="hidden truncate xl:block">{title}</span>
               </button>
             );
           })}
         </nav>
-        {/* 底部版本行 (改版稿 setwin-ver) */}
-        <div className="hidden shrink-0 border-t border-[var(--line)] px-5 py-3 font-mono text-micro text-[var(--fg-4)] xl:block">
+        <div className="hidden h-10 shrink-0 items-center border-t border-line px-5 text-meta text-fg-4 xl:flex">
           Pi Kitsune · 设置
         </div>
       </aside>
 
-      {/* 内容区: --bg 底 */}
       <div className="setwin-main flex min-w-0 flex-1 flex-col">
-        {/* 页头: 大标题 head 档 + desc; 唯一大标题 (面板内不再自带 h2) */}
-        <header className="flex h-16 shrink-0 flex-col justify-center gap-1 border-b border-[var(--line)] px-6">
-          <h2 className="text-head font-semibold text-[var(--fg)]">
-            {current.title}
-            <span className="ml-3 align-baseline text-label font-normal text-[var(--fg-4)]">
-              {current.desc}
-            </span>
-          </h2>
+        <header className="bar gap-3 px-8">
+          <h2 className="text-lead font-semibold text-fg">{current.title}</h2>
+          <span className="truncate text-label text-fg-4">{current.desc}</span>
         </header>
-        {/* 主体不在这里滚动, 交给各面板自己决定 */}
         <div className="min-h-0 flex-1 overflow-hidden">
-          {/* key 换分区即重挂载: 触发一次轻量淡入, 同时让面板回到各自的初始滚动位置 */}
+          {/* key 换分区即重挂载: 一次轻量淡入, 面板回到各自初始滚动位置 */}
           <div key={tab} className="h-full view-in-soft">
             {tab === "theme" && (
               <div className="h-full overflow-y-auto">
-                <ThemePanel />
+                <AppearancePanel />
               </div>
             )}
             {tab === "pet" && (
@@ -141,7 +107,7 @@ export function SettingsWindow({
                 <BehaviorStatsPanel />
               </div>
             )}
-            {/* ModelsPanel 自带全高两栏与内部滚动, 不套 padding/滚动容器 */}
+            {/* ModelsPanel 自带全高多栏与内部滚动 */}
             {tab === "models" && <ModelsPanel />}
           </div>
         </div>

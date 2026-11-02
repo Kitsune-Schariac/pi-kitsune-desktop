@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import {
-  Bot, ChevronDown, FilePenLine, FilePlus2, FileText, Radar, Terminal, Wrench, X,
+  Bot, Check, ChevronDown, FilePenLine, FilePlus2, FileText, Radar, Terminal, Wrench, X,
 } from "lucide-react";
 import type { ChatEntry } from "../../store/session";
 import { useFleetStore } from "../../store/fleet";
@@ -29,7 +29,7 @@ interface StepGroupProps {
 }
 
 /**
- * 连续工具调用聚合的步骤组: 头 = 执行 N 步 + 工具分布 + 失败数 + 总耗时。
+ * 连续工具调用聚合的步骤卡片: 头 = 状态 + 执行 N 步 + 工具分布 + 失败数 + 总耗时。
  * 含失败或运行中的组默认展开 (失败必须浮出来), 其余默认折叠; 用户手动开合后由本地 state 记忆。
  * 展开后一步一行。
  */
@@ -46,36 +46,44 @@ export const StepGroup = memo(function StepGroup({ entries, selectedId, revealSe
     .join(" · ");
 
   return (
-    <section
-      className={`tl-steps${open ? " open" : ""}${stats.errors ? " has-err" : ""}${
-        stats.running ? " running" : ""
-      }`}
-    >
+    <section className={`steps${open ? " open" : ""}${stats.errors ? " has-err" : ""}`}>
       <button
         type="button"
-        className="tl-steps-head"
+        className="steps-head"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="tl-node" aria-hidden />
-        <span className="tl-steps-title">
+        <span className="steps-status" aria-hidden>
+          {stats.running ? (
+            <span className="live-dot" />
+          ) : stats.errors > 0 ? (
+            <X className="h-3 w-3" />
+          ) : (
+            <Check className="h-3 w-3" />
+          )}
+        </span>
+        <span className="steps-title">
           {stats.running ? "执行中" : "执行"} {entries.length} 步
         </span>
-        <span className="tl-steps-tools">{toolText}</span>
-        {stats.errors > 0 && <span className="tl-steps-err">{stats.errors} 失败</span>}
+        <span className="steps-tools">{toolText}</span>
+        {stats.errors > 0 && <span className="steps-err">{stats.errors} 失败</span>}
         {/* 运行中不写耗时: 组还没跑完, 写部分和只会误导 */}
-        {!stats.running && stats.total != null && (
-          <span className="tl-steps-dur">{formatDuration(stats.total)}</span>
+        {!stats.running && stats.total != null ? (
+          <span className="steps-dur">{formatDuration(stats.total)}</span>
+        ) : (
+          <span className="ml-auto" />
         )}
-        <ChevronDown className="tl-chev h-3 w-3" />
+        <ChevronDown className="chev h-[14px] w-[14px]" />
       </button>
-      <ol className="tl-steps-list">
-        {entries.map((entry) => (
-          <li key={entry.id}>
-            <StepRow entry={entry} selected={entry.id === selectedId} onOpen={onStepClick} />
-          </li>
-        ))}
-      </ol>
+      {open && (
+        <ol className="steps-list">
+          {entries.map((entry) => (
+            <li key={entry.id}>
+              <StepRow entry={entry} selected={entry.id === selectedId} onOpen={onStepClick} />
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   );
 }, sameGroupProps);
@@ -112,27 +120,27 @@ function StepRow({ entry, selected, onOpen }: { entry: ChatEntry; selected: bool
   const diff = stepDiffStat(entry);
 
   return (
-    <div className={`tl-step-row${selected ? " sel" : ""}${entry.status === "error" ? " err" : ""}`}>
+    <div className={`step-row${selected ? " sel" : ""}${entry.status === "error" ? " err" : ""}`}>
       <button
         type="button"
-        className="tl-step-main"
+        className="step-main"
         data-step-id={entry.id}
         title={isSubagent ? summarizeStep(entry) : summary}
         onClick={() => (onOpen ? onOpen(entry) : useUiStore.getState().openStep(entry.id))}
       >
-        <span className="tl-step-status">
+        <span className="step-status">
           {entry.status === "running" ? (
-            <span className="flame" aria-hidden />
+            <span className="live-dot" aria-hidden />
           ) : entry.status === "error" ? (
             <X className="h-3 w-3" />
           ) : (
-            <span className="tl-step-dot" aria-hidden />
+            <span className="step-dot" aria-hidden />
           )}
         </span>
-        <Icon className="tl-step-icon h-[14px] w-[14px]" />
-        <span className="tl-step-name">{entry.toolName}</span>
-        <span className="tl-step-sum">{summary}</span>
-        <span className="tl-step-extra">
+        <Icon className="step-icon h-[14px] w-[14px]" />
+        <span className="step-name">{entry.toolName}</span>
+        <span className="step-sum">{summary}</span>
+        <span className="step-extra">
           {isSubagent ? (
             subagentCost != null ? (
               `$${subagentCost.toFixed(2)}`
@@ -140,19 +148,19 @@ function StepRow({ entry, selected, onOpen }: { entry: ChatEntry; selected: bool
           ) : (
             diff && (
               <>
-                <b className="tl-plus">+{diff.add}</b>
-                {diff.del > 0 && <i className="tl-minus">−{diff.del}</i>}
+                <b className="diff-plus">+{diff.add}</b>
+                {diff.del > 0 && <i className="diff-minus">−{diff.del}</i>}
               </>
             )
           )}
         </span>
-        <span className="tl-step-dur">{formatDuration(stepDuration(entry))}</span>
+        <span className="step-dur">{formatDuration(stepDuration(entry))}</span>
       </button>
       {/* subagent 行尾联动: 点开检查器舰队页签; 高频组件不订阅 store, 只触发 */}
       {isSubagent && (
         <button
           type="button"
-          className="tl-step-fleet"
+          className="step-fleet"
           title="在舰队中查看"
           aria-label="在舰队中查看"
           onClick={() => useFleetStore.getState().requestOpenPanel()}

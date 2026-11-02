@@ -36,7 +36,7 @@ export function QueueIndicator({ steering, followUp }: { steering: string[]; fol
         <>
           {/* 透明遮罩: 点击任意处关闭 (与其它弹层同模式) */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-full left-0 z-50 mb-2 max-h-72 w-80 max-w-[90vw] overflow-y-auto rounded-lg border border-line bg-popover py-1 shadow-[var(--shadow)]">
+          <div className="popover absolute bottom-full left-0 z-50 mb-2 max-h-72 w-80 max-w-[90vw] overflow-y-auto p-1 view-in-soft">
             <QueueGroup
               label="steer 指导"
               tone="accent"
@@ -66,13 +66,13 @@ function QueueGroup({ label, tone, icon, items }: {
   const labelCls = tone === "accent" ? "text-accent" : "text-accent-2";
   return (
     <div className="py-1">
-      <div className={`flex items-center gap-1 px-4 py-1 text-mini font-medium ${labelCls}`}>
+      <div className={`flex items-center gap-1 px-4 py-1 text-meta font-medium ${labelCls}`}>
         {icon}
         {label}
         <span className="text-fg-4">{items.length}</span>
       </div>
       {items.map((msg, i) => (
-        <div key={i} className="border-l-2 border-line px-4 py-1 text-mini text-fg-2">
+        <div key={i} className="border-l-2 border-line px-4 py-1 text-meta text-fg-2">
           <p className="truncate" title={msg}>{msg}</p>
         </div>
       ))}

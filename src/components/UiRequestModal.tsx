@@ -10,6 +10,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { UiRequest } from "../lib/pi";
+import { Button, FIELD_BASE } from "./ui";
 
 // 扩展 UI 请求弹窗: 权限确认 (confirm) / 选项 (select) / 单行输入 (input) / 多行文本 (editor)
 // 回复协议: confirm → {confirmed} ; select/input/editor → {value} ; 取消 → {cancelled: true}
@@ -55,43 +56,43 @@ export function UiRequestModal({
 
   const icon =
     request.method === "confirm" ? (
-      <ShieldAlert className="h-5 w-5 text-[var(--accent)]" />
+      <ShieldAlert className="h-4 w-4 text-fg-3" />
     ) : request.method === "select" ? (
-      <ListChecks className="h-5 w-5 text-[var(--accent)]" />
+      <ListChecks className="h-4 w-4 text-fg-3" />
     ) : request.method === "editor" ? (
-      <FileText className="h-5 w-5 text-[var(--accent)]" />
+      <FileText className="h-4 w-4 text-fg-3" />
     ) : (
-      <TextCursorInput className="h-5 w-5 text-[var(--accent)]" />
+      <TextCursorInput className="h-4 w-4 text-fg-3" />
     );
 
   const submit = () => onResolve(request.id, { value });
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
       onMouseDown={(e) => {
         // 点遮罩本身 = 取消 (不拦截卡片内部点击)
         if (e.target === e.currentTarget) onCancel(request.id);
       }}
     >
-      <div className="w-[420px] max-w-[90vw] rounded-lg border border-[var(--line)] bg-popover shadow-[var(--shadow)]">
-        <div className="flex items-center gap-2 border-b border-[var(--line)] px-5 py-4">
+      <div className="w-[440px] max-w-[90vw] rounded-xl border border-edge bg-popover shadow-lg view-in-soft">
+        <div className="flex h-12 items-center gap-2 border-b border-line pl-5 pr-3">
           {icon}
-          <span className="flex-1 truncate text-body font-semibold text-[var(--fg)]">
+          <span className="flex-1 truncate text-lead font-semibold text-fg">
             {request.title || "扩展请求"}
           </span>
           <button
             onClick={() => onCancel(request.id)}
-            className="rounded-md p-1 text-[var(--fg-4)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+            className="grid h-8 w-8 place-items-center rounded-md text-fg-4 transition duration-fast ease-out hover:bg-hover hover:text-fg"
             title="取消 (Esc)"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="px-5 py-4">
+        <div className="px-5 py-5">
           {request.method === "confirm" && (
-            <p className="text-body leading-relaxed text-[var(--fg-2)]">
+            <p className="text-body leading-relaxed text-fg-2">
               {request.message || "请确认此操作"}
             </p>
           )}
@@ -103,14 +104,14 @@ export function UiRequestModal({
                   <button
                     key={opt}
                     onClick={() => onResolve(request.id, { value: opt })}
-                    className="flex w-full items-center justify-between rounded-md border border-[var(--line)] px-4 py-2 text-left text-body text-[var(--fg-2)] transition duration-fast ease-out hover:border-[color-mix(in_oklch,var(--accent)_45%,transparent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-edge bg-card px-4 text-left text-body text-fg-2 shadow-sm transition duration-fast ease-out hover:border-line-2 hover:text-fg"
                   >
                     <span className="truncate">{opt}</span>
-                    <ListChecks className="h-4 w-4 shrink-0 text-[var(--fg-4)]" />
+                    <ListChecks className="h-4 w-4 shrink-0 text-fg-4" />
                   </button>
                 ))
               ) : (
-                <p className="text-body text-[var(--fg-4)]">没有可用选项</p>
+                <p className="text-body text-fg-4">没有可用选项</p>
               )}
             </div>
           )}
@@ -124,7 +125,7 @@ export function UiRequestModal({
                 if (e.key === "Enter") submit();
               }}
               placeholder={request.placeholder || "输入内容…"}
-              className="w-full rounded-md border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-body text-[var(--fg)] outline-none transition duration-fast ease-out placeholder:text-[var(--fg-4)] focus:border-[color-mix(in_oklch,var(--accent)_50%,transparent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+              className={`${FIELD_BASE} h-9 px-3`}
             />
           )}
 
@@ -138,25 +139,20 @@ export function UiRequestModal({
                 if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit();
               }}
               rows={8}
-              className="w-full resize-y rounded-md border border-[var(--line)] bg-[var(--well)] px-3 py-2 font-mono text-body text-[var(--fg)] outline-none transition duration-fast ease-out placeholder:text-[var(--fg-4)] focus:border-[color-mix(in_oklch,var(--accent)_50%,transparent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+              className={`${FIELD_BASE} resize-y px-3 py-2 font-mono leading-relaxed`}
             />
           )}
         </div>
 
         {(request.method === "confirm" || request.method === "input" || request.method === "editor") && (
-          <div className="flex justify-end gap-2 border-t border-[var(--line)] px-5 py-4">
-            <button
-              onClick={() => onCancel(request.id)}
-              className="rounded-md px-4 py-2 text-body text-[var(--fg-2)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
-            >
-              取消
-            </button>
-            <button
+          <div className="flex justify-end gap-2 border-t border-line px-5 py-3">
+            <Button onClick={() => onCancel(request.id)}>取消</Button>
+            <Button
+              variant="primary"
               onClick={request.method === "confirm" ? () => onResolve(request.id, { confirmed: true }) : submit}
-              className="rounded-md bg-[var(--accent)] px-4 py-2 text-body font-medium text-[var(--on-accent)] transition duration-fast ease-out hover:bg-[color-mix(in_oklch,var(--accent)_88%,black)]"
             >
               {request.method === "confirm" ? "确认" : "提交"}
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -214,14 +210,14 @@ export function NotificationToasts({
 
   return (
     <div
-      className="pointer-events-none absolute right-4 top-[72px] z-40 flex w-[340px] max-w-[calc(100%-32px)] flex-col gap-2"
+      className="pointer-events-none absolute right-4 top-16 z-40 flex w-[340px] max-w-[calc(100%-32px)] flex-col gap-2"
     >
       {/* 计时器与卡片分离: 折叠未渲染的组也要按时到期, 否则数据会永远留在 store 里 */}
       {groups.map((g) => (
         <GroupTimer key={g.key} group={g} onDismiss={onDismiss} />
       ))}
       {hidden > 0 && (
-        <div className="pointer-events-auto self-end rounded-full border border-[var(--line)] bg-popover px-3 py-1 text-micro text-[var(--fg-3)] shadow-[var(--shadow)]">
+        <div className="pointer-events-auto self-end rounded-full border border-edge bg-popover px-3 py-1 text-meta text-fg-3 shadow-lg">
           还有 {hidden} 条通知
         </div>
       )}
@@ -260,17 +256,16 @@ function NotificationToast({
 
   return (
     <div
-      className="pointer-events-auto flex items-start gap-2 rounded-md border border-[var(--line)] border-l-[3px] bg-popover px-3 py-2 shadow-[var(--shadow)]"
-      style={{ borderLeftColor: tone }}
+      className="pointer-events-auto flex items-start gap-3 rounded-lg border border-edge bg-popover px-4 py-3 shadow-lg view-in-soft"
     >
-      <Icon className="mt-1 h-4 w-4 shrink-0" style={{ color: tone }} />
-      <span className="flex-1 break-words text-label leading-snug text-[var(--fg-2)]">
+      <Icon className="mt-[3px] h-4 w-4 shrink-0" style={{ color: tone }} />
+      <span className="flex-1 break-words text-body leading-snug text-fg-2">
         {message}
-        {items.length > 1 && <span className="ml-1 text-micro text-[var(--fg-4)]">×{items.length}</span>}
+        {items.length > 1 && <span className="ml-1 text-meta text-fg-4">×{items.length}</span>}
       </span>
       <button
         onClick={() => items.forEach((n) => onDismiss(n.id))}
-        className="shrink-0 rounded-sm p-1 text-[var(--fg-4)] transition duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+        className="-mr-1 grid h-6 w-6 shrink-0 place-items-center rounded-md text-fg-4 transition duration-fast ease-out hover:bg-hover hover:text-fg"
         title="关闭"
         aria-label="关闭通知"
       >

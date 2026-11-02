@@ -124,14 +124,14 @@ export function RefsPopup({ root, onPick, onClose }: {
   };
 
   return (
-    <div className="absolute bottom-full left-0 z-50 mb-1 w-[520px] rounded-lg border border-line bg-popover p-3 shadow-[var(--shadow)]">
+    <div className="popover absolute bottom-full left-0 z-50 mb-2 w-[520px] p-3 view-in-soft">
       {/* tabs */}
       <div className="mb-2 flex items-center gap-1 border-b border-line pb-2">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => { setTab(key); setErr(null); }}
-            className={`flex items-center gap-1 rounded-md px-2 py-2 text-xs transition duration-fast ease-out ${
+            className={`flex items-center gap-1 rounded-md px-2 py-2 text-meta transition duration-fast ease-out ${
               tab === key
                 ? "bg-accent-soft font-medium text-accent"
                 : "text-fg-3 hover:bg-hover hover:text-fg-2"
@@ -155,7 +155,7 @@ export function RefsPopup({ root, onPick, onClose }: {
           <FileTreePicker root={root} onPick={onPick} onDone={() => {}} />
           <button
             onClick={addAnyFile}
-            className="flex items-center justify-center gap-2 rounded-md border border-dashed border-line-2 px-3 py-2 text-xs text-fg-3 transition duration-fast ease-out hover:border-[color-mix(in_oklch,var(--accent)_45%,transparent)] hover:text-accent"
+            className="flex items-center justify-center gap-2 rounded-md border border-dashed border-line-2 px-3 py-2 text-meta text-fg-3 transition duration-fast ease-out hover:border-[color-mix(in_srgb,var(--accent)_45%,transparent)] hover:text-accent"
           >
             <FilePlus2 className="h-4 w-4" />
             引用项目外文件 (系统选择器)
@@ -173,7 +173,7 @@ export function RefsPopup({ root, onPick, onClose }: {
           <button
             onClick={pasteText}
             disabled={busy !== null}
-            className="flex w-full items-center gap-2 rounded-md border border-line px-4 py-3 text-left text-sm text-fg-2 transition duration-fast ease-out hover:border-[color-mix(in_oklch,var(--accent)_45%,transparent)] hover:bg-accent-soft disabled:opacity-50"
+            className="flex w-full items-center gap-2 rounded-md border border-line px-4 py-3 text-left text-body text-fg-2 transition duration-fast ease-out hover:border-[color-mix(in_srgb,var(--accent)_45%,transparent)] hover:bg-accent-soft disabled:opacity-50"
           >
             {busy === "clipboard-text" ? (
               <Loader2 className="h-4 w-4 animate-spin text-accent" />
@@ -185,7 +185,7 @@ export function RefsPopup({ root, onPick, onClose }: {
           <button
             onClick={pasteImage}
             disabled={busy !== null}
-            className="flex w-full items-center gap-2 rounded-md border border-line px-4 py-3 text-left text-sm text-fg-2 transition duration-fast ease-out hover:border-[color-mix(in_oklch,var(--accent)_45%,transparent)] hover:bg-accent-soft disabled:opacity-50"
+            className="flex w-full items-center gap-2 rounded-md border border-line px-4 py-3 text-left text-body text-fg-2 transition duration-fast ease-out hover:border-[color-mix(in_srgb,var(--accent)_45%,transparent)] hover:bg-accent-soft disabled:opacity-50"
           >
             {busy === "clipboard-image" ? (
               <Loader2 className="h-4 w-4 animate-spin text-accent" />
@@ -201,7 +201,7 @@ export function RefsPopup({ root, onPick, onClose }: {
           <button
             onClick={shoot}
             disabled={busy !== null}
-            className="flex w-full items-center gap-2 rounded-md border border-line px-4 py-3 text-left text-sm text-fg-2 transition duration-fast ease-out hover:border-[color-mix(in_oklch,var(--accent)_45%,transparent)] hover:bg-accent-soft disabled:opacity-50"
+            className="flex w-full items-center gap-2 rounded-md border border-line px-4 py-3 text-left text-body text-fg-2 transition duration-fast ease-out hover:border-[color-mix(in_srgb,var(--accent)_45%,transparent)] hover:bg-accent-soft disabled:opacity-50"
           >
             {busy === "shot" ? (
               <Loader2 className="h-4 w-4 animate-spin text-accent" />
@@ -210,12 +210,12 @@ export function RefsPopup({ root, onPick, onClose }: {
             )}
             截取屏幕 (全屏)
           </button>
-          <p className="text-xs text-fg-4">截图随消息以图片形式发送, 视觉模型可直接查看</p>
+          <p className="text-meta text-fg-4">截图随消息以图片形式发送, 视觉模型可直接查看</p>
         </div>
       )}
 
       {err && (
-        <p className="mt-2 flex items-center gap-1 text-xs text-err">
+        <p className="mt-2 flex items-center gap-1 text-meta text-err">
           <AlertCircle className="h-3 w-3" />
           {err}
         </p>

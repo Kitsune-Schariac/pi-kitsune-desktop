@@ -1,24 +1,16 @@
-// 主题皮肤 store: 皮肤列表 + 当前主题 (只有纯色主题, 壁纸舞台已删除)
-// 切换主题 = 写 :root CSS 变量 + data-theme/data-base 属性 + override.css 注入
-// 契约对齐 Rust skins.rs (serde 序列化, snake_case 字段) + design.md 皮肤包 schema
+// 外观 store: 只有日间 (白) / 夜间 (黑) 两套配色, 外加「跟随系统」。
+// 颜色全部在 index.css 的 [data-base="light|dark"] 两组 token 里, 这里只负责决定 <html data-base>。
+// 皮肤包系统已移除 —— 多套皮肤各自一套配色策略, 组件层很难做到处处一致。
 import { create } from "zustand";
-import { invoke } from "@tauri-apps/api/core";
 
-/** Rust 侧 SkinMeta */
-export interface SkinMeta {
-  id: string;
-  name: string;
-  author: string;
-  version: string;
-  base: "light" | "dark";
-  colors: Record<string, string>;
-  has_override: boolean;
-}
+export type ThemeMode = "light" | "dark" | "system";
+export type ResolvedTheme = "light" | "dark";
 
-// localStorage 键: 与现有 kitsune.projectOrder 同前缀, 不冲突
-const ACTIVE_SKIN_KEY = "kitsune.activeSkin";
-// 已作废的旧键, 启动时清理: 气泡三件套与三个不透明率/模糊滑杆 (D2), 壁纸舞台的暗幕浓度
+const MODE_KEY = "kitsune.themeMode";
+// 已作废的旧键, 启动时清理 (皮肤 id、气泡与不透明度偏好、壁纸暗幕)
+const LEGACY_SKIN_KEY = "kitsune.activeSkin";
 const LEGACY_KEYS = [
+  LEGACY_SKIN_KEY,
   "kitsune.bubbleEnabled",
   "kitsune.bubbleOpacity",
   "kitsune.bubbleColor",
@@ -28,97 +20,89 @@ const LEGACY_KEYS = [
   "kitsune.bgBlur",
   "kitsune.scrim",
 ];
+// 旧版内置皮肤里 base=dark 的几套: 升级后沿用夜间模式, 不让老用户被突然切成白底
+const LEGACY_DARK_SKINS = new Set(["amber", "gold", "graphite", "jade"]);
 
-// StrictMode 双跑 effect 防重入: init 只执行一次
-let initialized = false;
+const media = (): MediaQueryList | null =>
+  typeof window !== "undefined" && window.matchMedia
+    ? window.matchMedia("(prefers-color-scheme: dark)")
+    : null;
 
-// 与 main.tsx 首帧预设的 data-base="light" 一致; 保存的 id 不存在 (含改名前的旧 id) 时也回落到这里
-export const DEFAULT_SKIN_ID = "white";
-
-/** 根容器 (App.tsx #app-root): 切换过渡挂这里 */
-function rootEl(): HTMLElement | null {
-  return document.getElementById("app-root");
-}
-
-/** override.css 注入标签: 全局唯一, 切皮肤时整体替换 (第三方皮肤兼容机制保留) */
-function overrideStyleEl(): HTMLStyleElement {
-  let el = document.getElementById("skin-override-style") as HTMLStyleElement | null;
-  if (!el) {
-    el = document.createElement("style");
-    el.id = "skin-override-style";
-    document.head.appendChild(el);
+function readMode(): ThemeMode {
+  try {
+    const saved = localStorage.getItem(MODE_KEY);
+    if (saved === "light" || saved === "dark" || saved === "system") return saved;
+    const legacy = localStorage.getItem(LEGACY_SKIN_KEY);
+    if (legacy) return LEGACY_DARK_SKINS.has(legacy) ? "dark" : "light";
+  } catch {
+    // localStorage 不可用 (隐私模式等): 回落默认
   }
-  return el;
+  return "light";
 }
 
-/** 上一个皮肤写过的变量名: 切换时先清掉, 防残留变量跨皮肤串扰 */
-let lastColorKeys: string[] = [];
-
-interface ThemeStore {
-  skins: SkinMeta[];
-  activeSkinId: string;
-  /** 当前皮肤 base 方向: 驱动 Shiki 主题 + markdown 文字色 (Markdown.tsx 订阅) */
-  activeBase: "light" | "dark";
-  init: () => Promise<void>;
-  applyTheme: (skin: SkinMeta) => Promise<void>;
-  reloadSkins: () => Promise<void>;
+function resolve(mode: ThemeMode): ResolvedTheme {
+  if (mode === "system") return media()?.matches ? "dark" : "light";
+  return mode;
 }
 
-export const useThemeStore = create<ThemeStore>((set, get) => ({
-  skins: [],
-  activeSkinId: DEFAULT_SKIN_ID,
-  activeBase: "light",
-
-  /** 启动: 清理废弃偏好 → 拉皮肤列表 → 恢复持久化 → 应用当前主题 */
-  init: async () => {
-    if (initialized) return;
-    initialized = true;
-    for (const k of LEGACY_KEYS) localStorage.removeItem(k);
-    const skins = await invoke<SkinMeta[]>("list_skins");
-    const saved = localStorage.getItem(ACTIVE_SKIN_KEY) ?? DEFAULT_SKIN_ID;
-    const skin =
-      skins.find((s) => s.id === saved) ??
-      skins.find((s) => s.id === DEFAULT_SKIN_ID) ??
-      skins[0];
-    if (!skin) return; // 理论不可能: 内置至少一套
-    set({ skins });
-    await get().applyTheme(skin);
-  },
-
-  applyTheme: async (skin) => {
-    const el = document.documentElement;
-    el.dataset.theme = skin.id;
-    el.dataset.base = skin.base;
-
-    // 1. 清掉旧皮肤定义过的变量再写新的 (primary 色阶 / accent / pane 等)
-    for (const k of lastColorKeys) el.style.removeProperty(`--${k}`);
-    lastColorKeys = Object.keys(skin.colors ?? {});
-    for (const [k, v] of Object.entries(skin.colors ?? {})) {
-      el.style.setProperty(`--${k}`, v);
-    }
-
-    // 2. override.css: 有则注入 (选择器建议带 [data-theme] 前缀防串扰), 无则移除
-    if (skin.has_override) {
-      const css = await invoke<string>("get_skin_asset", { skinId: skin.id, assetName: "override" });
-      overrideStyleEl().textContent = css;
-    } else {
-      overrideStyleEl().textContent = "";
-    }
-
-    // 3. 状态 + 持久化
-    set({ activeSkinId: skin.id, activeBase: skin.base });
-    localStorage.setItem(ACTIVE_SKIN_KEY, skin.id);
-
-    // 4. 淡入淡出过渡 ~220ms (底色切换瞬间)
-    rootEl()?.animate([{ opacity: 0.55 }, { opacity: 1 }], {
-      duration: 220,
+/** 写 <html data-base>; animate=true 时给根容器一个短淡入, 掩盖底色瞬切 */
+function apply(theme: ResolvedTheme, animate: boolean) {
+  const el = document.documentElement;
+  if (el.dataset.base === theme) return;
+  el.dataset.base = theme;
+  if (animate) {
+    document.getElementById("app-root")?.animate([{ opacity: 0.6 }, { opacity: 1 }], {
+      duration: 200,
       easing: "ease-out",
     });
-  },
+  }
+}
 
-  /** 放新皮肤后手动刷新列表 (不切换当前主题) */
-  reloadSkins: async () => {
-    const skins = await invoke<SkinMeta[]>("list_skins");
-    set({ skins });
-  },
-}));
+interface ThemeStore {
+  mode: ThemeMode;
+  /** 实际生效的明暗: 驱动 Shiki 主题与桌宠气泡 */
+  resolved: ResolvedTheme;
+  init: () => void;
+  setMode: (mode: ThemeMode) => void;
+}
+
+let initialized = false;
+
+export const useThemeStore = create<ThemeStore>((set, get) => {
+  const mode = readMode();
+  return {
+    mode,
+    resolved: resolve(mode),
+
+    /** 启动: 迁移旧偏好 → 应用 → 监听系统明暗 (仅 system 模式下生效) */
+    init: () => {
+      if (initialized) return;
+      initialized = true;
+      const m = get().mode;
+      try {
+        localStorage.setItem(MODE_KEY, m);
+        for (const k of LEGACY_KEYS) localStorage.removeItem(k);
+      } catch {
+        // 忽略
+      }
+      apply(get().resolved, false);
+      media()?.addEventListener("change", () => {
+        if (get().mode !== "system") return;
+        const r = resolve("system");
+        apply(r, true);
+        set({ resolved: r });
+      });
+    },
+
+    setMode: (next) => {
+      const r = resolve(next);
+      apply(r, true);
+      set({ mode: next, resolved: r });
+      try {
+        localStorage.setItem(MODE_KEY, next);
+      } catch {
+        // 忽略
+      }
+    },
+  };
+});

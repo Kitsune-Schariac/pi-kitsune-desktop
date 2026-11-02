@@ -57,7 +57,7 @@ export default function App() {
   // 启动即加载侧边栏数据 (无连接面板, 直接进主界面)
   useEffect(() => {
     loadProjects();
-    // 主题皮肤系统: 拉皮肤列表 + 恢复持久化 + 应用当前主题 (模块级防重入)
+    // 外观: 迁移旧偏好 + 应用日间/夜间 + 监听系统明暗 (模块级防重入)
     useThemeStore.getState().init();
     // 桌宠: 拉宠物列表, 上次开着就自动开回来 (此时才动态加载事件桥; 关着则不挂任何监听)
     usePetStore.getState().init();
@@ -110,7 +110,7 @@ export default function App() {
           <Rail onOpenPanel={setPanel} onOpenSettings={openSettings} />
           <SessionPane />
           {/* 主区: 底色用 --bg */}
-          <main className="relative flex min-w-0 flex-1 flex-col bg-[var(--bg)]">
+          <main className="relative flex min-w-0 flex-1 flex-col bg-bg">
             {isSwitching ? (
               <div className="flex flex-1 items-center justify-center">
                 <ChaosLoader />
@@ -120,7 +120,7 @@ export default function App() {
                 <StageHead />
                 {/* 错误提示放头部下方: 悬浮输入框会盖住底部区域, 放底部看不见 */}
                 {active.error && (
-                  <div className="shrink-0 border-b border-[color-mix(in_oklch,var(--err)_25%,transparent)] bg-[color-mix(in_oklch,var(--err)_10%,transparent)] px-5 py-2 text-body text-[var(--err)]">
+                  <div className="shrink-0 border-b border-line bg-[color-mix(in_srgb,var(--err)_8%,var(--bg))] px-5 py-2 text-body text-err">
                     {active.error}
                   </div>
                 )}
@@ -165,14 +165,14 @@ export default function App() {
         {/* Skill / Package 抽屉: settings 走独立模态窗, 不进抽屉, 否则多出空白抽屉 */}
         {(panel === "skills" || panel === "packages") && (
           <div className="absolute inset-0 z-40 flex justify-end bg-black/10">
-            <div className="flex h-full w-[380px] flex-col border-l border-[var(--line)] bg-popover shadow-[var(--shadow)]">
-              <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-3">
-                <span className="font-medium text-fg">
+            <div className="flex h-full w-[380px] flex-col border-l border-line bg-pane shadow-lg view-in-soft">
+              <div className="bar justify-between pl-5 pr-3">
+                <span className="text-lead font-semibold text-fg">
                   {panel === "skills" ? "Skill 管理" : "pi Package"}
                 </span>
                 <button
                   onClick={() => setPanel(null)}
-                  className="rounded-md p-1 text-fg-4 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
+                  className="grid h-8 w-8 place-items-center rounded-md text-fg-4 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
                   title="关闭"
                   aria-label="关闭"
                 >

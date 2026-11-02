@@ -118,14 +118,14 @@ export interface PetActivate {
   sessionId: string;
 }
 
-/** 皮肤配色: 皮肤是主窗口往自己的 <html> 上内联写 CSS 变量, 桌宠窗口是另一个页面拿不到,
- *  只能由主窗口把气泡用得到的几个变量读出来一起下发 */
+/** 气泡配色: 桌宠窗口是另一个页面, 不知道主窗口当前是日间还是夜间,
+ *  由主窗口把明暗与气泡用得到的几个变量读出来一起下发 */
 export interface PetTheme {
   base: "light" | "dark";
   vars: Record<string, string>;
 }
 
-const THEME_VARS = ["bg", "fg", "fg-2", "line", "line-2", "accent"];
+const THEME_VARS = ["bg", "card", "fg", "fg-2", "line", "line-2", "accent", "on-accent"];
 
 function readTheme(): PetTheme {
   const root = document.documentElement;

@@ -36,7 +36,7 @@ function genLorenzPath(steps: number, dt: number, x0: number, y0: number, z0: nu
 }
 
 // 两条轨迹不同初值 (吸引子形状都是蝴蝶, 细节不同) + 不同流动速度
-// 颜色走风格强调色 (--accent / --accent-2): 跟皮肤走, 不锁死固定色
+// 颜色走强调色 (--accent / --accent-2): 随日间 / 夜间切换, 不锁死固定色
 const TRACES = [
   { color: "var(--accent)", dur: 3.0, x0: 0.1, y0: 0, z0: 0 },
   { color: "var(--accent-2)", dur: 4.4, x0: -0.05, y0: 0.01, z0: 0 },
@@ -81,7 +81,7 @@ export function ChaosLoader({ label = "加载中" }: { label?: string }) {
           ))}
         </svg>
       </div>
-      <span className="text-label text-[var(--fg-3)]">{label}</span>
+      <span className="text-label text-fg-3">{label}</span>
     </div>
   );
 }

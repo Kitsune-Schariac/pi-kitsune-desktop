@@ -60,8 +60,8 @@ const MAX_PRESETS: [number, string][] = [
 ];
 const JSON_SLOT = "model-json";
 
-const CHIP_ON = "border-[color-mix(in_oklch,var(--accent)_45%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]";
-const CHIP_OFF = "border-[var(--line)] bg-[var(--well)] text-[var(--fg-3)] hover:border-[var(--line-2)] hover:text-[var(--fg)]";
+const CHIP_ON = "border-[color-mix(in_srgb,var(--accent)_45%,transparent)] bg-accent-soft text-accent";
+const CHIP_OFF = "border-line bg-well text-fg-3 hover:border-line-2 hover:text-fg";
 
 export function ModelEditor({
   pid,
@@ -175,21 +175,21 @@ export function ModelEditor({
   return (
     <section ref={rootRef} className="min-h-0 min-w-0 overflow-y-auto">
       <div className={`max-w-[880px] pb-10 pt-5 ${stacked ? "px-4" : "px-7"}`}>
-        <div className="flex flex-wrap items-start gap-4 border-b border-[var(--line)] pb-4">
+        <div className="flex flex-wrap items-start gap-4 border-b border-line pb-4">
           {onBack && (
             <button
               onClick={() => {
                 if (mode !== "json" || applyJson()) onBack();
               }}
-              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-label text-[var(--fg-3)] transition-colors duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-label text-fg-3 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
             >
               <ArrowLeft className="h-[14px] w-[14px]" />
               模型列表
             </button>
           )}
           <div className="min-w-[200px] flex-1">
-            <div className="break-all font-mono text-head font-semibold text-[var(--fg)]">{mid}</div>
-            <div className="mt-[2px] text-label text-[var(--fg-3)]">
+            <div className="break-all font-mono text-head font-semibold text-fg">{mid}</div>
+            <div className="mt-[2px] text-label text-fg-3">
               {name || "未命名"} · {pid}
             </div>
           </div>
@@ -260,18 +260,18 @@ export function ModelEditor({
                 jsonFocused.current = false;
                 applyJson();
               }}
-              className={`min-h-[460px] w-full resize-y rounded-md border bg-[var(--well)] px-3 py-2 font-mono text-label leading-relaxed text-[var(--fg)] outline-none transition-colors duration-fast ease-out ${
-                jsonErr ? "border-[var(--err)]" : "border-[var(--line)] focus:border-[var(--accent)]"
+              className={`min-h-[460px] w-full resize-y rounded-md border bg-well px-3 py-2 font-mono text-label leading-relaxed text-fg outline-none transition-colors duration-fast ease-out ${
+                jsonErr ? "border-err" : "border-line focus:border-accent"
               }`}
             />
-            <div className="flex flex-wrap items-center justify-between gap-3 text-mini">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-meta">
               {jsonErr ? (
-                <span className="inline-flex items-center gap-2 text-[var(--err)]">
+                <span className="inline-flex items-center gap-2 text-err">
                   <CircleAlert className="h-3 w-3 shrink-0" />
                   {jsonErr}
                 </span>
               ) : (
-                <span className="text-[var(--fg-4)]">整个模型对象。未知字段原样保留, 失焦、点「应用」或切回表单时生效。</span>
+                <span className="text-fg-4">整个模型对象。未知字段原样保留, 失焦、点「应用」或切回表单时生效。</span>
               )}
               <Button
                 size="sm"
@@ -296,8 +296,8 @@ export function ModelEditor({
 export function EditorPlaceholder({ pid, hasModels, onAdd }: { pid: string; hasModels: boolean; onAdd: () => void }) {
   const [fetching, setFetching] = useState(false);
   return (
-    <section className="grid min-h-0 min-w-0 place-content-center justify-items-center gap-3 p-10 text-center text-label text-[var(--fg-3)]">
-      <Boxes className="h-8 w-8 text-[var(--fg-4)]" />
+    <section className="grid min-h-0 min-w-0 place-content-center justify-items-center gap-3 p-10 text-center text-label text-fg-3">
+      <Boxes className="h-8 w-8 text-fg-4" />
       <span>{hasModels ? "选一个模型开始编辑" : "这个供应商还没有模型"}</span>
       {!hasModels && (
         <div className="flex flex-wrap justify-center gap-2">
@@ -319,10 +319,10 @@ export function EditorPlaceholder({ pid, hasModels, onAdd }: { pid: string; hasM
 
 function Row({ title, hint, labelCol, children }: { title: string; hint: string; labelCol: string; children: ReactNode }) {
   return (
-    <div className={`grid gap-x-6 gap-y-2 border-b border-[var(--line)] py-4 last:border-b-0 ${labelCol}`}>
+    <div className={`grid gap-x-6 gap-y-2 border-b border-line py-4 last:border-b-0 ${labelCol}`}>
       <div>
-        <div className="text-body font-semibold text-[var(--fg)]">{title}</div>
-        <div className="mt-[2px] text-mini leading-snug text-[var(--fg-4)]">{hint}</div>
+        <div className="text-body font-semibold text-fg">{title}</div>
+        <div className="mt-[2px] text-meta leading-snug text-fg-4">{hint}</div>
       </div>
       <div className="flex min-w-0 flex-col gap-3">{children}</div>
     </div>
@@ -384,7 +384,7 @@ function ModelForm({
       <Row title="标识" hint="id 原样发给供应商; 显示名只在界面里用" labelCol={labelCol}>
         <div className={`grid gap-3 ${stacked ? "grid-cols-1" : "grid-cols-2"}`}>
           <label className="flex flex-col gap-1">
-            <span className="text-mini text-[var(--fg-4)]">ID</span>
+            <span className="text-meta text-fg-4">ID</span>
             <Input
               className="font-mono"
               value={midDraft}
@@ -400,7 +400,7 @@ function ModelForm({
             {midErr && <FieldError>{midErr}</FieldError>}
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-mini text-[var(--fg-4)]">显示名</span>
+            <span className="text-meta text-fg-4">显示名</span>
             <Input
               value={typeof model.name === "string" ? model.name : ""}
               placeholder={mid}
@@ -445,7 +445,7 @@ function ModelForm({
 
       <Row title="兼容" hint="选「自动」时由 pi 按地址自己判断" labelCol={labelCol}>
         {compatRaw !== undefined && !isObj(compatRaw) ? (
-          <span className="flex items-start gap-2 text-mini text-[var(--err)]">
+          <span className="flex items-start gap-2 text-meta text-err">
             <CircleAlert className="mt-[2px] h-3 w-3 shrink-0" />
             compat 不是对象,
             <button className={LINK} onClick={onJson}>
@@ -460,10 +460,10 @@ function ModelForm({
               return (
                 <div key={k} className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex min-w-0 flex-col">
-                    <span className="font-mono text-label text-[var(--fg)]">{k}</span>
-                    <span className="text-mini text-[var(--fg-3)]">
+                    <span className="font-mono text-label text-fg">{k}</span>
+                    <span className="text-meta text-fg-3">
                       {COMPAT_DESC[k]}
-                      {cur === null && <span className="text-[var(--err)]"> · 值异常 ({JSON.stringify(v)})</span>}
+                      {cur === null && <span className="text-err"> · 值异常 ({JSON.stringify(v)})</span>}
                     </span>
                   </div>
                   <Segmented
@@ -480,7 +480,7 @@ function ModelForm({
               );
             })}
             {otherCompat.length > 0 && (
-              <span className="flex flex-wrap items-start gap-1 text-mini leading-relaxed text-[var(--fg-4)]">
+              <span className="flex flex-wrap items-start gap-1 text-meta leading-relaxed text-fg-4">
                 <Braces className="mt-[2px] h-3 w-3 shrink-0" />
                 另有 {otherCompat.length} 个兼容键:
                 <span className="font-mono">{otherCompat.join("、")}</span>
@@ -510,7 +510,7 @@ function ModelForm({
             </div>
           </>
         ) : (
-          <span className="text-mini text-[var(--fg-4)]">
+          <span className="text-meta text-fg-4">
             没有其他字段。samplingParams、headers 这类可以
             <button className={LINK} onClick={onJson}>
               在 JSON 里添加
@@ -529,8 +529,8 @@ function CapToggle({ on, icon: Icon, label, onClick }: { on: boolean; icon: Luci
       onClick={onClick}
       className={`inline-flex h-[30px] items-center gap-2 rounded-md border px-3 text-label transition-colors duration-fast ease-out ${
         on
-          ? "border-[color-mix(in_oklch,var(--accent)_45%,transparent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-          : "border-[var(--line-2)] text-[var(--fg-3)] hover:border-[var(--fg-4)] hover:text-[var(--fg)]"
+          ? "border-[color-mix(in_srgb,var(--accent)_45%,transparent)] bg-accent-soft text-accent"
+          : "border-line-2 text-fg-3 hover:border-fg-4 hover:text-fg"
       }`}
     >
       <Check className={`h-3 w-3 ${on ? "opacity-100" : "opacity-0"}`} />
@@ -572,7 +572,7 @@ function TokenField({
     <>
       <div className="flex flex-wrap items-center gap-3">
         <Input
-          className={`w-[140px] font-mono tabular-nums ${bad ? "!border-[var(--err)]" : ""}`}
+          className={`w-[140px] font-mono tabular-nums ${bad ? "!border-err" : ""}`}
           value={text}
           placeholder="未设置"
           onChange={(e) => setDraft(e.target.value)}
@@ -581,7 +581,7 @@ function TokenField({
             if (e.key === "Enter" && !e.nativeEvent.isComposing) e.currentTarget.blur();
           }}
         />
-        <span className="text-mini text-[var(--fg-4)]">
+        <span className="text-meta text-fg-4">
           {bad ? (
             <FieldError>写成 200000、200k 或 1M</FieldError>
           ) : n !== null ? (
@@ -601,7 +601,7 @@ function TokenField({
               setModelNumber(pid, mid, field, v);
               setDraft(null);
             }}
-            className={`h-6 rounded-[6px] border px-2 font-mono text-mini transition-colors duration-fast ease-out ${
+            className={`h-6 rounded-full border px-3 font-mono text-meta transition-colors duration-fast ease-out ${
               value === v ? CHIP_ON : CHIP_OFF
             }`}
           >
@@ -652,13 +652,13 @@ function CostGrid({ pid, mid, cost: costRaw, stacked }: { pid: string; mid: stri
       <div className={`grid gap-2 ${stacked ? "grid-cols-2" : "grid-cols-4"}`}>
         {COST_MAIN_KEYS.map((k) => (
           <label key={k} className="flex flex-col gap-1">
-            <span className="text-mini text-[var(--fg-4)]">{COST_LABELS[k]}</span>
+            <span className="text-meta text-fg-4">{COST_LABELS[k]}</span>
             <div className="relative">
-              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 font-mono text-label text-[var(--fg-4)]">
+              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 font-mono text-label text-fg-4">
                 $
               </span>
               <Input
-                className={`pl-5 font-mono tabular-nums ${bad[k] ? "!border-[var(--err)]" : ""}`}
+                className={`pl-5 font-mono tabular-nums ${bad[k] ? "!border-err" : ""}`}
                 inputMode="decimal"
                 value={textOf(k)}
                 placeholder="0"
@@ -675,13 +675,13 @@ function CostGrid({ pid, mid, cost: costRaw, stacked }: { pid: string; mid: stri
           </label>
         ))}
       </div>
-      <div className="flex flex-wrap items-center gap-3 text-mini text-[var(--fg-4)]">
+      <div className="flex flex-wrap items-center gap-3 text-meta text-fg-4">
         {Object.values(bad).some(Boolean) && <FieldError>价格要写成非负数字, 比如 2.5</FieldError>}
         {cost ? (
           <>
             <span>
               典型一轮 (50k 输入其中 40k 命中缓存, 2k 输出) 约{" "}
-              <b className="font-mono text-label font-semibold text-[var(--fg-2)]">${typical.toFixed(4)}</b>
+              <b className="font-mono text-label font-semibold text-fg-2">${typical.toFixed(4)}</b>
             </span>
             <span className="flex-1" />
             <button

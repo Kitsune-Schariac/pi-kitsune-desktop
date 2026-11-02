@@ -42,7 +42,7 @@ export function DebugPanel({ brainRef }: { brainRef: RefObject<Brain | null> }) 
 
   return (
     <div
-      className="text-micro"
+      className="text-meta"
       style={{
         position: "absolute",
         left: 4,
@@ -53,7 +53,7 @@ export function DebugPanel({ brainRef }: { brainRef: RefObject<Brain | null> }) 
         flexDirection: "column",
         gap: 3,
         borderRadius: 8,
-        background: "color-mix(in oklch, var(--bg) 90%, transparent)",
+        background: "color-mix(in srgb, var(--bg) 90%, transparent)",
         color: "var(--fg)",
         border: "1px solid var(--line-2)",
         fontVariantNumeric: "tabular-nums",

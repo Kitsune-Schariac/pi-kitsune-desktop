@@ -11,6 +11,7 @@ import { GitSidebarPanel } from "../GitSidebarPanel";
 import { FleetSidebarPanel } from "../FleetSidebarPanel";
 import { TrellisSidebarPanel } from "../TrellisSidebarPanel";
 import { StepDetail } from "../inspector/StepDetail";
+import { Segmented } from "../ui";
 import { SessionOverview } from "../inspector/SessionOverview";
 
 /**
@@ -84,16 +85,16 @@ export function Inspector() {
   if (!inspectorOpen) return null;
 
   const tabs: { key: InspectorTab; label: string; icon: ReactNode; disabled?: boolean; badge?: ReactNode }[] = [
-    { key: "detail", label: "详情", icon: <ScanSearch className="h-[14px] w-[14px]" /> },
+    { key: "detail", label: "详情", icon: <ScanSearch className="h-3 w-3" /> },
     {
       key: "git",
       label: "Git",
-      icon: <GitBranch className="h-[14px] w-[14px]" />,
+      icon: <GitBranch className="h-3 w-3" />,
       // 非仓库或状态未就绪 → 灰显; 状态就绪的仓库显示变更数徽标
       disabled: gitReady && !gitIsRepo,
       badge:
         gitReady && gitIsRepo && gitChangeCount > 0 ? (
-          <span className="font-mono text-micro tabular-nums text-[var(--fg-4)]">
+          <span className="font-mono text-meta tabular-nums text-fg-4">
             {gitChangeCount}
           </span>
         ) : null,
@@ -101,40 +102,46 @@ export function Inspector() {
     {
       key: "fleet",
       label: "舰队",
-      icon: <Radar className="h-[14px] w-[14px]" />,
+      icon: <Radar className="h-3 w-3" />,
       badge:
         fleetActiveCount > 0 ? (
-          <span className="h-[6px] w-[6px] rounded-full bg-[var(--accent)] shadow-[0_0_6px_var(--accent)]" />
+          <span className="h-[6px] w-[6px] rounded-full bg-fg" />
         ) : null,
     },
     ...(trellisExists
-      ? [{ key: "trellis" as const, label: "任务", icon: <ListTree className="h-[14px] w-[14px]" /> }]
+      ? [{ key: "trellis" as const, label: "任务", icon: <ListTree className="h-3 w-3" /> }]
       : []),
   ];
 
   return (
     <aside style={{ width }} className="inspector inspector-col">
-      <div className="flex h-11 shrink-0 items-center gap-3 border-b border-[var(--line)] px-4">
-        {tabs.map(({ key, label, icon, disabled, badge }) => (
-          <button
-            key={key}
-            className={`insp-tab ${inspectorTab === key ? "on" : ""}`}
-            disabled={disabled}
-            onClick={() => setInspectorTab(key)}
-            title={disabled ? "非 Git 仓库" : label}
-          >
-            {icon}
-            <span>{label}</span>
-            {badge}
-          </button>
-        ))}
+      {/* 列头 (--bar-h): 页签用分段控件, 与会话列表的「最近 / 项目」同一种控件 */}
+      <div className="bar gap-2 pl-4 pr-3">
+        <Segmented
+          size="sm"
+          value={inspectorTab}
+          onChange={setInspectorTab}
+          ariaLabel="检查器页签"
+          options={tabs.map(({ key, label, icon, disabled, badge }) => ({
+            value: key,
+            disabled,
+            title: disabled ? "非 Git 仓库" : label,
+            label: (
+              <>
+                {icon}
+                <span>{label}</span>
+                {badge}
+              </>
+            ),
+          }))}
+        />
         <button
           onClick={() => setInspectorOpen(false)}
-          className="ml-auto grid h-7 w-7 place-items-center rounded-md text-[var(--fg-4)] transition-colors duration-fast ease-out hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+          className="ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-md text-fg-4 transition duration-fast ease-out hover:bg-hover hover:text-fg"
           title="收起检查器"
           aria-label="收起检查器"
         >
-          <X className="h-[14px] w-[14px]" />
+          <X className="h-4 w-4" />
         </button>
       </div>
 
@@ -162,7 +169,7 @@ export function Inspector() {
       >
         <div
           className={`absolute inset-y-0 left-1/2 w-[3px] -translate-x-1/2 rounded-full transition-colors duration-fast ${
-            dragging ? "bg-[var(--accent)]" : "bg-transparent group-hover:bg-[var(--line-2)]"
+            dragging ? "bg-fg-3" : "bg-transparent group-hover:bg-line-2"
           }`}
         />
       </div>

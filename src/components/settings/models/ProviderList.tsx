@@ -39,13 +39,13 @@ export function ProviderList() {
   });
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-col border-r border-[var(--line)] bg-[var(--pane)]">
+    <section className="flex min-h-0 min-w-0 flex-col border-r border-line bg-pane">
       <div className="flex shrink-0 flex-col gap-2 px-3 pb-2 pt-3">
-        <div className="text-label text-[var(--fg-3)]">
-          供应商<span className="ml-1 font-mono text-[var(--fg-4)]">{ids.length}</span>
+        <div className="text-label text-fg-3">
+          供应商<span className="ml-1 font-mono text-fg-4">{ids.length}</span>
         </div>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-[var(--fg-4)]" />
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-fg-4" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -56,7 +56,7 @@ export function ProviderList() {
             <button
               onClick={() => setQuery("")}
               title="清空"
-              className="absolute right-1 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-sm text-[var(--fg-4)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+              className="absolute right-1 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-sm text-fg-4 hover:bg-hover hover:text-fg"
             >
               <X className="h-[14px] w-[14px]" />
             </button>
@@ -66,9 +66,9 @@ export function ProviderList() {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {ids.length === 0 ? (
-          <p className="px-3 py-6 text-center text-label text-[var(--fg-4)]">还没有供应商, 点下方新增</p>
+          <p className="px-3 py-6 text-center text-label text-fg-4">还没有供应商, 点下方新增</p>
         ) : rows.length === 0 ? (
-          <p className="px-3 py-6 text-center text-label text-[var(--fg-4)]">
+          <p className="px-3 py-6 text-center text-label text-fg-4">
             没有匹配「{query.trim()}」的供应商或模型
           </p>
         ) : (
@@ -82,41 +82,41 @@ export function ProviderList() {
                   onClick={() => selectProvider(id)}
                   title={id}
                   className={`relative flex w-full flex-col gap-[2px] rounded-md py-2 pl-3 pr-3 text-left transition-colors duration-fast ease-out ${
-                    on ? "bg-[var(--raise)] shadow-[inset_0_0_0_1px_var(--line)]" : "hover:bg-[var(--hover)]"
+                    on ? "bg-card" : "hover:bg-hover"
                   }`}
                 >
-                  {on && <span className="absolute bottom-3 left-0 top-3 w-[2px] rounded-r-sm bg-[var(--accent)]" />}
+                  {on && <span className="absolute bottom-3 left-0 top-3 w-[2px] rounded-r-sm bg-accent" />}
                   <span className="flex min-w-0 items-center gap-2">
                     <span
-                      className={`truncate text-body ${on ? "font-semibold text-[var(--fg)]" : "text-[var(--fg-2)]"}`}
+                      className={`truncate text-body ${on ? "font-semibold text-fg" : "text-fg-2"}`}
                     >
                       {id}
                     </span>
                     {defaults?.provider === id && (
-                      <Star className="h-3 w-3 shrink-0 text-[var(--accent)]" aria-label="新会话默认所在供应商" />
+                      <Star className="h-3 w-3 shrink-0 text-accent" aria-label="新会话默认所在供应商" />
                     )}
                     {changed.has(id) && (
-                      <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-[var(--warn)]" title="有未保存的改动" />
+                      <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-warn" title="有未保存的改动" />
                     )}
                     <span className="flex-1" />
                     {probe?.status === "running" && (
-                      <LoaderCircle className="h-3 w-3 shrink-0 animate-spin text-[var(--fg-4)]" />
+                      <LoaderCircle className="h-3 w-3 shrink-0 animate-spin text-fg-4" />
                     )}
                     {probe?.status === "done" && (
                       <span
                         className={`h-[6px] w-[6px] shrink-0 rounded-full ${
-                          probe.result.ok ? "bg-[var(--ok)]" : "bg-[var(--err)]"
+                          probe.result.ok ? "bg-ok" : "bg-err"
                         }`}
                         title={probe.result.ok ? "连接正常" : probe.result.message ?? "连接失败"}
                       />
                     )}
                   </span>
                   <span className="flex min-w-0 items-center gap-2">
-                    <span className="truncate font-mono text-mini text-[var(--fg-4)]">{host || "未设置地址"}</span>
+                    <span className="truncate font-mono text-meta text-fg-4">{host || "未设置地址"}</span>
                     <span className="flex-1" />
-                    <span className="shrink-0 font-mono text-mini text-[var(--fg-4)]">{rawModelsOf(doc, id).length}</span>
+                    <span className="shrink-0 font-mono text-meta text-fg-4">{rawModelsOf(doc, id).length}</span>
                   </span>
-                  {hit && <span className="truncate text-mini text-[var(--accent)]">含 {hit}</span>}
+                  {hit && <span className="truncate text-meta text-accent">含 {hit}</span>}
                 </button>
               );
             })}
@@ -124,10 +124,10 @@ export function ProviderList() {
         )}
       </div>
 
-      <div className="shrink-0 border-t border-[var(--line)] p-2">
+      <div className="shrink-0 border-t border-line p-2">
         <button
           onClick={() => setCreating(true)}
-          className="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-dashed border-[var(--line-2)] text-label text-[var(--fg-3)] transition-colors duration-fast ease-out hover:border-[var(--accent)] hover:text-[var(--fg)]"
+          className="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-dashed border-line-2 text-label text-fg-3 transition-colors duration-fast ease-out hover:border-accent hover:text-fg"
         >
           <Plus className="h-[14px] w-[14px]" />
           新增供应商
