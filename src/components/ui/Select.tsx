@@ -17,7 +17,7 @@ export interface SelectOption {
 
 const DENSITY = {
   md: "h-8 pl-3 pr-2 text-body",
-  sm: "h-7 pl-2 pr-1 text-label",
+  sm: "h-7 pl-3 pr-2 text-label",
 } as const;
 
 export type SelectDensity = keyof typeof DENSITY;
@@ -171,8 +171,8 @@ export function Select({
         onKeyDown={onKeyDown}
         className={`inline-flex min-w-0 shrink-0 items-center gap-2 rounded-md border bg-card text-left shadow-sm outline-none transition duration-fast ease-out disabled:cursor-not-allowed disabled:opacity-40 ${
           open
-            ? "border-fg-3 shadow-[var(--shadow-sm),0_0_0_3px_var(--accent-soft)]"
-            : "border-line hover:border-line-2"
+            ? "border-line-2 shadow-[var(--shadow-sm),0_0_0_3px_var(--accent-soft)]"
+            : "border-edge hover:border-line"
         } ${DENSITY[density]} ${className}`}
       >
         <span className={`min-w-0 flex-1 truncate ${selected ? "text-fg" : "text-fg-4"}`}>

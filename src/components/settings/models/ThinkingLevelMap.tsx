@@ -160,7 +160,7 @@ export function ThinkingLevelMap({ pid, mid, model }: { pid: string; mid: string
         </div>
 
         {sel && selInfo ? (
-          <div className="flex flex-col gap-2 rounded-md bg-well px-3 py-2 shadow-[inset_0_0_0_1px_var(--line)]">
+          <div className="flex flex-col gap-2 rounded-md bg-fg/[0.045] px-3 py-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-label font-semibold text-fg">{sel}</span>
               <span className="text-label text-fg-4">档发送</span>
@@ -201,7 +201,7 @@ export function ThinkingLevelMap({ pid, mid, model }: { pid: string; mid: string
                     <button
                       key={v}
                       onClick={() => setModelLevelEntry(pid, mid, sel, v)}
-                      className={`h-6 rounded-[6px] border px-2 font-mono text-meta transition-colors duration-fast ease-out ${
+                      className={`h-6 rounded-full border px-3 font-mono text-meta transition-colors duration-fast ease-out ${
                         selValue === v
                           ? "border-[color-mix(in_srgb,var(--accent)_45%,transparent)] bg-accent-soft text-accent"
                           : "border-line bg-well text-fg-3 hover:border-line-2 hover:text-fg"

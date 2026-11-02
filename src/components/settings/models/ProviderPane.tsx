@@ -307,7 +307,7 @@ export function ProviderPane({
               </div>
             </>
           ) : (
-            <div className="grid grid-cols-[32px_minmax(0,1fr)] items-center gap-x-2 gap-y-1 rounded-md bg-well px-3 py-2 text-label shadow-[inset_0_0_0_1px_var(--line)]">
+            <div className="grid grid-cols-[32px_minmax(0,1fr)] items-center gap-x-2 gap-y-1 rounded-md bg-fg/[0.045] px-3 py-2 text-label">
               <span className="text-meta text-fg-4">地址</span>
               <span className="flex min-w-0 items-center gap-2">
                 <span
@@ -610,7 +610,7 @@ function AddModelBox({
   return (
     <div
       ref={boxRef}
-      className="-mx-2 flex scroll-my-3 flex-col gap-1 rounded-md bg-well p-2 shadow-[inset_0_0_0_1px_var(--line)]"
+      className="-mx-2 flex scroll-my-3 flex-col gap-1 rounded-md bg-fg/[0.045] p-2"
     >
       <Input
         autoFocus
@@ -629,7 +629,7 @@ function AddModelBox({
         <button
           disabled={exists}
           onClick={addBlank}
-          className="flex w-full min-w-0 items-center gap-2 rounded-[6px] px-2 py-1 text-left text-label hover:bg-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+          className="flex w-full min-w-0 items-center gap-2 rounded-[8px] px-2 py-1 text-left text-label hover:bg-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
         >
           <Plus className="h-[14px] w-[14px] shrink-0" />
           <span className="min-w-0 flex-1 truncate">
@@ -657,7 +657,7 @@ function AddModelBox({
         <button
           key={`${s.pid}|${String(s.model.id)}`}
           onClick={() => addFrom(s)}
-          className="flex w-full min-w-0 items-center gap-2 rounded-[6px] px-2 py-1 text-left text-label hover:bg-hover"
+          className="flex w-full min-w-0 items-center gap-2 rounded-[8px] px-2 py-1 text-left text-label hover:bg-hover"
         >
           <Copy className="h-[14px] w-[14px] shrink-0 text-fg-4" />
           <span className="truncate font-mono">{String(s.model.id)}</span>

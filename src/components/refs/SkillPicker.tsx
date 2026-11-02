@@ -47,7 +47,7 @@ export function SkillPicker({ onPick, onDone }: {
 
   return (
     <div className="flex h-72 flex-col">
-      <div className="flex-1 overflow-auto rounded-md border border-line bg-card p-1">
+      <div className="flex-1 overflow-auto rounded-md border border-edge bg-card p-1">
         {!skills ? (
           <div className="flex h-full items-center justify-center gap-2 text-meta text-fg-4">
             <Loader2 className="h-4 w-4 animate-spin" /> 加载中…

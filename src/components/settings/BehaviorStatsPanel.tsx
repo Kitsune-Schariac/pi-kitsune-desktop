@@ -123,9 +123,9 @@ function TurnWaterfall({ turns }: { turns: SessionBehaviorResult["turns"] }) {
             <span className="w-8 shrink-0 text-right text-meta tabular-nums text-fg-4">
               #{t.idx + 1}
             </span>
-            <div className="h-[10px] flex-1 rounded-[3px] bg-well">
+            <div className="h-[10px] flex-1 rounded-full bg-fg/[0.06]">
               <div
-                className={`h-full rounded-[3px] transition-[width] duration-500 ease-out ${
+                className={`h-full rounded-full transition-[width] duration-500 ease-out ${
                   danger
                     ? "bg-err/80 group-hover:bg-err"
                     : warn
@@ -311,7 +311,7 @@ export function BehaviorStatsPanel() {
               ].map(({ icon: Icon, text }) => (
                 <span
                   key={text}
-                  className="flex h-8 items-center gap-2 rounded-full border border-line bg-card px-3 text-fg-2 shadow-sm"
+                  className="flex h-8 items-center gap-2 rounded-full border border-edge bg-card px-3 text-fg-2 shadow-sm"
                 >
                   <Icon className="h-[14px] w-[14px] text-fg-4" />
                   {text}
@@ -325,13 +325,13 @@ export function BehaviorStatsPanel() {
                 <h3 className="text-lead font-semibold text-fg">轮耗时瀑布</h3>
                 <div className="flex items-center gap-3 text-meta text-fg-4">
                   <span className="flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-[2px] bg-fg/30" />正常
+                    <span className="inline-block h-2 w-2 rounded-full bg-fg/30" />正常
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-[2px] bg-warn/80" />工具失败
+                    <span className="inline-block h-2 w-2 rounded-full bg-warn/80" />工具失败
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-[2px] bg-err/80" />错误/重试
+                    <span className="inline-block h-2 w-2 rounded-full bg-err/80" />错误/重试
                   </span>
                 </div>
               </div>
@@ -415,10 +415,10 @@ export function BehaviorStatsPanel() {
             <h3 className="text-lead font-semibold text-fg">按天趋势</h3>
             <div className="flex items-center gap-3 text-meta text-fg-4">
               <span className="flex items-center gap-1">
-                <span className="inline-block h-2 w-2 rounded-[2px] bg-fg/80" />轮数
+                <span className="inline-block h-2 w-2 rounded-full bg-fg/80" />轮数
               </span>
               <span className="flex items-center gap-1">
-                <span className="inline-block h-2 w-2 rounded-[2px] bg-fg/25" />工具调用
+                <span className="inline-block h-2 w-2 rounded-full bg-fg/25" />工具调用
               </span>
               <span title="轮与工具调用量纲差一个数量级, 共用刻度会把轮数压成一条线">各自缩放</span>
               <span>{byDay[0].date} ~ {byDay[byDay.length - 1].date}</span>
@@ -430,7 +430,7 @@ export function BehaviorStatsPanel() {
             const maxTurns = Math.max(...byDay.map((d) => d.turns), 1);
             const maxTools = Math.max(...byDay.map((d) => d.toolCalls), 1);
             return (
-              <div className="flex h-32 items-end gap-1 border-b border-line">
+              <div className="flex h-32 items-end gap-2">
                 {byDay.map((d) => (
                   <div
                     key={d.date}
@@ -440,11 +440,11 @@ export function BehaviorStatsPanel() {
                     title={`${d.date} · ${d.turns} 轮 · ${d.toolCalls} 次工具${d.retries > 0 ? ` · ${d.retries} 次重试` : ""}${d.compactions > 0 ? ` · ${d.compactions} 次压缩` : ""}`}
                   >
                     <div
-                      className="flex-1 rounded-t-[3px] bg-fg/80 transition duration-fast ease-out hover:bg-fg"
+                      className="flex-1 rounded-[5px] bg-fg/70 transition duration-fast ease-out hover:bg-fg"
                       style={{ height: `${Math.max((d.turns / maxTurns) * 100, d.turns > 0 ? 3 : 0)}%` }}
                     />
                     <div
-                      className="flex-1 rounded-t-[3px] bg-fg/25 transition duration-fast ease-out hover:bg-fg/50"
+                      className="flex-1 rounded-[5px] bg-fg/20 transition duration-fast ease-out hover:bg-fg/40"
                       style={{ height: `${Math.max((d.toolCalls / maxTools) * 100, d.toolCalls > 0 ? 3 : 0)}%` }}
                     />
                   </div>
@@ -587,9 +587,9 @@ function ToolDistChart({ dist, title }: { dist: { name: string; count: number }[
             <span className={`w-20 shrink-0 truncate text-right font-mono text-label ${d.name === "其它" ? "text-fg-4" : "text-fg-2"}`}>
               {d.name}
             </span>
-            <div className="h-3 flex-1 rounded-[3px] bg-well">
+            <div className="h-3 flex-1 rounded-full bg-fg/[0.06]">
               <div
-                className={`h-full rounded-[3px] transition-[width,background-color] duration-500 ease-out ${
+                className={`h-full rounded-full transition-[width,background-color] duration-500 ease-out ${
                   d.name === "其它" ? "bg-fg-4/40" : "bg-fg/30 group-hover:bg-fg"
                 }`}
                 style={{ width: `${Math.max((d.count / max) * 100, 2)}%` }}

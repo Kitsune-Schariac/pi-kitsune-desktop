@@ -56,15 +56,15 @@ export default {
       serif: ["var(--f-ui)"],
       mono: ["var(--f-mono)"],
     },
-    // 圆角四档: 小件 6 / 控件 8 / 卡片 12 / 大卡与气泡 16
+    // 圆角: 控件 10 / 卡片 16 / 大卡与弹窗 20 / 输入卡 24; 嵌套时内圆角 = 外圆角 − 内边距
     borderRadius: {
       none: "0px",
-      DEFAULT: "6px",
-      sm: "6px",
-      md: "8px",
-      lg: "12px",
-      xl: "16px",
-      "2xl": "20px",
+      DEFAULT: "8px",
+      sm: "8px",
+      md: "10px",
+      lg: "16px",
+      xl: "20px",
+      "2xl": "24px",
       full: "9999px",
     },
     extend: {
@@ -79,6 +79,8 @@ export default {
         well: "color-mix(in srgb, var(--well) calc(<alpha-value> * 100%), transparent)",
         hover: "color-mix(in srgb, var(--hover) calc(<alpha-value> * 100%), transparent)",
         line: "color-mix(in srgb, var(--line) calc(<alpha-value> * 100%), transparent)",
+        // 浮起表面的外轮廓: 比分隔线更淡, 主要靠阴影出层次, 边缘才显得软
+        edge: "color-mix(in srgb, var(--edge) calc(<alpha-value> * 100%), transparent)",
         "line-2": "color-mix(in srgb, var(--line-2) calc(<alpha-value> * 100%), transparent)",
         fg: "color-mix(in srgb, var(--fg) calc(<alpha-value> * 100%), transparent)",
         "fg-2": "color-mix(in srgb, var(--fg-2) calc(<alpha-value> * 100%), transparent)",

@@ -42,7 +42,7 @@ export function PackagesPanel() {
             {packages.map((p) => (
               <li
                 key={p}
-                className="flex h-10 items-center gap-2 rounded-lg border border-line bg-card px-3 text-body text-fg-2 shadow-sm"
+                className="flex h-10 items-center gap-2 rounded-lg border border-edge bg-card px-3 text-body text-fg-2 shadow-sm"
               >
                 <Package className="h-4 w-4 shrink-0 text-fg-3" />
                 <span className="truncate font-mono text-label" title={p}>{p}</span>
@@ -60,7 +60,7 @@ export function PackagesPanel() {
         {providers && providers.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {providers.map((p) => (
-              <span key={p} className="inline-flex h-6 items-center rounded-full bg-well px-3 text-label text-fg-2 shadow-[inset_0_0_0_1px_var(--line)]">
+              <span key={p} className="inline-flex h-6 items-center rounded-full bg-fg/[0.045] px-3 text-label text-fg-2">
                 {p}
               </span>
             ))}

@@ -61,7 +61,7 @@ export function StageHead() {
           onClick={() => setInspectorOpen(!inspectorOpen)}
           className={`grid h-8 w-8 place-items-center rounded-md transition duration-fast ease-out ${
             inspectorOpen
-              ? "bg-card text-fg shadow-[var(--shadow-sm),inset_0_0_0_1px_var(--line)]"
+              ? "bg-card text-fg shadow-[var(--shadow-sm),inset_0_0_0_1px_var(--edge)]"
               : "text-fg-3 hover:bg-hover hover:text-fg"
           }`}
           title={inspectorOpen ? "收起检查器" : "展开检查器"}

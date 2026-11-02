@@ -87,7 +87,7 @@ export function Badge({
   return (
     <span
       title={title}
-      className={`inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-[6px] border px-2 text-meta ${BADGE_TONE[tone]} ${className}`}
+      className={`inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 text-meta ${BADGE_TONE[tone]} ${className}`}
     >
       {children}
     </span>

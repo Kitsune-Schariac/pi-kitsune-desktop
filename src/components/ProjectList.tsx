@@ -728,7 +728,7 @@ export function ProjectList({
       {/* 重命名输入: 会话行内联编辑 */}
       {renamingPath && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30">
-          <div className="w-80 rounded-xl border border-line bg-popover p-5 shadow-lg view-in-soft">
+          <div className="w-80 rounded-xl border border-edge bg-popover p-5 shadow-lg view-in-soft">
             <p className="mb-3 text-lead font-semibold text-fg">重命名会话</p>
             <Input
               autoFocus

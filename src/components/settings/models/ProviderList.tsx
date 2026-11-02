@@ -82,7 +82,7 @@ export function ProviderList() {
                   onClick={() => selectProvider(id)}
                   title={id}
                   className={`relative flex w-full flex-col gap-[2px] rounded-md py-2 pl-3 pr-3 text-left transition-colors duration-fast ease-out ${
-                    on ? "bg-card shadow-[inset_0_0_0_1px_var(--line)]" : "hover:bg-hover"
+                    on ? "bg-card" : "hover:bg-hover"
                   }`}
                 >
                   {on && <span className="absolute bottom-3 left-0 top-3 w-[2px] rounded-r-sm bg-accent" />}

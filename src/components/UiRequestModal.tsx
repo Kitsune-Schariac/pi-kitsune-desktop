@@ -75,7 +75,7 @@ export function UiRequestModal({
         if (e.target === e.currentTarget) onCancel(request.id);
       }}
     >
-      <div className="w-[440px] max-w-[90vw] rounded-xl border border-line bg-popover shadow-lg view-in-soft">
+      <div className="w-[440px] max-w-[90vw] rounded-xl border border-edge bg-popover shadow-lg view-in-soft">
         <div className="flex h-12 items-center gap-2 border-b border-line pl-5 pr-3">
           {icon}
           <span className="flex-1 truncate text-lead font-semibold text-fg">
@@ -104,7 +104,7 @@ export function UiRequestModal({
                   <button
                     key={opt}
                     onClick={() => onResolve(request.id, { value: opt })}
-                    className="flex h-10 w-full items-center justify-between rounded-md border border-line bg-card px-4 text-left text-body text-fg-2 shadow-sm transition duration-fast ease-out hover:border-line-2 hover:text-fg"
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-edge bg-card px-4 text-left text-body text-fg-2 shadow-sm transition duration-fast ease-out hover:border-line-2 hover:text-fg"
                   >
                     <span className="truncate">{opt}</span>
                     <ListChecks className="h-4 w-4 shrink-0 text-fg-4" />
@@ -217,7 +217,7 @@ export function NotificationToasts({
         <GroupTimer key={g.key} group={g} onDismiss={onDismiss} />
       ))}
       {hidden > 0 && (
-        <div className="pointer-events-auto self-end rounded-full border border-line bg-popover px-3 py-1 text-meta text-fg-3 shadow-lg">
+        <div className="pointer-events-auto self-end rounded-full border border-edge bg-popover px-3 py-1 text-meta text-fg-3 shadow-lg">
           还有 {hidden} 条通知
         </div>
       )}
@@ -256,7 +256,7 @@ function NotificationToast({
 
   return (
     <div
-      className="pointer-events-auto flex items-start gap-3 rounded-lg border border-line bg-popover px-4 py-3 shadow-lg view-in-soft"
+      className="pointer-events-auto flex items-start gap-3 rounded-lg border border-edge bg-popover px-4 py-3 shadow-lg view-in-soft"
     >
       <Icon className="mt-[3px] h-4 w-4 shrink-0" style={{ color: tone }} />
       <span className="flex-1 break-words text-body leading-snug text-fg-2">

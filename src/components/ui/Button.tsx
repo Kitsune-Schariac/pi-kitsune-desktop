@@ -16,12 +16,12 @@ const BTN_SIZE = {
 const BTN_VARIANT = {
   // 次级操作: 卡片底 + 细边 + 小阴影 (与卡片同一语言)
   ghost:
-    "border border-line bg-card text-fg-2 shadow-sm hover:border-line-2 hover:text-fg",
+    "border border-edge bg-card text-fg-2 shadow-sm hover:border-line hover:text-fg",
   // 主操作: 墨色实底 (日间黑 / 夜间白)
   primary: "bg-accent font-medium text-on-accent shadow-sm hover:opacity-90",
   // 危险操作: 卡片底 + 红字, 悬停转红边
   danger:
-    "border border-line bg-card text-err shadow-sm hover:border-err hover:bg-[color-mix(in_srgb,var(--err)_8%,var(--card))]",
+    "border border-edge bg-card text-err shadow-sm hover:bg-[color-mix(in_srgb,var(--err)_8%,var(--card))]",
   // 纯文字按钮: 工具栏 / 卡片头里的轻操作
   subtle: "text-fg-3 hover:bg-hover hover:text-fg",
 } as const;

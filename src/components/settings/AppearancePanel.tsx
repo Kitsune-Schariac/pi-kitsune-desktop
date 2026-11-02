@@ -28,10 +28,10 @@ function Preview({ base }: { base: "light" | "dark" }) {
           <div className="flex flex-1 flex-col gap-[5px] pt-[2px]">
             <i className="block h-[4px] w-full rounded-full bg-fg/60" />
             <i className="block h-[4px] w-5/6 rounded-full bg-fg/60" />
-            <i className="block h-[12px] w-full rounded-[4px] border border-line bg-card shadow-sm" />
+            <i className="block h-[12px] w-full rounded-[4px] border border-edge bg-card shadow-sm" />
           </div>
         </div>
-        <div className="mb-2 mt-auto flex h-[16px] items-center justify-end rounded-[6px] border border-line-2 bg-card px-[3px] shadow-sm">
+        <div className="mb-2 mt-auto flex h-[16px] items-center justify-end rounded-[8px] border border-line-2 bg-card px-[3px] shadow-sm">
           <i className="block h-[10px] w-[10px] rounded-full bg-accent" />
         </div>
       </div>
@@ -58,7 +58,7 @@ export function AppearancePanel() {
                 onClick={() => setMode(m)}
                 aria-pressed={on}
                 className={`group overflow-hidden rounded-lg border bg-card text-left shadow-md transition duration-fast ease-out ${
-                  on ? "border-fg ring-1 ring-fg" : "border-line hover:border-line-2"
+                  on ? "border-fg/40 shadow-[var(--shadow-md),0_0_0_4px_var(--accent-soft)]" : "border-edge hover:border-line"
                 }`}
               >
                 <div className="relative h-28 w-full overflow-hidden">

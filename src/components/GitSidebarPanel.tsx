@@ -573,7 +573,7 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
             if (e.target === e.currentTarget) setBranchPickerOpen(false);
           }}
         >
-          <div className="w-72 overflow-hidden rounded-xl border border-line bg-popover shadow-lg view-in-soft">
+          <div className="w-72 overflow-hidden rounded-xl border border-edge bg-popover shadow-lg view-in-soft">
             <div className="flex items-center justify-between border-b border-line px-4 py-2">
               <span className="text-lead font-medium">切换分支</span>
               <button
@@ -623,7 +623,7 @@ export function GitSidebarPanel({ cwd, onClose }: Props) {
             if (e.target === e.currentTarget) confirm.onCancel();
           }}
         >
-          <div className="w-96 overflow-hidden rounded-xl border border-line bg-popover shadow-lg view-in-soft">
+          <div className="w-96 overflow-hidden rounded-xl border border-edge bg-popover shadow-lg view-in-soft">
             <div className="border-b border-line px-4 py-3 text-lead font-medium">{confirm.title}</div>
             <div className="whitespace-pre-line px-4 py-4 text-meta text-fg-2">{confirm.message}</div>
             <div className="flex justify-end gap-2 border-t border-line px-4 py-3">

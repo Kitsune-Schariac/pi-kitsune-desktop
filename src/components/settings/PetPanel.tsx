@@ -96,11 +96,11 @@ export function PetPanel() {
                   onClick={() => setPetId(p.id)}
                   aria-pressed={isActive}
                   className={`flex items-start gap-3 rounded-lg border bg-card p-4 text-left shadow-md transition duration-fast ease-out ${
-                    isActive ? "border-fg ring-1 ring-fg" : "border-line hover:border-line-2"
+                    isActive ? "border-fg/40 shadow-[var(--shadow-md),0_0_0_4px_var(--accent-soft)]" : "border-edge hover:border-line"
                   }`}
                   title={p.description || p.name}
                 >
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-well shadow-[inset_0_0_0_1px_var(--line)]">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-fg/[0.045]">
                     <Cat className="h-4 w-4 text-fg-3" />
                   </span>
                   <span className="min-w-0 flex-1">

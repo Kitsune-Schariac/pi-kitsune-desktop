@@ -236,11 +236,11 @@ export function TokenStatsPanel() {
           {(() => {
             const max = Math.max(...byDay.map((d) => d.total), 1);
             return (
-              <div className="flex h-32 items-end gap-1 border-b border-line">
+              <div className="flex h-32 items-end gap-2">
                 {byDay.map((d) => (
                   <div
                     key={d.date}
-                    className="group relative flex-1 rounded-t-[4px] bg-fg/25 transition duration-fast ease-out hover:bg-fg"
+                    className="group relative flex-1 rounded-[6px] bg-fg/15 transition duration-fast ease-out hover:bg-fg/70"
                     style={{ height: `${Math.max((d.total / max) * 100, 1.5)}%` }}
                     title={`${d.date} · ${fmt(d.total)} tokens · ${fmt(d.messageCount)} 条消息 · 命中率 ${hitRate(d.cacheRead, d.cacheWrite, d.input)}`}
                   />

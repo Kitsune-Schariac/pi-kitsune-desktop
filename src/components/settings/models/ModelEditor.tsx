@@ -601,7 +601,7 @@ function TokenField({
               setModelNumber(pid, mid, field, v);
               setDraft(null);
             }}
-            className={`h-6 rounded-[6px] border px-2 font-mono text-meta transition-colors duration-fast ease-out ${
+            className={`h-6 rounded-full border px-3 font-mono text-meta transition-colors duration-fast ease-out ${
               value === v ? CHIP_ON : CHIP_OFF
             }`}
           >

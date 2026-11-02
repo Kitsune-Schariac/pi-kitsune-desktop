@@ -84,7 +84,7 @@ function FileViewerDialog({ path, line }: { path: string; line: number | null })
         role="dialog"
         aria-modal="true"
         aria-label={name}
-        className="view-in-soft flex h-[min(85vh,900px)] w-[min(1100px,100%)] flex-col overflow-hidden rounded-xl border border-line bg-popover shadow-lg"
+        className="view-in-soft flex h-[min(85vh,900px)] w-[min(1100px,100%)] flex-col overflow-hidden rounded-xl border border-edge bg-popover shadow-lg"
       >
         <div className="flex shrink-0 items-start gap-2 border-b border-line py-3 pl-5 pr-3">
           <div className="min-w-0 flex-1">

@@ -73,7 +73,7 @@ export function SessionPane() {
       <div className="flex h-full flex-col" style={{ width }}>
         {/* 列头: 与主区 / 检查器同高 (--bar-h), 底线横向贯通 */}
         <div className="bar gap-2 px-3">
-          <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-line bg-card px-2 text-fg-4 shadow-sm transition duration-fast ease-out focus-within:border-fg-3 focus-within:shadow-[var(--shadow-sm),0_0_0_3px_var(--accent-soft)]">
+          <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-edge bg-card pl-3 pr-2 text-fg-4 shadow-sm transition duration-fast ease-out focus-within:border-line-2 focus-within:shadow-[var(--shadow-sm),0_0_0_3px_var(--accent-soft)]">
             <Search className="h-[14px] w-[14px] shrink-0" />
             <input
               ref={searchRef}
@@ -89,14 +89,14 @@ export function SessionPane() {
               aria-label="搜索会话"
               className="min-w-0 flex-1 bg-transparent text-body text-fg outline-none placeholder:text-fg-4"
             />
-            <kbd className="grid h-5 min-w-5 shrink-0 place-items-center rounded-[4px] bg-well px-1 font-mono text-meta text-fg-4 shadow-[inset_0_0_0_1px_var(--line)]">
+            <kbd className="grid h-5 min-w-5 shrink-0 place-items-center rounded-[6px] bg-fg/[0.06] px-1 font-mono text-meta text-fg-4">
               /
             </kbd>
           </label>
           <button
             onClick={handleAddProject}
             disabled={adding}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-line bg-card text-fg-3 shadow-sm transition duration-fast ease-out hover:border-line-2 hover:text-fg disabled:opacity-40"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-edge bg-card text-fg-3 shadow-sm transition duration-fast ease-out hover:border-line hover:text-fg disabled:opacity-40"
             title="新建会话 (选择目录)"
             aria-label="新建会话"
           >

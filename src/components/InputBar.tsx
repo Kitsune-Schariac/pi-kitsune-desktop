@@ -116,7 +116,7 @@ function ModelPicker({
       >
         <Cpu className="h-3 w-3 shrink-0 text-fg-4" />
         {model ? (
-          <span className="composer-meta-label max-w-[150px] truncate font-mono text-label text-fg">
+          <span className="composer-meta-label max-w-[150px] truncate text-label text-fg">
             {model.name}
           </span>
         ) : (
@@ -139,7 +139,7 @@ function ModelPicker({
                   className={`h-6 rounded-full px-3 text-label transition duration-fast ease-out ${
                     p === provider
                       ? "bg-accent text-on-accent"
-                      : "bg-well text-fg-2 shadow-[inset_0_0_0_1px_var(--line)] hover:text-fg"
+                      : "bg-fg/[0.045] text-fg-2 hover:text-fg"
                   }`}
                 >
                   {p}
@@ -153,7 +153,7 @@ function ModelPicker({
               <button
                 key={m.id}
                 onClick={() => { onPick(provider, m.id); setOpenSel(false); }}
-                className={`flex h-8 w-full items-center truncate rounded-md px-3 text-left font-mono text-label transition duration-fast ease-out hover:bg-hover ${
+                className={`flex h-8 w-full items-center truncate rounded-md px-3 text-left text-body transition duration-fast ease-out hover:bg-hover ${
                   model?.id === m.id ? "font-medium text-fg" : "text-fg-2"
                 }`}
               >
@@ -673,7 +673,7 @@ export function InputBar({
         )}
         {/* 排队条: 队列非空时贴卡片上沿显示 (原 StageHead 头部徽标迁入) */}
         <QueueIndicator steering={active?.steeringQueue ?? []} followUp={active?.followUpQueue ?? []} />
-        <div className="px-4 pt-3">
+        <div className="px-5 pt-3">
           {/* @引用 / /命令 浮层: 悬浮在输入卡上方 (与 RefsPopup 同模式), 不占卡片布局 */}
           <div className="relative">
             {popup?.kind === "mention" && (
@@ -705,7 +705,7 @@ export function InputBar({
                 return (
                   <span
                     key={i}
-                    className="flex h-7 items-center gap-2 rounded-md border border-line bg-well pl-2 pr-1 text-label text-fg-2"
+                    className="flex h-7 items-center gap-2 rounded-full bg-fg/[0.055] pl-3 pr-1 text-label text-fg-2"
                   >
                     <Icon className="h-3 w-3" />
                     <button
@@ -718,7 +718,7 @@ export function InputBar({
                     {meta && <span className="text-label text-fg-4">{meta}</span>}
                     <button
                       onClick={() => setRefs((prev) => prev.filter((_, j) => j !== i))}
-                      className="grid h-5 w-5 place-items-center rounded-[4px] text-fg-4 transition duration-fast ease-out hover:bg-hover hover:text-fg"
+                      className="grid h-5 w-5 place-items-center rounded-full text-fg-4 transition duration-fast ease-out hover:bg-hover hover:text-fg"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -780,13 +780,13 @@ export function InputBar({
           onPaste={handlePaste}
           placeholder={isStreaming ? "运行中: Enter 发 steer 指导, Alt+Enter 排队后续" : "输入消息, Enter 发送 (@ 引用文件/技能, / 命令)"}
           rows={2}
-          className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3 text-lead leading-relaxed text-fg outline-none placeholder:text-fg-4"
+          className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-5 pb-1 pt-4 text-lead leading-relaxed text-fg outline-none placeholder:text-fg-4"
         />
 
         {/* 工具行: 左 = 项目 chip (仅空状态) / 引用 / 命令; 右 = 上下文用量 / 模型 / 思考 / 发送。
             状态区 shrink-0 不折行, 窄宽下由 @container 收窄次要标签 (见 index.css) */}
-        {hint && <p className="px-4 text-right text-label text-warn">{hint}</p>}
-        <div className="flex items-center justify-between gap-2 px-2 pb-2">
+        {hint && <p className="px-5 text-right text-label text-warn">{hint}</p>}
+        <div className="flex items-center justify-between gap-2 px-3 pb-2">
           {/* 左下: 项目 / 引用 / 命令入口 */}
           <div className="flex min-w-0 items-center gap-1 overflow-hidden">
             {!activeSessionId && (
@@ -921,7 +921,7 @@ export function InputBar({
             store 的 notify 分支被过滤)。运行中实时跳动, settled 后定格, 下一轮 agent_start 重置 */}
         {turnStats && (
           <div
-            className={`flex h-9 items-center gap-4 border-t border-line px-4 text-label tabular-nums transition-colors duration-fast ease-out ${
+            className={`mx-5 flex h-9 items-center gap-4 border-t border-line text-label tabular-nums transition-colors duration-fast ease-out ${
               isStreaming ? "text-fg-2" : "text-fg-4"
             }`}
           >

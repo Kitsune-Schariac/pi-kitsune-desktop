@@ -64,7 +64,7 @@ export function Checkbox({
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`grid h-4 w-4 shrink-0 place-items-center rounded-[4px] border transition duration-fast ease-out disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`grid h-4 w-4 shrink-0 place-items-center rounded-[5px] border transition duration-fast ease-out disabled:cursor-not-allowed disabled:opacity-40 ${
         checked ? "border-accent bg-accent text-on-accent" : "border-line-2 bg-card hover:border-fg-4"
       } ${children ? "" : className}`}
     >

@@ -5,11 +5,11 @@ import type {
   TextareaHTMLAttributes,
 } from "react";
 
-// 输入原语: 凹陷井底 + 细边, 聚焦时边框加深并外扩一圈淡环 (全站输入框同一手感)。
+// 输入原语: 浅凹陷底 + 极淡轮廓, 聚焦时转白底并外扩一圈淡环 (全站输入框同一手感)。
 // 尺寸: md = 常规 (32px), sm = 行内紧凑 (28px)。调用方不要覆盖 h/py。
 
 export const FIELD_BASE =
-  "w-full rounded-md border border-line bg-well text-body text-fg outline-none transition duration-fast ease-out placeholder:text-fg-4 hover:border-line-2 focus:border-fg-3 focus:shadow-[0_0_0_3px_var(--accent-soft)] disabled:cursor-not-allowed disabled:opacity-50";
+  "w-full rounded-md border border-edge bg-well text-body text-fg outline-none transition duration-fast ease-out placeholder:text-fg-4 hover:border-line focus:border-line-2 focus:bg-card focus:shadow-[0_0_0_3px_var(--accent-soft)] disabled:cursor-not-allowed disabled:opacity-50";
 
 const FIELD_SIZE = {
   md: "h-8 px-3",

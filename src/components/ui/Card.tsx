@@ -57,8 +57,9 @@ export function SettingRow({
   className?: string;
 }) {
   return (
+    // 行间分隔线内缩 16px, 不顶到卡片两侧 (顶边的直线会把圆角卡片切成方格)
     <div
-      className={`flex min-h-14 items-center justify-between gap-6 px-4 py-3 [&+&]:border-t [&+&]:border-line ${className}`}
+      className={`relative flex min-h-14 items-center justify-between gap-6 px-4 py-3 [&+&]:before:absolute [&+&]:before:inset-x-4 [&+&]:before:top-0 [&+&]:before:h-px [&+&]:before:bg-line [&+&]:before:content-[''] ${className}`}
     >
       <div className="min-w-0">
         <div className="text-body text-fg">{title}</div>
@@ -82,7 +83,7 @@ export function Badge({
   title?: string;
 }) {
   const toneCls = {
-    neutral: "bg-well text-fg-3 shadow-[inset_0_0_0_1px_var(--line)]",
+    neutral: "bg-fg/[0.06] text-fg-3",
     ok: "bg-[color-mix(in_srgb,var(--ok)_12%,transparent)] text-ok",
     err: "bg-[color-mix(in_srgb,var(--err)_12%,transparent)] text-err",
     warn: "bg-[color-mix(in_srgb,var(--warn)_14%,transparent)] text-warn",
@@ -112,7 +113,7 @@ export function EmptyHint({
 }) {
   return (
     <div
-      className={`flex flex-col items-center gap-2 rounded-lg border border-dashed border-line-2 px-6 py-10 text-center ${className}`}
+      className={`flex flex-col items-center gap-2 rounded-lg bg-fg/[0.03] px-6 py-10 text-center ${className}`}
     >
       {icon && <div className="text-fg-4">{icon}</div>}
       <div className="text-body text-fg-2">{title}</div>
