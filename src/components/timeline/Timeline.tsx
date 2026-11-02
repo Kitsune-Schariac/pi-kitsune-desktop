@@ -9,6 +9,7 @@ import { TurnView } from "./TurnView";
  * 会话区 (对话形式, 主区): entries → 轮 → 用户气泡 + AI 块 (回复 / 步骤卡片 / 通知)。
  * 滚动与自动跟随: 距底 < 80px 视为跟随中, 用户上滑即暂停; 只有「用户自己发的消息」
  * 和「切会话」会重新打开跟随 (流式期间的工具/回复/通知条目一律不抢跟随权, 否则上翻会被拽回底部)。
+ * 跟随中内容自己变高 (字体 / 高亮 / 图片) 会补贴底, 但用户点开卡片 / 推理、定位展开折叠组引起的变高不贴底。
  * 「在会话中定位」订阅 ui.locateStepSeq: 目标步骤行滚到视口中央并闪烁。
  * 「回到最新」按钮: 上滑离开底部时浮在输入卡上方居中, 点击恢复跟随; 期间有新条目时带一个小点。
  */
@@ -114,6 +115,10 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
     });
   }, [entries, activeSessionId]);
 
+  // 用户主动让内容变高的时刻: 点开 / 收起卡片与推理, 或「在会话中定位」展开折叠组。
+  // 紧随其后的变高是用户要看的内容, 贴底会把刚点开的卡片头顶出视口、把定位的平滑滚动瞬移回底部
+  const userGrowAtRef = useRef(0);
+
   // 内容在条目不变的情况下也会长高: 网页字体按需加载完成后换字重排、Shiki 异步高亮替换代码块、
   // 图片解码。跟随中 (在底部) 时随之贴底, 否则打开历史会话会停在离底部一截的位置, 最后一段压在输入卡下
   const colRef = useRef<HTMLDivElement>(null);
@@ -124,6 +129,12 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
     if (!col || !el) return;
     const ro = new ResizeObserver(() => {
       if (!autoScrollRef.current || smoothJumpRef.current) return;
+      if (performance.now() - userGrowAtRef.current < 500) {
+        // 不贴底, 按变高后的位置重判是否还在底部: scrollTop 没动就没有 scroll 事件替我们判,
+        // 不判的话跟随权停在 true, 下一个流式 delta 照样把视图拽走, 「回到最新」按钮也不出来
+        handleScroll();
+        return;
+      }
       followingRef.current = true;
       el.scrollTop = el.scrollHeight;
     });
@@ -146,6 +157,7 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
     if (!locateStepSeq) return;
     const id = useUiStore.getState().selectedStepId;
     if (!id) return;
+    userGrowAtRef.current = performance.now();
     let raf = 0;
     let attempts = 0;
     const tryScroll = () => {
@@ -192,7 +204,15 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
         {entries.length === 0 ? (
           <div className="py-20 text-center text-body text-fg-4">输入消息开始对话</div>
         ) : (
-          <div ref={colRef} className="chat-col">
+          <div
+            ref={colRef}
+            className="chat-col"
+            // 折叠开关一律带 aria-expanded (StepGroup 卡片头 / ThinkingView 推理胶囊)。只认它, 不认任意点击:
+            // 点步骤行会开检查器, 主区变窄正文重排变高, 那种变高应当照常跟随
+            onClickCapture={(e) => {
+              if ((e.target as Element).closest("button[aria-expanded]")) userGrowAtRef.current = performance.now();
+            }}
+          >
             {turns.map((turn, i) => (
               <TurnView
                 key={turn.id}
