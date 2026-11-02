@@ -399,6 +399,52 @@ html:has([data-pet]) #root {
 .tl-scroll {
   scrollbar-gutter: stable;
 }
+
+/* ---- 「回到最新」浮层 (上滑离开底部时出现) ---- */
+/* 水平居中于滚动区: 与 .composer-wrap 用同一个 right 8px 基准 (让出滚动条槽),
+   所以按钮中线正好对输入卡中线, 不会因滚动条有无而偏 4px */
+.tl-jump-layer {
+  position: absolute;
+  left: 0;
+  right: 8px;
+  display: flex;
+  justify-content: center;
+  /* 只让按钮接事件: 浮层横跨正文宽度, 不能挡住选中和链接 */
+  pointer-events: none;
+  /* 高于 .composer-wrap 的 20: 底部渐隐带压在文字上时按钮仍然清晰 */
+  z-index: 25;
+}
+.tl-jump {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--popover);
+  color: var(--fg-3);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+  transition: color 0.18s var(--ease), background 0.18s var(--ease),
+    border-color 0.18s var(--ease);
+}
+.tl-jump:hover {
+  color: var(--fg);
+  background: var(--raise);
+  border-color: color-mix(in oklch, var(--accent) 38%, transparent);
+}
+/* 上滑期间来了新条目的提示点 (不带数字: 时间线一直在长, 计数只会变成噪音) */
+.tl-jump-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+}
 /* 文字列宽 --col-w: 取可用宽的 --col-ratio, 窄窗下不低于原型像素宽, 且不超出可用宽减两侧留白。
    固定像素列宽在宽屏上只占主区一半左右; 比例经老大实机试看调整 (75% → 65% → 60%)。
    变量值含 %, 在使用处按各自容器宽解析 (未注册的自定义属性是文本替换);

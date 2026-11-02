@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown } from "lucide-react";
 import { useSessionStore } from "../../store/session";
 import { useUiStore } from "../../store/ui";
 import { buildTimeline } from "../../lib/timeline";
@@ -6,8 +7,10 @@ import { TurnView } from "./TurnView";
 
 /**
  * 时间线 (框架 C 第三列主区): entries → 轮 → prompt / reply / steps / notice。
- * 滚动与自动跟随逻辑自 MessageList 原样搬入 (新条目强制跟随, 流式只在距底 < 80px 时跟随);
+ * 滚动与自动跟随: 距底 < 80px 视为跟随中, 用户上滑即暂停; 只有「用户自己发的消息」
+ * 和「切会话」会重新打开跟随 (流式期间的工具/回复/通知条目一律不抢跟随权, 否则上翻会被拽回底部)。
  * 「在时间线定位」订阅 ui.locateStepSeq: 目标步骤行滚到视口中央并闪烁。
+ * 「回到最新」按钮: 上滑离开底部时浮在文字列右下方, 点击恢复跟随; 期间有新条目时带一个 accent 小点。
  */
 export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
   const entries = useSessionStore((s) => {
@@ -22,6 +25,7 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
     const a = s.activeSessionId ? s.sessions[s.activeSessionId] : null;
     return a && a.isStreaming ? a.currentAssistantId : null;
   });
+  const activeSessionId = useSessionStore((s) => s.activeSessionId);
   const selectedId = useUiStore((s) => s.selectedStepId);
   const locateStepSeq = useUiStore((s) => s.locateStepSeq);
 
@@ -32,6 +36,20 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
   // 是否自动跟随滚动: 用户主动上滑查看历史时暂停, 回到底部后恢复
   const autoScrollRef = useRef(true);
   const prevLenRef = useRef(0);
+  const prevSessionRef = useRef(activeSessionId);
+  // 上滑离开底部时显示「回到最新」按钮; hasNew 标记上滑期间是否又进来了新条目
+  const [showJump, setShowJump] = useState(false);
+  const [hasNew, setHasNew] = useState(false);
+  // 程序化跟随滚动进行中 (smooth 途中"还没到底"): 这段时间不刷新按钮, 否则会闪一下。
+  // 用户的滚轮/按下会打断平滑滚动, 同时解除锁, 按钮立刻恢复正常判定
+  const followingRef = useRef(false);
+  // 点击「回到最新」后的平滑滚动进行中: 这段时间内的跟随也走 smooth, 否则流式 delta 的下一次
+  // auto 跟随会立刻瞬移到底, 把滚动过程生吃掉
+  const smoothJumpRef = useRef(false);
+  const releaseFollowLock = () => {
+    followingRef.current = false;
+    smoothJumpRef.current = false;
+  };
 
   const handleScroll = () => {
     const el = containerRef.current;
@@ -39,20 +57,62 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
     // 距底部 < 80px 视为"在底部", 允许自动跟随
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     autoScrollRef.current = atBottom;
+    if (atBottom) {
+      followingRef.current = false;
+      smoothJumpRef.current = false;
+      setShowJump(false);
+      // 自己滚回底部也算已读, 小点不残留
+      setHasNew(false);
+    } else if (!followingRef.current) {
+      setShowJump(true);
+    }
   };
 
-  // entries 变化时滚动: 新消息强制跟随, 流式 delta 只在用户在底部时跟随
+  // 按钮点击: 先拿回跟随权再平滑滚到底。上锁让途中不刷新按钮, 到站后 handleScroll 自动解锁
+  const jumpToBottom = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    autoScrollRef.current = true;
+    setShowJump(false);
+    setHasNew(false);
+    followingRef.current = true;
+    smoothJumpRef.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  };
+
+  // entries 变化 / 切会话时决定是否跟随滚动。
+  // 跟随权只由「用户自己发的消息」恢复: 流式输出期间工具条目、回复、通知会持续追加,
+  // 若按「长度变大就跟随」处理, 用户手动上翻看历史会被每一条新条目拽回底部。
   useEffect(() => {
+    const sessionChanged = prevSessionRef.current !== activeSessionId;
+    prevSessionRef.current = activeSessionId;
+
     const newLen = entries.length;
     const isNewMessage = newLen > prevLenRef.current;
-    if (isNewMessage) autoScrollRef.current = true;
     prevLenRef.current = newLen;
 
-    if (autoScrollRef.current) {
-      // 新消息平滑滚动, 流式 delta 瞬间跳 (避免 smooth 动画堆积卡顿)
-      endRef.current?.scrollIntoView({ behavior: isNewMessage ? "smooth" : "auto" });
+    if (sessionChanged) {
+      // 切会话是新起点: 上一个会话的上翻状态不该带过来, 直接看最新内容
+      autoScrollRef.current = true;
+      setShowJump(false);
+      setHasNew(false);
+    } else if (isNewMessage) {
+      const last = newLen > 0 ? entries[newLen - 1] : null;
+      if (last?.kind === "message" && last.role === "user") {
+        autoScrollRef.current = true;
+      } else if (!autoScrollRef.current) {
+        // 上滑期间进来了新条目: 只在按钮上点一个小点, 不抢滚动位置
+        setHasNew(true);
+      }
     }
-  }, [entries]);
+
+    if (!autoScrollRef.current) return;
+    // 新消息 / 平滑回底途中走 smooth; 流式 delta 与切会话瞬间跳 (避免动画堆积卡顿)
+    followingRef.current = true;
+    endRef.current?.scrollIntoView({
+      behavior: smoothJumpRef.current || (isNewMessage && !sessionChanged) ? "smooth" : "auto",
+    });
+  }, [entries, activeSessionId]);
 
   const flashTimerRef = useRef<number | null>(null);
   // 「在时间线定位」: 信号递增 → 找选中步骤行 → 滚到中央 + 闪烁。
@@ -88,31 +148,55 @@ export function Timeline({ inputBarH = 0 }: { inputBarH?: number }) {
   }, [locateStepSeq]);
 
   return (
+    // 外层接住 flex 高度, 按钮才能绝对定位在滚动区下方; 滚动本身仍由内层承担
     <div
-      ref={containerRef}
-      onScroll={handleScroll}
-      // overflow-x-hidden 兜底: 任何子元素意外撑宽都不能让时间线横向滚动 (定位时 scrollIntoView 会连带横滚把正文切掉)
-      className="tl-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
-      // 底部 padding = 输入卡高 + bottom-4(16px) + 间隔 24px: 滚动到底消息停在卡片上方间隔处,
-      // 滚动过程中消息可平滑滑入卡片后方, 不会被提前截断
-      style={{ paddingBottom: inputBarH + 40 }}
+      className="relative min-h-0 flex-1"
+      // 用户主动滚动的两类入口: 解除跟随锁, 让「回到最新」按钮及时冒出来
+      onWheel={releaseFollowLock}
+      onPointerDown={releaseFollowLock}
     >
-      {entries.length === 0 ? (
-        <div className="py-20 text-center text-label text-[var(--fg-4)]">输入消息开始对话</div>
-      ) : (
-        <div className="tl-timeline">
-          {turns.map((turn, i) => (
-            <TurnView
-              key={turn.id}
-              turn={turn}
-              live={isStreaming && i === turns.length - 1}
-              streamingReplyId={streamingReplyId}
-              selectedId={selectedId}
-              revealSeq={locateStepSeq}
-            />
-          ))}
-          {/* 滚动锚点: 自动跟随的 scrollIntoView 目标 */}
-          <div ref={endRef} />
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        // overflow-x-hidden 兜底: 任何子元素意外撑宽都不能让时间线横向滚动 (定位时 scrollIntoView 会连带横滚把正文切掉)
+        className="tl-scroll h-full overflow-y-auto overflow-x-hidden"
+        // 底部 padding = 输入卡高 + bottom-4(16px) + 间隔 24px: 滚动到底消息停在卡片上方间隔处,
+        // 滚动过程中消息可平滑滑入卡片后方, 不会被提前截断
+        style={{ paddingBottom: inputBarH + 40 }}
+      >
+        {entries.length === 0 ? (
+          <div className="py-20 text-center text-label text-[var(--fg-4)]">输入消息开始对话</div>
+        ) : (
+          <div className="tl-timeline">
+            {turns.map((turn, i) => (
+              <TurnView
+                key={turn.id}
+                turn={turn}
+                live={isStreaming && i === turns.length - 1}
+                streamingReplyId={streamingReplyId}
+                selectedId={selectedId}
+                revealSeq={locateStepSeq}
+              />
+            ))}
+            {/* 滚动锚点: 自动跟随的 scrollIntoView 目标 */}
+            <div ref={endRef} />
+          </div>
+        )}
+      </div>
+      {showJump && (
+        // 水平居中于滚动区 (与输入卡同一中线基准). 底部偏移 = 卡高 + composer-wrap 底 padding 18
+        // + 16 间距 —— inputBarH 只有卡本身高度, 不加 18 按钮会压在输入卡上
+        <div className="tl-jump-layer" style={{ bottom: inputBarH + 34 }}>
+          <button
+            type="button"
+            onClick={jumpToBottom}
+            aria-label="回到最新消息"
+            title="回到最新消息"
+            className="tl-jump view-in-soft"
+          >
+            <ArrowDown size={15} strokeWidth={2} />
+            {hasNew && <span className="tl-jump-dot" />}
+          </button>
         </div>
       )}
     </div>
