@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 
 // 下拉原语: 自绘触发钮 + 浮层菜单 (不再用原生 <select>, 弹出列表也走卡片 + 阴影, 字体与界面一致)。
-// 菜单挂到 body (fixed 定位), 不会被设置页各栏的 overflow 裁掉; 滚动 / 缩放窗口即收起。
+// 菜单挂到 body (fixed 定位), 不会被设置页各栏的 overflow 裁掉; 触发钮所在的容器滚动 / 缩放窗口即收起。
 // 键盘: 触发钮上 ↓ / Enter / 空格展开; 菜单里 ↑↓ 移动、Enter 选中、Esc / Tab 收起。
 
 export interface SelectOption {
@@ -73,7 +73,7 @@ export function Select({
     });
   }, [open, options.length]);
 
-  // 外部点击 / 滚动 / 缩放即收起 (菜单内部的滚动除外)
+  // 外部点击 / 触发钮所在容器滚动 / 缩放即收起
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -81,8 +81,10 @@ export function Select({
       if (menuRef.current?.contains(t) || btnRef.current?.contains(t)) return;
       setOpen(false);
     };
+    // 只有触发钮的祖先 (含 document) 滚动才会让 fixed 菜单与触发钮脱节。捕获阶段能收到全页任意元素的滚动,
+    // 不过滤的话设置窗背后会话区的流式贴底会把菜单秒关; 菜单在 body 下不是祖先, 自身滚动也自然放过
     const onScroll = (e: Event) => {
-      if (menuRef.current?.contains(e.target as Node)) return;
+      if (!(e.target as Node).contains(btnRef.current)) return;
       setOpen(false);
     };
     const onResize = () => setOpen(false);
