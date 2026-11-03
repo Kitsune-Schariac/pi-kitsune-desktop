@@ -23,6 +23,10 @@ export interface ChatEntry {
   endedAt?: number;
   // notification 专用: info/warning/error, 决定图标 + 类型色 (会话内系统消息条目)
   notifyType?: "info" | "warning" | "error";
+  // 实时 assistant 专用: 模型此刻在流式生成的内容块是工具调用参数。工具卡要等 message_end 之后的
+  // tool_execution_start 才出现, 这段时间正文没有字在长, 时间线据此把等待提示换成「生成工具调用中」。
+  // 只在内容块切换 (*_start) 时写, 每块一次; 历史回放不填
+  draftingTool?: boolean;
 }
 
 export interface ModelInfo {
@@ -536,6 +540,18 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           // delta 计数落在模块级累加器里 (零分配零通知): 若每个 token 都 patch turnStats,
           // 高速模型下每秒会触发数百次 React 重渲染 —— 这是本次修复的既有性能问题
           noteDelta(sessionId, ev?.type, !!ev?.delta, Date.now());
+          // 内容块切换: 记下当前块是不是工具调用 (见 ChatEntry.draftingTool)。*_start 每块只来一次,
+          // 这里的 find + patch 是低频路径, 不会把 delta 级的重渲染带回来; *_start 不带 delta, 处理完即可返回
+          if (ev?.type === "toolcall_start" || ev?.type === "text_start" || ev?.type === "thinking_start") {
+            const drafting = ev.type === "toolcall_start";
+            const target = cur.currentAssistantId
+              ? cur.entries.find((e) => e.id === cur.currentAssistantId && e.kind === "message")
+              : undefined;
+            if (target && !!target.draftingTool !== drafting) {
+              patch(sessionId, { entries: cur.entries.map((e) => (e === target ? { ...e, draftingTool: drafting } : e)) });
+            }
+            break;
+          }
           if (!cur.currentAssistantId || !ev?.delta) break;
           if (ev.type === "text_delta") {
             patch(sessionId, { entries: cur.entries.map((e) =>

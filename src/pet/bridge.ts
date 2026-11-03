@@ -75,11 +75,11 @@ export async function startBridge(): Promise<() => void> {
   // 会话状态变化 → 重算并按需推送 (pushSignals 内部做了去重)
   offs.push(useSessionStore.subscribe(() => pushSignals()));
 
-  // 切日间/夜间 → 重推配置, 让气泡跟着换色。setMode 先写完 data-base 才 set resolved,
-  // 所以这里读到的已经是新配色的值
+  // 切日间/夜间 / 换强调色 → 重推配置, 让气泡跟着换色。setMode / setAccent 都是先写完
+  // data-base / 强调色 token 才 set, 所以这里读到的已经是新配色的值
   offs.push(
     useThemeStore.subscribe((s, prev) => {
-      if (s.resolved !== prev.resolved) pushConfig();
+      if (s.resolved !== prev.resolved || s.accent !== prev.accent) pushConfig();
     }),
   );
 

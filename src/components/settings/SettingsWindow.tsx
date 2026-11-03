@@ -12,14 +12,15 @@ type TabKey = "theme" | "pet" | "stats" | "behavior" | "models";
 export type SettingsSection = TabKey;
 
 const NAV_ITEMS: { key: TabKey; icon: LucideIcon; title: string; desc: string }[] = [
-  { key: "theme", icon: Palette, title: "外观", desc: "日间 / 夜间 / 跟随系统" },
+  { key: "theme", icon: Palette, title: "外观", desc: "日间 / 夜间 / 强调色" },
   { key: "models", icon: Boxes, title: "模型与供应商", desc: "供应商 / 模型 / 新会话默认" },
   { key: "stats", icon: BarChart3, title: "Token 统计", desc: "用量与成本分布" },
   { key: "behavior", icon: Activity, title: "行为统计", desc: "轮次 / 工具 / 思考占比" },
   { key: "pet", icon: Cat, title: "桌宠", desc: "桌面宠物开关 / 角色 / 大小" },
 ];
 
-// 设置视图: 覆盖整个窗口的全屏界面 (渲染在 #app-root 内, absolute inset-0 铺满)。
+// 设置视图: 盖住标题栏以下整个内容行的全屏界面 (App 把它渲染在内容行里, absolute inset-0 铺满)。
+// 标题栏 (拖拽区 + 窗口三键) 必须留在外面, 否则设置页里没法最小化 / 最大化 / 关窗。
 // 两栏的头部与主界面各列同高 (--bar-h), 分隔线横向贯通。
 export function SettingsWindow({
   onClose,

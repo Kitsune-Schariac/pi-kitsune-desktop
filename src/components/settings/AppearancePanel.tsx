@@ -1,6 +1,7 @@
 import { Check, Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 import { useThemeStore, type ThemeMode } from "../../store/theme";
 import { Card, Section, SettingRow } from "../ui";
+import { AccentPicker } from "./AccentPicker";
 
 const MODES: { mode: ThemeMode; title: string; desc: string; icon: LucideIcon }[] = [
   { mode: "light", title: "日间", desc: "白底黑字", icon: Sun },
@@ -9,8 +10,8 @@ const MODES: { mode: ThemeMode; title: string; desc: string; icon: LucideIcon }[
 ];
 
 /**
- * 界面缩略图: 根节点挂 data-base, 直接命中 index.css 里对应那组 token,
- * 不在 TS 里复制任何颜色。画的是真实布局的骨架 (侧栏 / 气泡 / AI 回复 / 输入卡)
+ * 界面缩略图: 根节点挂 data-base, 直接命中 index.css 里对应那组 token (含注入的强调色),
+ * 不在 TS 里复制任何颜色。画的是真实布局的骨架 (侧栏 / 气泡 / 不带头像的 AI 回复 / 输入卡)
  */
 function Preview({ base }: { base: "light" | "dark" }) {
   return (
@@ -23,13 +24,10 @@ function Preview({ base }: { base: "light" | "dark" }) {
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2 px-3 pt-3">
         <i className="block h-[10px] w-1/2 self-end rounded-full bg-[var(--bubble)]" />
-        <div className="flex gap-2">
-          <i className="block h-[10px] w-[10px] shrink-0 rounded-full bg-card shadow-[inset_0_0_0_1px_var(--line-2)]" />
-          <div className="flex flex-1 flex-col gap-[5px] pt-[2px]">
-            <i className="block h-[4px] w-full rounded-full bg-fg/60" />
-            <i className="block h-[4px] w-5/6 rounded-full bg-fg/60" />
-            <i className="block h-[12px] w-full rounded-[4px] border border-edge bg-card shadow-sm" />
-          </div>
+        <div className="flex flex-col gap-[5px]">
+          <i className="block h-[4px] w-full rounded-full bg-fg/60" />
+          <i className="block h-[4px] w-5/6 rounded-full bg-fg/60" />
+          <i className="block h-[12px] w-full rounded-[4px] border border-edge bg-card shadow-sm" />
         </div>
         <div className="mb-2 mt-auto flex h-[16px] items-center justify-end rounded-[8px] border border-line-2 bg-card px-[3px] shadow-sm">
           <i className="block h-[10px] w-[10px] rounded-full bg-accent" />
@@ -39,7 +37,7 @@ function Preview({ base }: { base: "light" | "dark" }) {
   );
 }
 
-// 设置 · 外观: 日间 / 夜间 / 跟随系统 (三张可选卡片) + 字体说明
+// 设置 · 外观: 日间 / 夜间 / 跟随系统 (三张可选卡片) + 强调色 (预设 / 调色盘) + 字体说明
 export function AppearancePanel() {
   const mode = useThemeStore((s) => s.mode);
   const resolved = useThemeStore((s) => s.resolved);
@@ -96,6 +94,13 @@ export function AppearancePanel() {
             );
           })}
         </div>
+      </Section>
+
+      <Section
+        title="强调色"
+        desc="用在主按钮、开关、选中、运行中、链接、焦点等高亮处，其余界面保持黑白。为保证可读性，日间 / 夜间会自动微调明暗。"
+      >
+        <AccentPicker />
       </Section>
 
       <Section title="字体与字号" desc="全局统一，不随配色变化。">

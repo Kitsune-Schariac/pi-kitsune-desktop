@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Check } from "lucide-react";
 
 // 开关 / 复选框 / 滑杆: 取代散落各处的原生 checkbox 与 range。
-// 颜色只用墨色 (日间黑 / 夜间白) 与灰阶, 尺寸固定。
+// 选中态用强调色 (--accent, 墨色方案下即日间黑 / 夜间白), 其余灰阶, 尺寸固定。
 
 /** 开关: 设置项的布尔值一律用它 (立即生效的开关语义) */
 export function Switch({
@@ -90,7 +90,7 @@ export function Checkbox({
   );
 }
 
-/** 滑杆: 已填充段用墨色, 未填充段用线色; 右侧可选显示当前值 */
+/** 滑杆: 已填充段用强调色, 未填充段用线色; 右侧可选显示当前值 */
 export function Slider({
   value,
   min,

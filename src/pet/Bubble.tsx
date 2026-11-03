@@ -168,7 +168,7 @@ export function Bubble({ canvasW, canvasH, charW, charH }: Props) {
             padding: "0 6px",
             borderRadius: 10,
             background: "var(--accent)",
-            // 墨色底配反色字: 日间黑底白字 / 夜间白底黑字
+            // 强调色底配 --on-accent (按对比度在白 / 黑里选, 墨色方案下即日间黑底白字 / 夜间白底黑字)
             color: "var(--on-accent)",
             fontWeight: 600,
             lineHeight: "20px",

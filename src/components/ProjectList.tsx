@@ -155,7 +155,7 @@ function SessionRow({
           // 运行中符号: 呼吸圆点 (全站统一的运行态)
           <span className="live-dot" aria-hidden />
         ) : right === "dot" ? (
-          <span className="h-[6px] w-[6px] rounded-full bg-fg" />
+          <span className="h-[6px] w-[6px] rounded-full bg-accent" />
         ) : right === null ? (
           <span className="text-meta text-fg-4">新会话</span>
         ) : (
