@@ -61,6 +61,44 @@ export function buildTimeline(entries: ChatEntry[]): Turn[] {
   return turns;
 }
 
+/** 空回复: 既无正文也无推理 (message_start 刚建的占位, 或只含工具调用的那条 assistant) */
+export function isEmptyReply(entry: ChatEntry): boolean {
+  return !entry.text && !entry.thinking;
+}
+
+/** 等待提示的阶段: waiting = 等模型出首个 token; drafting = 模型在生成工具调用参数 */
+export type PendingPhase = "waiting" | "drafting";
+
+/**
+ * 运行中最后一轮的等待提示阶段: 请求已在路上, 界面上却没有任何东西在长时返回阶段, 否则 null。
+ * - waiting: 刚发出提问 / 一批工具跑完等下一次模型调用 / 新回复已开头但首个 token 还没到
+ * - drafting: 模型在流式生成工具调用参数 (工具卡要等 tool_execution_start 才出现, 期间正文不动)
+ * 正文在长 (光标) / 推理在长 (胶囊计数) / 工具在跑 (卡片动点) 时返回 null, 各自已有动态。
+ * 末尾的通知 (如自动重试提示) 不算产出, 跳过它按之前的条目判断 —— 扩展在开轮时 notify 一条
+ * 不该把提示吞掉。正文已写完的回复在末尾 = 本轮收尾 (agent_settled 前), 返回 null 免得结尾闪一下。
+ * 只对「流式中的最后一轮」有意义, 调用方自己判 live。
+ */
+export function pendingPhase(turn: Turn): PendingPhase | null {
+  for (let i = turn.items.length - 1; i >= 0; i--) {
+    const item = turn.items[i];
+    switch (item.kind) {
+      case "notice":
+        continue;
+      case "prompt":
+        return "waiting";
+      case "steps":
+        return item.entries.some((e) => e.status === "running") ? null : "waiting";
+      case "reply": {
+        const e = item.entry;
+        // 工具参数生成优先: 正文写完接着生成工具调用时, 光标停在正文末尾不动, 一样要提示
+        if (e.draftingTool) return "drafting";
+        return isEmptyReply(e) ? "waiting" : null;
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * 步骤一行摘要 (修 P1: 旧卡片取 JSON 缩进首行, 永远显示 "{")。
  * 口径: bash → 命令首行 (去掉开头 `cd <dir> &&` 导航前缀, 只留真正在跑的指令);

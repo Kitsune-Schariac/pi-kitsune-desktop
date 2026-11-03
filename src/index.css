@@ -451,6 +451,45 @@ html:has([data-pet]) #root {
   to { visibility: hidden; }
 }
 
+/* 等待提示: 请求已发出、界面上还没有东西在长时挂在 AI 块末尾 (首 token 前 / 工具跑完等下一次调用 /
+   生成工具参数)。行高 26px 与正文首行一致, 只有这一行时也和 28px 头像中线对齐 */
+.ai-pending {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 26px;
+  font-size: var(--fs-label);
+  color: var(--fg-3);
+  animation: chat-rise 0.24s var(--ease-in);
+}
+.ai-pending-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ai-pending-dots > i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.25;
+  animation: pending-wave 1.2s var(--ease) infinite;
+}
+.ai-pending-dots > i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.ai-pending-dots > i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes pending-wave {
+  0%, 60%, 100% { opacity: 0.25; transform: none; }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+.ai-pending-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-4);
+}
+
 /* ---- 一键复制 (回复 / 提问 / 代码块共用 .copy-btn) ---- */
 .copy-btn {
   display: inline-grid;
