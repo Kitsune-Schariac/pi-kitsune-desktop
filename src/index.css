@@ -15,8 +15,10 @@
 
 /* ============================================================
    设计系统 (唯一来源)
-   - 配色只有两套: 日间 = 白, 夜间 = 黑。中性灰阶无色相, 强调色就是墨色 (日间黑 / 夜间白);
-     语义色 (成功 / 错误 / 警告) 是界面里仅有的彩色。
+   - 配色两套: 日间 = 白, 夜间 = 黑, 中性灰阶无色相。彩色只出现在两处: 强调色 (--accent*) 与
+     语义色 (成功 / 错误 / 警告)。强调色只给「高亮」用 —— 主按钮、开关、选中、运行中、链接、焦点、光标;
+     下面这组是墨色默认值 (设置里的「墨」), 选了其它颜色时由 store/theme 注入一段 <style> 覆盖,
+     推导规则 (按明暗调明度保对比度) 见 lib/accent.ts。
    - 字体: 苹果式无衬线。拉丁用内置 Inter (字形接近 SF Pro), 中文走系统黑体
      (macOS 苹方 / Windows 微软雅黑 UI); 代码与路径用等宽。字距随字号收紧, 与 SF 的字距表同向。
    - 字号 7 档 / 圆角 4 档 / 阴影 3 档 / 间距 4px 网格; 所有列头统一 --bar-h 高, 分隔线横向贯通。
@@ -182,15 +184,15 @@ html:has([data-pet]) #root {
   display: none !important;
 }
 
-/* 键盘焦点: 仅 Tab 导航时显示墨色描边; 文本输入豁免 (光标本身就是焦点指示) */
+/* 键盘焦点: 仅 Tab 导航时显示强调色描边; 文本输入豁免 (光标本身就是焦点指示) */
 :focus-visible:not(input):not(textarea):not([contenteditable="true"]) {
-  outline: 2px solid var(--fg-3);
+  outline: 2px solid color-mix(in srgb, var(--accent) 75%, transparent);
   outline-offset: 1px;
   border-radius: 6px;
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--fg) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 /* 滚动条: 细窄, 灰阶 */
@@ -244,14 +246,14 @@ html:has([data-pet]) #root {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--fg);
+  background: var(--accent);
 }
 .live-dot::after {
   content: "";
   position: absolute;
   inset: -3px;
   border-radius: 50%;
-  border: 1.5px solid var(--fg);
+  border: 1.5px solid var(--accent);
   opacity: 0;
   animation: live-ring 1.4s var(--ease-in) infinite;
 }
@@ -303,7 +305,7 @@ html:has([data-pet]) #root {
   box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--edge);
 }
 
-/* 图标轨按钮: 36px, 激活 = 卡片底 + 小阴影 */
+/* 图标轨按钮: 36px, 激活 = 卡片底 + 小阴影 + 强调色图标 */
 .rail-btn {
   position: relative;
   display: grid;
@@ -319,7 +321,7 @@ html:has([data-pet]) #root {
   background: var(--hover);
 }
 .rail-btn.on {
-  color: var(--fg);
+  color: var(--accent);
   background: var(--card);
   box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--edge);
 }
@@ -421,7 +423,7 @@ html:has([data-pet]) #root {
   margin-left: 3px;
   vertical-align: -0.16em;
   border-radius: 1px;
-  background: var(--fg);
+  background: var(--accent);
   animation: chat-blink 1s steps(2, start) infinite;
 }
 @keyframes chat-blink {
@@ -448,7 +450,7 @@ html:has([data-pet]) #root {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: currentColor;
+  background: var(--accent);
   opacity: 0.25;
   animation: pending-wave 1.2s var(--ease) infinite;
 }
@@ -657,7 +659,7 @@ html:has([data-pet]) #root {
 .step-row.sel,
 .step-row.sel:hover {
   background: var(--accent-soft);
-  box-shadow: inset 2px 0 0 var(--fg);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 .step-main {
   flex: 1;
@@ -818,7 +820,7 @@ html:has([data-pet]) #root {
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: var(--fg);
+  background: var(--accent);
 }
 
 /* ---- 紧凑变体: 检查器舰队页的子会话 (面板宽 ~340px) ---- */
@@ -955,7 +957,7 @@ html:has([data-pet]) #root {
   }
 }
 
-/* 发送 / 中止: 圆形墨色钮, 运行中转描边圆 */
+/* 发送 / 中止: 圆形强调色钮, 运行中转描边圆 */
 .composer-send {
   flex: none;
   display: grid;
@@ -1060,7 +1062,7 @@ html:has([data-pet]) #root {
   background: color-mix(in srgb, var(--err) 12%, transparent);
 }
 .sd-status.running {
-  color: var(--fg);
+  color: var(--accent-2);
   background: var(--accent-soft);
 }
 .sd-meta {
@@ -1396,7 +1398,7 @@ html:has([data-pet]) #root {
 }
 .markdown-body input[type="checkbox"] {
   margin-right: 0.4em;
-  accent-color: var(--fg);
+  accent-color: var(--accent);
 }
 
 /* 代码块: 凹陷卡 */
@@ -1513,14 +1515,15 @@ html:has([data-pet]) #root {
   font-weight: 600;
 }
 
+/* 链接: 文字用 --accent-2 (对底色 ≥ 4.5:1 的那档), 下划线淡一档, 悬停加深 */
 .markdown-body a {
-  color: var(--fg);
+  color: var(--accent-2);
   text-decoration: underline;
-  text-decoration-color: var(--line-2);
+  text-decoration-color: color-mix(in srgb, var(--accent-2) 35%, transparent);
   text-underline-offset: 3px;
 }
 .markdown-body a:hover {
-  text-decoration-color: var(--fg);
+  text-decoration-color: var(--accent-2);
 }
 .markdown-body hr {
   margin: 1.2em 0;
@@ -1546,7 +1549,7 @@ input[type="range"] {
 input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
-  background: linear-gradient(var(--fg), var(--fg)) 0 / var(--fill, 0%) 100% no-repeat, var(--line-2);
+  background: linear-gradient(var(--accent), var(--accent)) 0 / var(--fill, 0%) 100% no-repeat, var(--line-2);
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -1624,6 +1627,9 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   color: var(--fg);
   background: var(--card);
   box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--edge);
+}
+.setwin-navitem.on svg {
+  color: var(--accent);
 }
 
 /* 视图进场 / 分区切换淡入 */

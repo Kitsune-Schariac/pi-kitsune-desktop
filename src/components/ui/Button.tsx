@@ -17,7 +17,7 @@ const BTN_VARIANT = {
   // 次级操作: 卡片底 + 细边 + 小阴影 (与卡片同一语言)
   ghost:
     "border border-edge bg-card text-fg-2 shadow-sm hover:border-line hover:text-fg",
-  // 主操作: 墨色实底 (日间黑 / 夜间白)
+  // 主操作: 强调色实底 (墨色方案下即日间黑 / 夜间白)
   primary: "bg-accent font-medium text-on-accent shadow-sm hover:opacity-90",
   // 危险操作: 卡片底 + 红字, 悬停转红边
   danger:

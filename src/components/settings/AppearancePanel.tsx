@@ -1,6 +1,7 @@
 import { Check, Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 import { useThemeStore, type ThemeMode } from "../../store/theme";
 import { Card, Section, SettingRow } from "../ui";
+import { AccentPicker } from "./AccentPicker";
 
 const MODES: { mode: ThemeMode; title: string; desc: string; icon: LucideIcon }[] = [
   { mode: "light", title: "日间", desc: "白底黑字", icon: Sun },
@@ -9,8 +10,8 @@ const MODES: { mode: ThemeMode; title: string; desc: string; icon: LucideIcon }[
 ];
 
 /**
- * 界面缩略图: 根节点挂 data-base, 直接命中 index.css 里对应那组 token,
- * 不在 TS 里复制任何颜色。画的是真实布局的骨架 (侧栏 / 气泡 / AI 回复 / 输入卡)
+ * 界面缩略图: 根节点挂 data-base, 直接命中 index.css 里对应那组 token (含注入的强调色),
+ * 不在 TS 里复制任何颜色。画的是真实布局的骨架 (侧栏 / 气泡 / 不带头像的 AI 回复 / 输入卡)
  */
 function Preview({ base }: { base: "light" | "dark" }) {
   return (
@@ -36,7 +37,7 @@ function Preview({ base }: { base: "light" | "dark" }) {
   );
 }
 
-// 设置 · 外观: 日间 / 夜间 / 跟随系统 (三张可选卡片) + 字体说明
+// 设置 · 外观: 日间 / 夜间 / 跟随系统 (三张可选卡片) + 强调色 (预设 / 调色盘) + 字体说明
 export function AppearancePanel() {
   const mode = useThemeStore((s) => s.mode);
   const resolved = useThemeStore((s) => s.resolved);
@@ -93,6 +94,13 @@ export function AppearancePanel() {
             );
           })}
         </div>
+      </Section>
+
+      <Section
+        title="强调色"
+        desc="用在主按钮、开关、选中、运行中、链接、焦点等高亮处，其余界面保持黑白。为保证可读性，日间 / 夜间会自动微调明暗。"
+      >
+        <AccentPicker />
       </Section>
 
       <Section title="字体与字号" desc="全局统一，不随配色变化。">

@@ -12,7 +12,7 @@ type TabKey = "theme" | "pet" | "stats" | "behavior" | "models";
 export type SettingsSection = TabKey;
 
 const NAV_ITEMS: { key: TabKey; icon: LucideIcon; title: string; desc: string }[] = [
-  { key: "theme", icon: Palette, title: "外观", desc: "日间 / 夜间 / 跟随系统" },
+  { key: "theme", icon: Palette, title: "外观", desc: "日间 / 夜间 / 强调色" },
   { key: "models", icon: Boxes, title: "模型与供应商", desc: "供应商 / 模型 / 新会话默认" },
   { key: "stats", icon: BarChart3, title: "Token 统计", desc: "用量与成本分布" },
   { key: "behavior", icon: Activity, title: "行为统计", desc: "轮次 / 工具 / 思考占比" },

@@ -3,14 +3,15 @@ import ReactDOM from "react-dom/client";
 import { listen } from "@tauri-apps/api/event";
 import App from "./App";
 import { useSessionStore } from "./store/session";
-import { useThemeStore } from "./store/theme";
+import { applyAccent, useThemeStore } from "./store/theme";
 // 拉丁字形用内置 Inter (可变字重, 接近 SF Pro), 按 unicode-range 分片只加载用到的那片;
 // 中文不打包, 走系统黑体 (苹方 / 微软雅黑 UI), 见 index.css --f-ui
 import "@fontsource-variable/inter";
 import "./index.css";
 
-// 首帧就写好明暗 (store 构造时已读出持久化偏好), 避免先闪一帧白底
+// 首帧就写好明暗与强调色 (store 构造时已读出持久化偏好), 避免先闪一帧白底 / 墨色
 document.documentElement.dataset.base = useThemeStore.getState().resolved;
+applyAccent(useThemeStore.getState().accent);
 
 // 同一份 bundle 服务两个窗口, 按 query 分流。桌宠窗口由 Rust 侧
 // open_pet_window 以 index.html?window=pet 打开
