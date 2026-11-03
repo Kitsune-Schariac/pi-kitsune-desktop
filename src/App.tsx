@@ -143,6 +143,38 @@ export default function App() {
           </main>
           {/* 检查器: 有活动会话才渲染 (无会话时详情/面板都无主体可挂) */}
           {active && <Inspector />}
+
+          {/* 设置视图与 Skill / Package 抽屉挂在内容行里 (absolute inset-0 只铺满标题栏以下):
+              挂在 #app-root 上会连标题栏一起盖住 —— 窗口三键和拖拽区随之消失, 设置页里没法最小化 / 关窗 */}
+          {/* 设置: 全屏视图 (与抽屉并存, 不冲突); initialSection 供 Rail 快捷入口定位 */}
+          {panel === "settings" && (
+            <SettingsWindow onClose={() => setPanel(null)} initialSection={settingsSection} />
+          )}
+
+          {/* Skill / Package 抽屉: settings 走全屏视图, 不进抽屉, 否则多出空白抽屉 */}
+          {(panel === "skills" || panel === "packages") && (
+            <div className="absolute inset-0 z-40 flex justify-end bg-black/10">
+              <div className="flex h-full w-[380px] flex-col border-l border-line bg-pane shadow-lg view-in-soft">
+                <div className="bar justify-between pl-5 pr-3">
+                  <span className="text-lead font-semibold text-fg">
+                    {panel === "skills" ? "Skill 管理" : "pi Package"}
+                  </span>
+                  <button
+                    onClick={() => setPanel(null)}
+                    className="grid h-8 w-8 place-items-center rounded-md text-fg-4 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
+                    title="关闭"
+                    aria-label="关闭"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {panel === "skills" && <SkillsPanel />}
+                  {panel === "packages" && <PackagesPanel />}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 扩展 UI 请求弹窗: 只渲染活跃会话的队头请求 (FIFO, 关闭后自动弹下一个) */}
@@ -156,36 +188,6 @@ export default function App() {
 
         {/* 程序内文件查看器: 会话里点开的文本文件, 由 ui.viewer 驱动 */}
         <FileViewer />
-
-        {/* 设置: 独立模态窗口 (与抽屉并存, 不冲突); initialSection 供 Rail 快捷入口定位 */}
-        {panel === "settings" && (
-          <SettingsWindow onClose={() => setPanel(null)} initialSection={settingsSection} />
-        )}
-
-        {/* Skill / Package 抽屉: settings 走独立模态窗, 不进抽屉, 否则多出空白抽屉 */}
-        {(panel === "skills" || panel === "packages") && (
-          <div className="absolute inset-0 z-40 flex justify-end bg-black/10">
-            <div className="flex h-full w-[380px] flex-col border-l border-line bg-pane shadow-lg view-in-soft">
-              <div className="bar justify-between pl-5 pr-3">
-                <span className="text-lead font-semibold text-fg">
-                  {panel === "skills" ? "Skill 管理" : "pi Package"}
-                </span>
-                <button
-                  onClick={() => setPanel(null)}
-                  className="grid h-8 w-8 place-items-center rounded-md text-fg-4 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
-                  title="关闭"
-                  aria-label="关闭"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                {panel === "skills" && <SkillsPanel />}
-                {panel === "packages" && <PackagesPanel />}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </>
   );
