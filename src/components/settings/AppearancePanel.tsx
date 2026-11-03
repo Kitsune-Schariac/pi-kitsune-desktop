@@ -23,13 +23,10 @@ function Preview({ base }: { base: "light" | "dark" }) {
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2 px-3 pt-3">
         <i className="block h-[10px] w-1/2 self-end rounded-full bg-[var(--bubble)]" />
-        <div className="flex gap-2">
-          <i className="block h-[10px] w-[10px] shrink-0 rounded-full bg-card shadow-[inset_0_0_0_1px_var(--line-2)]" />
-          <div className="flex flex-1 flex-col gap-[5px] pt-[2px]">
-            <i className="block h-[4px] w-full rounded-full bg-fg/60" />
-            <i className="block h-[4px] w-5/6 rounded-full bg-fg/60" />
-            <i className="block h-[12px] w-full rounded-[4px] border border-edge bg-card shadow-sm" />
-          </div>
+        <div className="flex flex-col gap-[5px]">
+          <i className="block h-[4px] w-full rounded-full bg-fg/60" />
+          <i className="block h-[4px] w-5/6 rounded-full bg-fg/60" />
+          <i className="block h-[12px] w-full rounded-[4px] border border-edge bg-card shadow-sm" />
         </div>
         <div className="mb-2 mt-auto flex h-[16px] items-center justify-end rounded-[8px] border border-line-2 bg-card px-[3px] shadow-sm">
           <i className="block h-[10px] w-[10px] rounded-full bg-accent" />

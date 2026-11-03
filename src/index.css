@@ -341,7 +341,7 @@ html:has([data-pet]) #root {
 
 /* ============================================================
    会话区: 对话气泡
-   用户消息 = 右侧灰底气泡; AI = 左侧头像 + 正文 (不套气泡, 长文好读);
+   用户消息 = 右侧灰底气泡; AI = 不带头像的正文, 铺满会话列宽 (不套气泡, 长文好读);
    连续工具调用收进一张可折叠的步骤卡片; 系统通知是一张小卡
    ============================================================ */
 
@@ -378,11 +378,12 @@ html:has([data-pet]) #root {
   overflow-wrap: anywhere;
 }
 
-/* ---- AI 回复块: 头像列 28 + 内容列 ---- */
+/* ---- AI 回复块: 不带头像, 正文 / 步骤卡片 / 通知直接铺满会话列宽 ---- */
 .msg-ai {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  column-gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
   margin-top: 24px;
 }
 /* 气泡下方已有一行 (hover 才显的) 复制钮占位, 这里只补一点 */
@@ -391,30 +392,6 @@ html:has([data-pet]) #root {
 }
 .msg-ai:first-child {
   margin-top: 0;
-}
-.ai-avatar {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--card);
-  box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--edge);
-  color: var(--fg);
-  font-size: var(--fs-lead);
-  font-weight: 600;
-  line-height: 1;
-}
-.ai-avatar.live {
-  box-shadow: 0 0 0 3px var(--accent-soft), inset 0 0 0 1px var(--line-2);
-}
-.ai-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-  /* 首行文字与 28px 头像中线对齐 */
-  padding-top: 2px;
 }
 
 .ai-reply {
@@ -452,7 +429,7 @@ html:has([data-pet]) #root {
 }
 
 /* 等待提示: 请求已发出、界面上还没有东西在长时挂在 AI 块末尾 (首 token 前 / 工具跑完等下一次调用 /
-   生成工具参数)。行高 26px 与正文首行一致, 只有这一行时也和 28px 头像中线对齐 */
+   生成工具参数)。行高 26px 与正文首行一致, 首字到达替换掉它时不跳行 */
 .ai-pending {
   display: flex;
   align-items: center;
@@ -858,11 +835,7 @@ html:has([data-pet]) #root {
   font-size: var(--fs-body);
 }
 .compact .msg-ai {
-  grid-template-columns: minmax(0, 1fr);
   margin-top: 14px;
-}
-.compact .ai-avatar {
-  display: none;
 }
 .compact .ai-reply {
   font-size: var(--fs-body);
@@ -929,7 +902,7 @@ html:has([data-pet]) #root {
 .composer {
   position: relative;
   pointer-events: auto;
-  /* 与会话列同宽: 气泡右缘、AI 头像左缘都与输入卡对齐 */
+  /* 与会话列同宽: 气泡右缘、AI 正文左缘都与输入卡对齐 */
   width: var(--col-w);
   margin: 0 auto;
   border: 1px solid var(--edge);

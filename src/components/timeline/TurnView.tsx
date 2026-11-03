@@ -9,7 +9,7 @@ import { CopyButton } from "../ui";
 
 interface TurnViewProps {
   turn: Turn;
-  /** 会话流式中且这是最后一轮: AI 头像加一圈运行光晕 */
+  /** 会话流式中且这是最后一轮: 决定流式光标与等待提示 */
   live: boolean;
   /** 正在流式生成的 assistant entry id: 只有它末尾显示光标 */
   streamingReplyId: string | null;
@@ -22,7 +22,7 @@ interface TurnViewProps {
 
 /**
  * 单轮渲染 (对话形式): 用户提问 = 右侧气泡; 其后的回复 / 步骤卡片 / 推理 / 通知
- * 按 buildTimeline 给的原顺序收进一个 AI 块 (左侧头像只出现一次), 不重排。
+ * 按 buildTimeline 给的原顺序收进一个 AI 块 (不带头像, 铺满会话列宽), 不重排。
  * 首个提问之前的条目 (head 轮: 欢迎语 / 通知) 没有提问, 直接是一个 AI 块。
  * 流式中界面上没有东西在长 (首 token 前 / 工具跑完等下一次调用 / 生成工具参数) 时,
  * AI 块末尾挂一行等待提示; 刚发出提问还没有任何 AI 条目时也照样立起 AI 块来承载它。
@@ -47,43 +47,39 @@ export const TurnView = memo(function TurnView({
     <article className="chat-turn">
       {prompt && <PromptView entry={prompt.entry} />}
       {(rest.length > 0 || phase) && (
+        // 不带头像: 正文 / 步骤卡片 / 通知直接铺满会话列宽
         <div className="msg-ai">
-          <div className={`ai-avatar${live ? " live" : ""}`} aria-hidden>
-            π
-          </div>
-          <div className="ai-body">
-            {rest.map((item) => {
-              if (item.kind === "reply") {
-                return (
-                  <ReplyView
-                    key={`r:${item.entry.id}`}
-                    entry={item.entry}
-                    // 生成工具参数时正文已写完, 光标不再闪 (由下方「生成工具调用中」接手)
-                    cursor={live && item.entry.id === streamingReplyId && !item.entry.draftingTool}
-                  />
-                );
-              }
-              if (item.kind === "steps") {
-                return (
-                  <StepGroup
-                    key={item.id}
-                    entries={item.entries}
-                    selectedId={selectedId}
-                    revealSeq={revealSeq}
-                    onStepClick={onStepClick}
-                  />
-                );
-              }
-              if (item.kind === "notice") {
-                return <NoticeRow key={`n:${item.entry.id}`} entry={item.entry} />;
-              }
-              // 同一轮里不会再出现 prompt (每条用户消息开新轮); 保险起见按气泡渲染
-              return <PromptView key={`p:${item.entry.id}`} entry={item.entry} />;
-            })}
-            {/* 固定在条目列表之后的同一位置: 条目增删不会让它重挂载, 计时连续;
-                key=阶段 让「等待 → 生成工具调用」切换时重新计时 */}
-            {phase && <PendingRow key={phase} phase={phase} />}
-          </div>
+          {rest.map((item) => {
+            if (item.kind === "reply") {
+              return (
+                <ReplyView
+                  key={`r:${item.entry.id}`}
+                  entry={item.entry}
+                  // 生成工具参数时正文已写完, 光标不再闪 (由下方「生成工具调用中」接手)
+                  cursor={live && item.entry.id === streamingReplyId && !item.entry.draftingTool}
+                />
+              );
+            }
+            if (item.kind === "steps") {
+              return (
+                <StepGroup
+                  key={item.id}
+                  entries={item.entries}
+                  selectedId={selectedId}
+                  revealSeq={revealSeq}
+                  onStepClick={onStepClick}
+                />
+              );
+            }
+            if (item.kind === "notice") {
+              return <NoticeRow key={`n:${item.entry.id}`} entry={item.entry} />;
+            }
+            // 同一轮里不会再出现 prompt (每条用户消息开新轮); 保险起见按气泡渲染
+            return <PromptView key={`p:${item.entry.id}`} entry={item.entry} />;
+          })}
+          {/* 固定在条目列表之后的同一位置: 条目增删不会让它重挂载, 计时连续;
+              key=阶段 让「等待 → 生成工具调用」切换时重新计时 */}
+          {phase && <PendingRow key={phase} phase={phase} />}
         </div>
       )}
     </article>
