@@ -160,25 +160,6 @@ body,
   overscroll-behavior: none;
 }
 
-/* 桌宠窗口 (index.html?window=pet): 三层背景必须全透明, 少透一层就是个白方块 */
-html:has([data-pet]),
-html:has([data-pet]) body,
-html:has([data-pet]) #root {
-  background: transparent !important;
-  overflow: hidden;
-  user-select: none;
-}
-
-/* 桌宠被拎起来时的晃动 (src/pet/effects.ts setDangling) */
-@keyframes pet-fx-dangle {
-  from { transform: rotate(-6deg); }
-  to { transform: rotate(6deg); }
-}
-.pet-fx-dangle {
-  transform-origin: 50% 0%;
-  animation: pet-fx-dangle 0.45s ease-in-out infinite alternate;
-}
-
 /* 显隐保底: hidden 属性必须盖过 display:flex 等布局 class */
 [hidden] {
   display: none !important;

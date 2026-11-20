@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
-import { X, BarChart3, Palette, Activity, Boxes, Cat, type LucideIcon } from "lucide-react";
+import { X, BarChart3, Palette, Activity, Boxes, type LucideIcon } from "lucide-react";
 import { TokenStatsPanel } from "./TokenStatsPanel";
 import { AppearancePanel } from "./AppearancePanel";
 import { BehaviorStatsPanel } from "./BehaviorStatsPanel";
 import { ModelsPanel } from "./ModelsPanel";
-import { PetPanel } from "./PetPanel";
 
-type TabKey = "theme" | "pet" | "stats" | "behavior" | "models";
+type TabKey = "theme" | "stats" | "behavior" | "models";
 
-/** 设置分区键: Rail 的「统计」「桌宠」「设置」入口直接定位到对应分区 */
+/** 设置分区键: Rail 的「统计」「设置」入口直接定位到对应分区 */
 export type SettingsSection = TabKey;
 
 const NAV_ITEMS: { key: TabKey; icon: LucideIcon; title: string; desc: string }[] = [
@@ -16,7 +15,6 @@ const NAV_ITEMS: { key: TabKey; icon: LucideIcon; title: string; desc: string }[
   { key: "models", icon: Boxes, title: "模型与供应商", desc: "供应商 / 模型 / 新会话默认" },
   { key: "stats", icon: BarChart3, title: "Token 统计", desc: "用量与成本分布" },
   { key: "behavior", icon: Activity, title: "行为统计", desc: "轮次 / 工具 / 思考占比" },
-  { key: "pet", icon: Cat, title: "桌宠", desc: "桌面宠物开关 / 角色 / 大小" },
 ];
 
 // 设置视图: 盖住标题栏以下整个内容行的全屏界面 (App 把它渲染在内容行里, absolute inset-0 铺满)。
@@ -91,11 +89,6 @@ export function SettingsWindow({
             {tab === "theme" && (
               <div className="h-full overflow-y-auto">
                 <AppearancePanel />
-              </div>
-            )}
-            {tab === "pet" && (
-              <div className="h-full overflow-y-auto">
-                <PetPanel />
               </div>
             )}
             {tab === "stats" && (

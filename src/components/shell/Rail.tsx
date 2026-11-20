@@ -1,12 +1,12 @@
 import {
-  MessagesSquare, Sparkles, Package, ChartNoAxesColumn, Cat, Settings2,
+  MessagesSquare, Sparkles, Package, ChartNoAxesColumn, Settings2,
 } from "lucide-react";
 import { useUiStore } from "../../store/ui";
 import type { SettingsSection } from "../settings/SettingsWindow";
 
 /**
  * 图标轨 (框架 C 第一列): 会话开关会话列表, Skill / Package 开抽屉,
- * 统计 / 桌宠 / 设置直接打开设置窗的对应分区。
+ * 统计 / 设置直接打开设置窗的对应分区。
  * 激活态 = 卡片底 + 小阴影 (见 index.css .rail-btn)。
  */
 export function Rail({
@@ -54,9 +54,6 @@ export function Rail({
         <ChartNoAxesColumn className="h-[18px] w-[18px]" />
       </button>
       <span className="flex-1" />
-      <button className="rail-btn" onClick={() => onOpenSettings("pet")} title="桌宠" aria-label="桌宠">
-        <Cat className="h-[18px] w-[18px]" />
-      </button>
       <button className="rail-btn" onClick={() => onOpenSettings("theme")} title="设置" aria-label="设置">
         <Settings2 className="h-[18px] w-[18px]" />
       </button>
