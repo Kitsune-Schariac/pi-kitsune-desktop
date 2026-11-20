@@ -3,7 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useSessionStore } from "../store/session";
 import { useProjectsStore } from "../store/projects";
+import { useAgentsStore } from "../store/agents";
 import type { ModelInfo } from "../store/session";
+import { PI_CAPABILITIES } from "../lib/agent";
 import {
   Send, Square, Paperclip, X, ChevronDown, Cpu, Brain, Loader2,
   ArrowUp, ArrowDown, Clock, DollarSign, Gauge, Database, FolderGit2, Slash, FilePlus2,
@@ -255,6 +257,8 @@ export function InputBar({
   }, [activeSessionId]);
   const sessions = useSessionStore((s) => s.sessions);
   const active = activeSessionId ? sessions[activeSessionId] : null;
+  const caps = active?.capabilities ?? PI_CAPABILITIES;
+  const lastAgent = useAgentsStore((s) => s.lastAgent);
   const isStreaming = active?.isStreaming ?? false;
   const contextUsage = active?.contextUsage ?? null;
   const turnStats = active?.turnStats ?? null;
@@ -413,7 +417,7 @@ export function InputBar({
         return;
       }
       try {
-        await startSession(emptyProject);
+        await startSession(emptyProject, { agentKind: lastAgent });
       } catch (e) {
         console.error("自动新建会话失败", e);
         return;
@@ -547,7 +551,7 @@ export function InputBar({
         // 新建会话: 当前项目 (活跃会话 cwd 优先, 空状态用选择器值); 无项目给提示
         const cwd = active?.cwd || emptyProject;
         if (!cwd) { showHint("请先在上方选择项目"); return false; }
-        try { await startSession(cwd); return true; }
+        try { await startSession(cwd, { agentKind: lastAgent }); return true; }
         catch (e) { showHint(`新建会话失败: ${e}`); return false; }
       }
       case "model":
@@ -617,8 +621,13 @@ export function InputBar({
       e.preventDefault();
       // 对齐 pi TUI 官方行为: 运行中 Alt+Enter 排队 followUp, 空闲时 Alt+Enter 与 Enter 等价直接发送
       // (pi 的 followUp 队列只在下一次 turn 时投递, 空闲排队会造成消息悬挂不投递)
-      if (isStreaming) handleSend(e.altKey ? "followUp" : "steer");
-      else handleSend("prompt");
+      if (isStreaming) {
+        if (e.altKey && caps.followUp) handleSend("followUp");
+        else if (!e.altKey && caps.steer) handleSend("steer");
+        else showHint("当前 Agent 运行中不支持插话，请等待本轮结束或先中止");
+      } else {
+        handleSend("prompt");
+      }
     }
   };
 
@@ -671,8 +680,10 @@ export function InputBar({
             <span>松开以添加为引用</span>
           </div>
         )}
-        {/* 排队条: 队列非空时贴卡片上沿显示 (原 StageHead 头部徽标迁入) */}
-        <QueueIndicator steering={active?.steeringQueue ?? []} followUp={active?.followUpQueue ?? []} />
+        {/* 排队条: 仅支持队列能力且队列非空时贴卡片上沿显示 */}
+        {(caps.steer || caps.followUp) && (
+          <QueueIndicator steering={active?.steeringQueue ?? []} followUp={active?.followUpQueue ?? []} />
+        )}
         <div className="px-5 pt-3">
           {/* @引用 / /命令 浮层: 悬浮在输入卡上方 (与 RefsPopup 同模式), 不占卡片布局 */}
           <div className="relative">
@@ -688,6 +699,7 @@ export function InputBar({
             {popup?.kind === "command" && (
               <CommandPalette
                 sessionId={activeSessionId}
+                remoteCommands={caps.remoteCommands}
                 streaming={isStreaming}
                 query={popup.query}
                 onExecute={handleExecuteCommand}
@@ -778,7 +790,13 @@ export function InputBar({
           onKeyUp={handleKeyUp}
           onMouseUp={handleCursorMove}
           onPaste={handlePaste}
-          placeholder={isStreaming ? "运行中: Enter 发 steer 指导, Alt+Enter 排队后续" : "输入消息, Enter 发送 (@ 引用文件/技能, / 命令)"}
+          placeholder={
+            isStreaming
+              ? caps.steer
+                ? "运行中: Enter 发 steer 指导, Alt+Enter 排队后续"
+                : "Agent 正在运行中…"
+              : "输入消息, Enter 发送 (@ 引用文件/技能, / 命令)"
+          }
           rows={2}
           className="max-h-[256px] w-full resize-none overflow-y-auto bg-transparent px-5 pb-1 pt-4 text-lead leading-relaxed text-fg outline-none placeholder:text-fg-4"
         />
@@ -874,26 +892,30 @@ export function InputBar({
               </span>
             </div>
 
-            {/* 模型选择 (provider + model 合并): 切 provider 自动选中该组第一个模型 */}
-            <ModelPicker
-              provider={selProvider}
-              model={currentModel}
-              models={availableModels}
-              onPick={(p, mId) => {
-                if (activeSessionId) setModel(activeSessionId, p, mId);
-              }}
-              disabled={!activeSessionId || availableModels.length === 0}
-              openRef={modelSelectOpen}
-            />
-            <MiniSelect
-              label="Thinking"
-              icon={Brain}
-              value={thinkingLevel}
-              options={availableThinkingLevels}
-              onChange={(lv) => activeSessionId && setThinkingLevel(activeSessionId, lv)}
-              disabled={!activeSessionId || availableThinkingLevels.length <= 1}
-              openRef={thinkingSelectOpen}
-            />
+            {/* 模型选择: 仅当当前 Agent 支持热切模型时展示 */}
+            {caps.hotModelSwitch && (
+              <ModelPicker
+                provider={selProvider}
+                model={currentModel}
+                models={availableModels}
+                onPick={(p, mId) => {
+                  if (activeSessionId) setModel(activeSessionId, p, mId);
+                }}
+                disabled={!activeSessionId || availableModels.length === 0}
+                openRef={modelSelectOpen}
+              />
+            )}
+            {caps.thinkingLevel && (
+              <MiniSelect
+                label="Thinking"
+                icon={Brain}
+                value={thinkingLevel}
+                options={availableThinkingLevels}
+                onChange={(lv) => activeSessionId && setThinkingLevel(activeSessionId, lv)}
+                disabled={!activeSessionId || availableThinkingLevels.length <= 1}
+                openRef={thinkingSelectOpen}
+              />
+            )}
 
             {isStreaming ? (
               <button

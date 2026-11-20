@@ -3,6 +3,7 @@ import { Folder, MoreHorizontal, PanelRight, X } from "lucide-react";
 import { useSessionStore } from "../../store/session";
 import { useUiStore } from "../../store/ui";
 import { Badge } from "../ui";
+import { AgentBadge } from "../AgentBadge";
 
 /** 路径最后一段 (项目名展示用): 兼容 Windows 反斜杠 */
 function baseName(p: string): string {
@@ -39,6 +40,7 @@ export function StageHead() {
   return (
     // 单行列头 (--bar-h): 与会话列表 / 检查器列头同高, 底线贯通。cwd 收进项目名的悬停提示
     <header className="bar gap-3 px-5">
+      <AgentBadge kind={active.agentKind} size="md" />
       <h1 className="min-w-0 truncate text-lead font-semibold text-fg">
         {active.sessionName || baseName(active.cwd)}
       </h1>

@@ -30,6 +30,10 @@ export function Inspector() {
     const id = s.activeSessionId;
     return id ? s.sessions[id]?.cwd : undefined;
   });
+  const fleetEnabled = useSessionStore((s) => {
+    const id = s.activeSessionId;
+    return id ? (s.sessions[id]?.capabilities.fleetView ?? true) : true;
+  });
 
   // 详情页签的选中步骤: 选中 id 在当前会话 entries 里找不到 (切会话 / 历史刷新丢条目) 时回落概览占位
   const selectedStepId = useUiStore((s) => s.selectedStepId);
@@ -99,19 +103,23 @@ export function Inspector() {
           </span>
         ) : null,
     },
-    {
-      key: "fleet",
-      label: "舰队",
-      icon: <Radar className="h-3 w-3" />,
-      badge:
-        fleetActiveCount > 0 ? (
-          <span className="h-[6px] w-[6px] rounded-full bg-fg" />
-        ) : null,
-    },
+    ...(fleetEnabled
+      ? [{
+          key: "fleet" as const,
+          label: "舰队",
+          icon: <Radar className="h-3 w-3" />,
+          badge:
+            fleetActiveCount > 0 ? (
+              <span className="h-[6px] w-[6px] rounded-full bg-fg" />
+            ) : null,
+        }]
+      : []),
     ...(trellisExists
       ? [{ key: "trellis" as const, label: "任务", icon: <ListTree className="h-3 w-3" /> }]
       : []),
   ];
+  const effectiveTab: InspectorTab =
+    inspectorTab === "fleet" && !fleetEnabled ? "detail" : inspectorTab;
 
   return (
     <aside style={{ width }} className="inspector inspector-col">
@@ -119,7 +127,7 @@ export function Inspector() {
       <div className="bar gap-2 pl-4 pr-3">
         <Segmented
           size="sm"
-          value={inspectorTab}
+          value={effectiveTab}
           onChange={setInspectorTab}
           ariaLabel="检查器页签"
           options={tabs.map(({ key, label, icon, disabled, badge }) => ({
@@ -146,15 +154,15 @@ export function Inspector() {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        {inspectorTab === "detail" ? (
+        {effectiveTab === "detail" ? (
           selectedEntry ? (
             <StepDetail key={selectedEntry.id} entry={selectedEntry} cwd={cwd} />
           ) : (
             <SessionOverview />
           )
-        ) : inspectorTab === "git" ? (
+        ) : effectiveTab === "git" ? (
           <GitSidebarPanel cwd={cwd} />
-        ) : inspectorTab === "fleet" ? (
+        ) : effectiveTab === "fleet" ? (
           <FleetSidebarPanel />
         ) : (
           <TrellisSidebarPanel cwd={cwd ?? ""} />

@@ -20,6 +20,9 @@ pub struct SessionInfo {
     pub session_id: String,   // uuid
     pub preview: String,      // 首条 user 消息摘要
     pub mtime_ms: Option<u64>, // 文件最后修改时间 (毫秒); 元数据不可得时为 None
+    /// 所属 Agent 类型 (默认 Pi, 供前端展示徽标与按 Agent 过滤)
+    #[serde(default = "crate::backends::AgentKind::pi_default")]
+    pub agent_kind: crate::backends::AgentKind,
 }
 
 /// pi 配置目录。必须与 spawn 出来的 pi 同源: pi 认 `PI_CODING_AGENT_DIR` 覆盖默认目录
@@ -245,6 +248,7 @@ pub fn list_projects_and_sessions() -> Result<Vec<ProjectInfo>, String> {
                 timestamp: ts,
                 preview,
                 mtime_ms,
+                agent_kind: crate::backends::AgentKind::Pi,
             });
         }
         // 会话按最后修改时间倒序 (最近活动在前); mtime 不可得时回退文件名时间戳,
@@ -697,6 +701,7 @@ mod tests {
             session_id: String::new(),
             preview: String::new(),
             mtime_ms,
+            agent_kind: crate::backends::AgentKind::Pi,
         };
         // 时间戳 → 对应毫秒 (量级一致, 避免夹具自身引入倒挂)
         let jan = parse_file_ts_ms("2026-01-01T00-00-00-000Z").unwrap();

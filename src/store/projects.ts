@@ -2,6 +2,7 @@
 // 数据源: Rust list_projects_and_sessions (扫描 ~/.pi/agent/sessions/)
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import type { AgentKind } from "../lib/agent";
 
 export interface SessionNode {
   file_name: string;
@@ -11,6 +12,8 @@ export interface SessionNode {
   preview: string;
   /** 文件最后修改时间 (毫秒); Rust 元数据不可得时为 null, 排序回退文件名时间戳 */
   mtime_ms?: number | null;
+  /** 所属 Agent 类型 (缺省回退 "pi") */
+  agent_kind?: AgentKind;
 }
 
 export interface ProjectNode {

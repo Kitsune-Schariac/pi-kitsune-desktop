@@ -16,7 +16,7 @@ import { PackagesPanel } from "./components/panels/PackagesPanel";
 import { NotificationToasts, UiRequestModal } from "./components/UiRequestModal";
 import { FileViewer } from "./components/FileViewer";
 import { useThemeStore } from "./store/theme";
-import { usePetStore } from "./store/pet";
+import { useAgentsStore } from "./store/agents";
 import { useGitStore } from "./store/git";
 import { useFleetStore } from "./store/fleet";
 import { useTrellisTasksStore } from "./store/trellisTasks";
@@ -54,13 +54,11 @@ export default function App() {
   // 悬浮输入卡高度: 动态撑开消息区底部留白, 避免高输入框遮挡最后一条消息
   const [inputBarH, setInputBarH] = useState(0);
 
-  // 启动即加载侧边栏数据 (无连接面板, 直接进主界面)
+  // 启动即加载侧边栏数据与本机 Agent 运行时探测
   useEffect(() => {
     loadProjects();
-    // 外观: 迁移旧偏好 + 应用日间/夜间 + 监听系统明暗 (模块级防重入)
     useThemeStore.getState().init();
-    // 桌宠: 拉宠物列表, 上次开着就自动开回来 (此时才动态加载事件桥; 关着则不挂任何监听)
-    usePetStore.getState().init();
+    void useAgentsStore.getState().loadAgents();
   }, [loadProjects]);
 
   // 舰队初始快照: App 挂载拉一次 runs (后台 run 在 GUI 重启后仍可被发现, 检查器页签徽标用)

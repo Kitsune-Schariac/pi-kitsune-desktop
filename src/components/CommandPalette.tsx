@@ -26,8 +26,9 @@ const SOURCE_LABEL: Record<string, string> = {
   skill: "技能",
 };
 
-export function CommandPalette({ sessionId, streaming, query, onExecute, onClose, ref }: {
+export function CommandPalette({ sessionId, remoteCommands = true, streaming, query, onExecute, onClose, ref }: {
   sessionId: string | null;
+  remoteCommands?: boolean;
   streaming: boolean;
   query: string;
   onExecute: (cmd: PaletteCommand) => void;
@@ -38,15 +39,19 @@ export function CommandPalette({ sessionId, streaming, query, onExecute, onClose
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
 
-  // 透传命令: 首次打开拉取一次, 失败降级为仅本地命令 (提示条告知); 无会话不拉取
+  // 透传命令: 仅当当前 Agent 支持 remoteCommands 时拉取; 失败降级为仅本地命令
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !remoteCommands) {
+      setRemote([]);
+      setRemoteError(null);
+      return;
+    }
     let cancelled = false;
     invoke<{ commands: PassthroughCommand[] }>("get_commands", { sessionId })
       .then((v) => { if (!cancelled) setRemote(v.commands || []); })
       .catch((e) => { if (!cancelled) setRemoteError(String(e)); });
     return () => { cancelled = true; };
-  }, [sessionId]);
+  }, [sessionId, remoteCommands]);
 
   // 合并候选: 本地白名单在前 (保持静态顺序), 透传按名称排序在后; stop 空闲时置灰
   const items = useMemo<PaletteItem[]>(() => {

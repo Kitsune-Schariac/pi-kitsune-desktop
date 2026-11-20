@@ -1,22 +1,20 @@
 mod attach;
-mod capture;
+mod backends;
 mod behavior_stats;
-mod pi_runtime;
-mod search;
+mod capture;
 mod git;
 mod local_path;
 mod models_config;
-mod pet_import;
-mod pet_stage;
-mod pets;
 mod provider_probe;
+mod search;
 mod session_fs;
 mod settings_config;
 mod subagent_fleet;
 mod token_stats;
 mod trellis_tasks;
 
-use pi_runtime::PiRuntime;
+use backends::pi::{PiBackend, PiWarmPool};
+use backends::{AgentKind, AgentRuntime};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
@@ -25,20 +23,12 @@ use tokio::sync::Mutex;
 
 const POOL_CAPACITY: usize = 6;
 
-/// 多 session 运行时池: HashMap 管理多个 pi sidecar, LRU 淘汰最久未活动的
-/// M4.5: 预热槽 (warm) — 打开会话后后台预 spawn 同 cwd 的 pi, 下次点击直接复用
+/// 多 session 运行时池: HashMap 管理多个抽象 AgentRuntime, LRU 淘汰最久未活动的。
+/// PI 专属预热槽下沉到 `PiWarmPool`, 不污染其他 Agent 生命周期。
 struct RuntimePool {
-    runtimes: HashMap<String, PiRuntime>,
+    runtimes: HashMap<String, AgentRuntime>,
     last_active: HashMap<String, Instant>,
-    /// 预热好的空闲 runtime (cwd 匹配时复用, 避免 pi 冷启动 ~3.5s)
-    warm: Option<PiRuntime>,
-    warm_cwd: Option<String>,
-    /// 预热 spawn 进行中 (防并发重复预热)
-    warming: bool,
-    /// 预热代次: 每次作废预热槽 (drop_warm) 递增。飞行中的预热任务完成后凭代次自证
-    /// 有效性 —— 保存 models.json 会作废旧槽, 但那时可能有一个 spawn 已经在飞, 它读的是
-    /// 旧配置, 无条件回写会让「保存后新建会话立即生效」在这个时序下失效。
-    warm_epoch: u64,
+    pi_warm: PiWarmPool,
 }
 
 impl RuntimePool {
@@ -46,10 +36,7 @@ impl RuntimePool {
         Self {
             runtimes: HashMap::new(),
             last_active: HashMap::new(),
-            warm: None,
-            warm_cwd: None,
-            warming: false,
-            warm_epoch: 0,
+            pi_warm: PiWarmPool::new(),
         }
     }
 
@@ -58,63 +45,10 @@ impl RuntimePool {
         self.last_active.insert(session_id.to_string(), Instant::now());
     }
 
-    /// 取预热 runtime: cwd 匹配才复用, 否则 None (调用方负责替换/丢弃)
-    fn take_warm(&mut self, cwd: &str) -> Option<PiRuntime> {
-        if self.warm_cwd.as_deref() == Some(cwd) {
-            self.warming = false;
-            self.warm_cwd = None;
-            self.warm.take()
-        } else {
-            None
-        }
-    }
-
-    /// 丢弃不匹配的 warm (cwd 变化): 异步 stop 不阻塞调用方
-    /// 递增代次, 使飞行中的预热任务完成后自行作废 (见 warm_epoch 注释)
-    fn drop_warm(&mut self) {
-        self.warm_epoch = self.warm_epoch.wrapping_add(1);
-        if let Some(mut rt) = self.warm.take() {
-            self.warm_cwd = None;
-            tauri::async_runtime::spawn(async move {
-                let _ = rt.stop().await;
-            });
-        }
-        self.warming = false;
-    }
-
-    /// 标记预热进行中 (防并发重复); 返回 None = 已有预热在跑, 否则返回本轮代次供回写时校验
-    fn mark_warming(&mut self) -> Option<u64> {
-        if self.warming || self.warm.is_some() {
-            None
-        } else {
-            self.warming = true;
-            Some(self.warm_epoch)
-        }
-    }
-
-    /// 预热完成回写 (无论成败都清标志)。epoch 与当前代次不符 = 预热期间配置被改动作废了,
-    /// 这个 runtime 读的是旧配置, 回写会让下个会话拿到过期配置 → 直接停掉
-    fn finish_warming(&mut self, cwd: String, epoch: u64, rt: Result<PiRuntime, String>) {
-        self.warming = false;
-        if epoch != self.warm_epoch {
-            if let Ok(mut stale) = rt {
-                tauri::async_runtime::spawn(async move {
-                    let _ = stale.stop().await;
-                });
-            }
-            return;
-        }
-        if let Ok(rt) = rt {
-            self.warm = Some(rt);
-            self.warm_cwd = Some(cwd);
-        }
-    }
-
     /// 超过 capacity 时淘汰最久未活动的 runtime (graceful stop)
-    /// 淘汰后 emit session_evicted: 前端保留 entries 标记 detached, 切回时秒切 + reattach
+    /// 淘汰后 emit session_evicted: 前端保留 entries 标记 detached, 切回走 reattach
     async fn evict_lru(&mut self, app: &tauri::AppHandle) {
         while self.runtimes.len() > POOL_CAPACITY {
-            // 先 clone 出 victim id, 结束 iter 不可变借用, 再 remove
             let victim = self
                 .last_active
                 .iter()
@@ -125,7 +59,6 @@ impl RuntimePool {
                 let _ = rt.stop().await;
             }
             self.last_active.remove(&id);
-            // 通知前端: pi 进程被 LRU 淘汰, entries 仍在内存, 切回走 reattach 而非报错
             let _ = app.emit("session_evicted", serde_json::json!({ "sessionId": id }));
         }
     }
@@ -136,208 +69,137 @@ impl RuntimePool {
             let _ = rt.stop().await;
         }
         self.last_active.clear();
-        if let Some(mut rt) = self.warm.take() {
-            let _ = rt.stop().await;
-        }
-        self.warm_cwd = None;
-        self.warming = false;
-        self.warm_epoch = self.warm_epoch.wrapping_add(1);
+        self.pi_warm.stop().await;
     }
 }
 
 type SharedRuntime = Arc<Mutex<RuntimePool>>;
 
 /// 应用版本号 (编译期来自 Cargo.toml): 标题栏展示用。
-/// 不用 @tauri-apps/api getVersion (需额外 capability core:app:allow-version),
-/// 自定义 command 已由 default capability 放行。
 #[tauri::command]
 fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-// --- 桌宠窗口 ---
-
-/// 开桌宠窗: 透明无边框置顶小窗, 加载同一份前端 bundle 但带 ?window=pet 走桌宠分支。
-/// 已存在则只 show (重复开不再建第二个窗)。
-/// 尺寸是前端算好的画布尺寸 (比角色大, 透明区域靠舞台线程动态穿透); x/y 缺省时交给 builder 默认落位。
-#[tauri::command]
-async fn open_pet_window(
-    app: tauri::AppHandle,
-    w: f64,
-    h: f64,
-    x: Option<f64>,
-    y: Option<f64>,
-) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("pet") {
-        win.show().map_err(|e| format!("显示桌宠窗口失败: {e}"))?;
-        return Ok(());
-    }
-    let mut builder = tauri::WebviewWindowBuilder::new(
-        &app,
-        "pet",
-        tauri::WebviewUrl::App("index.html?window=pet".into()),
-    )
-    .title("Pi Kitsune Pet")
-    .inner_size(w, h)
-    .transparent(true)
-    .decorations(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .shadow(false)
-    .resizable(false);
-    // 存档位置不能交给 builder.position: tao 创建窗口时只认"左上角落在某块屏幕内"的初始位置,
-    // 否则回落到系统默认位置。宠物贴着屏幕左边时画布左上角在屏幕外, 每次重启都会被挪走。
-    // 所以先隐藏着建出来, 再 set_position (创建后挪窗口没有这个限制), 最后显示, 也免得先在默认位置闪一下
-    let restore = x.zip(y);
-    if restore.is_some() {
-        builder = builder.visible(false);
-    }
-    let win = builder
-        .build()
-        .map_err(|e| format!("创建桌宠窗口失败: {e}"))?;
-    if let Some((x, y)) = restore {
-        win.set_position(tauri::LogicalPosition::new(x, y))
-            .map_err(|e| format!("定位桌宠窗口失败: {e}"))?;
-        win.show().map_err(|e| format!("显示桌宠窗口失败: {e}"))?;
-    }
-    pet_stage::start(app.clone());
-    Ok(())
-}
-
-/// 关桌宠窗 (窗口不存在时静默成功 — 关一个已经没了的窗不算错)
-#[tauri::command]
-async fn close_pet_window(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("pet") {
-        win.close().map_err(|e| format!("关闭桌宠窗口失败: {e}"))?;
-    }
-    Ok(())
-}
-
-/// 呼出主窗口 (单击桌宠跳到待处理会话)。放在 Rust 侧做, 免得给主窗口的 capability 追加
-/// show / unminimize / set-focus 一串窗口权限; 最小化着直接 set_focus 在 Windows 上不会还原, 所以先 unminimize
-#[tauri::command]
-async fn focus_main_window(app: tauri::AppHandle) -> Result<(), String> {
-    let win = app
-        .get_webview_window("main")
-        .ok_or_else(|| "主窗口不存在".to_string())?;
-    win.show().map_err(|e| format!("显示主窗口失败: {e}"))?;
-    win.unminimize().map_err(|e| format!("还原主窗口失败: {e}"))?;
-    win.set_focus().map_err(|e| format!("聚焦主窗口失败: {e}"))?;
-    Ok(())
-}
-
 // --- 模型配置保存后的预热槽废弃 ---
 
-/// 废弃 warm 预热槽: pi 只在启动时读 models.json / settings.json, 已就绪的预热槽里是旧配置的进程,
+/// 废弃 PI warm 预热槽: pi 只在启动时读 models.json / settings.json, 已就绪的预热槽里是旧配置的进程,
 /// 直接弃掉让下一个新建会话重新 spawn。已运行会话不受影响 (UI 侧提示重启)
 #[tauri::command]
 async fn discard_warm_runtime(state: State<'_, SharedRuntime>) -> Result<(), String> {
     let mut guard = state.lock().await;
-    guard.drop_warm();
+    guard.pi_warm.drop_warm();
     Ok(())
 }
 
-/// 启动一个 pi sidecar 会话, 返回 sessionId (不替换已有 session, 多个并存)
-/// session_path 存在时: switch_session 加载历史会话文件
-/// M4.5: 优先复用预热 runtime (cwd 匹配); 完成后后台预热同 cwd 的下一个
-/// 慢操作 (spawn/switch) 不持有全局锁, 避免并发打开会话互相阻塞
+/// 启动一个 Agent 会话, 返回 `{ sessionId, agentKind, capabilities, entries }` (多个会话并存)。
+/// 慢操作 (spawn/switch) 不持有全局锁, 避免并发打开会话互相阻塞。
 #[tauri::command]
 async fn start_session(
     app: tauri::AppHandle,
     state: State<'_, SharedRuntime>,
     cwd: String,
+    agent_kind: Option<AgentKind>,
     provider: Option<String>,
     model: Option<String>,
     session_path: Option<String>,
     session_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    // reattach 复用原 sessionId: 事件流 rebind 到原 id, 前端缓存 entries 不用迁移 key;
-    // 新建会话不传 → 生成新 id
+    let kind = agent_kind.unwrap_or(AgentKind::Pi);
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
         .as_millis();
     let session_id = session_id.unwrap_or_else(|| format!("sess_{now_ms}"));
 
-    // 首帧直读: 历史会话 entries 由 Rust 直接解析 jsonl (零 pi 进程依赖, ~1ms, 锁外),
-    // 随返回值一并交付, 前端立即渲染, 不再等 get_entries RPC
-    // 路径安全校验是命令层职责 (ensure_within_sessions, 拒绝 sessions 根外路径)
-    let entries = match &session_path {
-        Some(path) => {
-            let abs = crate::session_fs::ensure_within_sessions(std::path::Path::new(path))?;
-            crate::session_fs::read_session_entries(&abs)?
+    match kind {
+        AgentKind::Pi => {
+            // 首帧直读: 历史会话 entries 由 Rust 直接解析 jsonl (零 pi 进程依赖, ~1ms, 锁外)
+            let entries = match &session_path {
+                Some(path) => {
+                    let abs = crate::session_fs::ensure_within_sessions(std::path::Path::new(path))?;
+                    crate::session_fs::read_session_entries(&abs)?
+                }
+                None => Vec::new(),
+            };
+
+            // 阶段 1 (锁内, 快速): 取 warm / 丢弃不匹配 warm / 标记预热
+            let warm_rt;
+            let warm_epoch = {
+                let mut guard = state.lock().await;
+                warm_rt = match guard.pi_warm.take_warm(&cwd) {
+                    Some(rt) => Some(rt),
+                    None => {
+                        guard.pi_warm.drop_warm();
+                        None
+                    }
+                };
+                guard.pi_warm.mark_warming()
+            };
+
+            // 阶段 2 (无锁, 慢操作): spawn (或复用 warm) + switch_session
+            let reused_warm = warm_rt.is_some();
+            let mut pi = match warm_rt {
+                Some(rt) => rt,
+                None => PiBackend::spawn(app.clone(), session_id.clone(), cwd.clone(), provider, model).await?,
+            };
+            if reused_warm {
+                pi.rebind_session(session_id.clone()).await;
+            }
+            if let Some(path) = session_path {
+                match pi.switch_session(path).await {
+                    Ok(true) => {
+                        pi.stop().await?;
+                        return Err("切换会话被扩展取消".into());
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        pi.stop().await?;
+                        return Err(format!("加载会话失败: {e}"));
+                    }
+                }
+            }
+
+            let runtime = AgentRuntime::Pi(pi);
+            let capabilities = runtime.capabilities();
+
+            // 阶段 3 (锁内, 快速): 入池 + LRU 淘汰
+            {
+                let mut guard = state.lock().await;
+                guard.runtimes.insert(session_id.clone(), runtime);
+                guard.touch(&session_id);
+                guard.evict_lru(&app).await;
+            }
+
+            // 后台预热同 cwd 的下一个 PI 实例
+            if let Some(epoch) = warm_epoch {
+                let state2 = state.inner().clone();
+                let cwd2 = cwd.clone();
+                let app2 = app.clone();
+                let warm_sid = format!(
+                    "warm_{}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_err(|e| e.to_string())?
+                        .as_millis()
+                );
+                tauri::async_runtime::spawn(async move {
+                    let rt = PiBackend::spawn(app2, warm_sid, cwd2.clone(), None, None).await;
+                    let mut guard = state2.lock().await;
+                    guard.pi_warm.finish_warming(cwd2, epoch, rt);
+                });
+            }
+
+            Ok(serde_json::json!({
+                "sessionId": session_id,
+                "agentKind": kind,
+                "capabilities": capabilities,
+                "entries": entries,
+            }))
         }
-        None => Vec::new(),
-    };
-
-    // 阶段 1 (锁内, 快速): 取 warm / 丢弃不匹配 warm / 标记预热 (防并发重复)
-    let warm_rt;
-    let warm_epoch = {
-        let mut guard = state.lock().await;
-        warm_rt = match guard.take_warm(&cwd) {
-            Some(rt) => Some(rt),
-            None => {
-                guard.drop_warm();
-                None
-            }
-        };
-        // 无论 warm 是否命中都触发下一轮预热, 保证连续切换始终命中
-        guard.mark_warming()
-    };
-
-    // 阶段 2 (无锁, 慢操作): spawn (或复用 warm) + switch_session
-    let reused_warm = warm_rt.is_some();
-    let mut runtime = match warm_rt {
-        Some(rt) => rt,
-        None => PiRuntime::spawn(app.clone(), session_id.clone(), cwd.clone(), provider, model).await?,
-    };
-    // warm 复用: 事件流的 sessionId 还停留在预热时的 warm_xxx, 必须 rebind 到真实会话,
-    // 否则前端按 sessionId 路由查不到 → 流式事件全部丢弃 → 客户端永远"思考中"
-    if reused_warm {
-        runtime.rebind_session(session_id.clone()).await;
+        AgentKind::Claude => Err("Claude Code 后端将在 Phase 2 接入，敬请期待".into()),
+        AgentKind::Agy => Err("Antigravity CLI (ACP) 后端将在 Phase 3 接入，敬请期待".into()),
     }
-    if let Some(path) = session_path {
-        // 加载历史会话: 切换失败或被扩展取消时停掉 runtime, 防止僵尸 pi 进程
-        match runtime.switch_session(path).await {
-            Ok(true) => {
-                runtime.stop().await?;
-                return Err("切换会话被扩展取消".into());
-            }
-            Ok(false) => {}
-            Err(e) => {
-                runtime.stop().await?;
-                return Err(format!("加载会话失败: {e}"));
-            }
-        }
-    }
-
-    // 阶段 3 (锁内, 快速): 入池 + 触发后台预热
-    {
-        let mut guard = state.lock().await;
-        guard.runtimes.insert(session_id.clone(), runtime);
-        guard.touch(&session_id);
-        guard.evict_lru(&app).await;
-    }
-    // 预热: spawn 同 cwd 的 pi 存槽 (spawn 本身 ~10ms, pi 的 3.5s 初始化在后台自然度过;
-    // 预热不写 session 文件, 复用后 switch_session 绑定真实会话)
-    if let Some(epoch) = warm_epoch {
-        let state2 = state.inner().clone();
-        let cwd2 = cwd.clone();
-        let app2 = app.clone();
-        let warm_sid = format!(
-            "warm_{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|e| e.to_string())?
-                .as_millis()
-        );
-        tauri::async_runtime::spawn(async move {
-            let rt = PiRuntime::spawn(app2, warm_sid, cwd2.clone(), None, None).await;
-            let mut guard = state2.lock().await;
-            guard.finish_warming(cwd2, epoch, rt);
-        });
-    }
-    Ok(serde_json::json!({"sessionId": session_id, "entries": entries}))
 }
 
 #[tauri::command]
@@ -346,7 +208,7 @@ async fn send_prompt(
     session_id: String,
     message: String,
     images: Option<Vec<serde_json::Value>>,
-) -> Result<(), String> {
+) -> Result<serde_json::Value, String> {
     let mut guard = state.lock().await;
     guard.touch(&session_id);
     let runtime = guard.runtimes.get_mut(&session_id).ok_or("session 不存在")?;
@@ -447,7 +309,7 @@ async fn get_available_thinking_levels(state: State<'_, SharedRuntime>, session_
     runtime.get_available_thinking_levels().await
 }
 
-// --- M4: 会话切换后加载 (历史/统计/重命名) ---
+// --- 会话切换后加载 (历史/统计/重命名) ---
 
 #[tauri::command]
 async fn get_entries(state: State<'_, SharedRuntime>, session_id: String) -> Result<serde_json::Value, String> {
@@ -472,7 +334,7 @@ async fn set_session_name(state: State<'_, SharedRuntime>, session_id: String, n
     runtime.set_session_name(name).await
 }
 
-// --- extension_ui_request 响应 (权限确认弹窗等 dialog 类请求的回复) ---
+// --- extension_ui_request 响应 ---
 
 #[tauri::command]
 async fn send_extension_ui_response(
@@ -487,8 +349,7 @@ async fn send_extension_ui_response(
     runtime.send_extension_ui_response(id, payload).await
 }
 
-/// 动态拉取可透传的 /命令 候选 (扩展/技能/prompt 模板), 供前端命令面板合并
-/// 无活跃会话时返回空列表而非报错: 前端面板降级为仅本地命令, 不弹错误打断输入
+/// 动态拉取可透传的 /命令 候选, 无活跃会话时返回空列表而非报错
 #[tauri::command]
 async fn get_commands(state: State<'_, SharedRuntime>, session_id: String) -> Result<serde_json::Value, String> {
     let mut guard = state.lock().await;
@@ -506,8 +367,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(Arc::new(Mutex::new(RuntimePool::new())) as SharedRuntime)
         .setup(|_app| {
-            // token 统计索引预热: 后台线程首次全量建索引 (1~2s), 不阻塞启动;
-            // 之后 get_token_stats 的增量守卫只 stat + 重扫变化文件
             std::thread::Builder::new()
                 .name("token-index-prewarm".into())
                 .spawn(|| {
@@ -519,6 +378,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            backends::list_available_agents,
             start_session, send_prompt, abort_session, stop_session,
             send_steer, send_follow_up,
             get_state, get_available_models, set_model, cycle_model,
@@ -539,11 +399,6 @@ pub fn run() {
             attach::read_clipboard_attachments, attach::resolve_attachment_paths,
             token_stats::get_token_stats,
             behavior_stats::get_behavior_stats, behavior_stats::get_session_behavior,
-            pets::list_pets, pets::get_pet_asset, pets::open_pets_dir,
-            pet_import::inspect_pet_import, pet_import::commit_pet_import, pet_import::discard_pet_import,
-            open_pet_window, close_pet_window, focus_main_window,
-            pet_stage::pet_stage_set_hitbox, pet_stage::pet_stage_drag, pet_stage::pet_stage_press,
-            pet_stage::pet_stage_move_to, pet_stage::pet_stage_stop, pet_stage::pet_stage_set_gravity,
             subagent_fleet::list_fleet_runs, subagent_fleet::read_fleet_run_detail,
             trellis_tasks::list_trellis_tasks, trellis_tasks::read_trellis_task_doc,
             models_config::read_models_config, models_config::write_models_config,
@@ -553,14 +408,8 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
-                // 收摊只认主窗口: 桌宠窗口关闭绝不能牵连 pi 会话 —— 这个 handler 对任何
-                // 窗口的 Destroyed 都会触发, 多窗口后不判 label 就会关个桌宠把会话全停了
                 if window.label() != "main" {
                     return;
-                }
-                // 主窗口走了, 桌宠窗留着就是孤儿 (它 skip_taskbar 且置顶, 用户很难关掉)
-                if let Some(pet) = window.app_handle().get_webview_window("pet") {
-                    pet.close().ok();
                 }
                 if let Some(state) = window.app_handle().try_state::<SharedRuntime>() {
                     let state = state.inner().clone();

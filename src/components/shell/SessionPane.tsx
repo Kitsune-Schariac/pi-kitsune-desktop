@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Database, Loader2, Plus, Search } from "lucide-react";
 import { ProjectList } from "../ProjectList";
+import { AgentPickerMenu } from "../AgentPickerMenu";
 import { useResizableWidth } from "../../hooks/useResizableWidth";
 import { useSessionStore } from "../../store/session";
-import { useUiStore, type SessionListMode } from "../../store/ui";
+import { useUiStore, type AgentFilter, type SessionListMode } from "../../store/ui";
+import type { AgentKind } from "../../lib/agent";
 import { Segmented } from "../ui";
 
 const LIST_MODES: { value: SessionListMode; label: string }[] = [
@@ -12,15 +14,23 @@ const LIST_MODES: { value: SessionListMode; label: string }[] = [
   { value: "projects", label: "项目" },
 ];
 
+const AGENT_FILTERS: { value: AgentFilter; label: string }[] = [
+  { value: "all", label: "全部" },
+  { value: "pi", label: "PI" },
+  { value: "claude", label: "CC" },
+  { value: "agy", label: "AGY" },
+];
+
 /**
- * 会话列表 (第二列): 列头 (搜索 + 新建) + 「最近 / 项目」分段 + 列表体 + 会话库路径小字。
+ * 会话列表 (第二列): 列头 (搜索 + 新建) + 「最近 / 项目」分段 + Agent 过滤胶囊 + 列表体。
  * 收起与拖拽调宽由 paneOpen / 右缘手柄控制。
- * 列表体 (最近 / 项目两视图) 都走 ProjectList, 打开 / 删除 / 菜单逻辑单源。
  */
 export function SessionPane() {
   const paneOpen = useUiStore((s) => s.paneOpen);
   const listMode = useUiStore((s) => s.listMode);
   const setListMode = useUiStore((s) => s.setListMode);
+  const agentFilter = useUiStore((s) => s.agentFilter);
+  const setAgentFilter = useUiStore((s) => s.setAgentFilter);
   const startSession = useSessionStore((s) => s.startSession);
   const { width, dragging, onDragStart } = useResizableWidth({
     storageKey: "kitsune.sidebarWidth",
@@ -29,7 +39,7 @@ export function SessionPane() {
     max: 480,
   });
   const [adding, setAdding] = useState(false);
-  // 搜索关键词: 非空时项目树切为全局拍平过滤视图 (Sidebar 持有的旧行为原样保留)
+  const [pickerPos, setPickerPos] = useState<{ x: number; y: number } | null>(null);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -48,15 +58,14 @@ export function SessionPane() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // 新建会话 = 选目录 + 在该目录起一个会话。项目列表是 Rust 扫会话文件反推的,
-  // 目录里没有会话就无从显示, 落盘前的空项目由 ProjectList 的虚拟项目行兜住
-  const handleAddProject = async () => {
+  // 选中 Agent → 选目录 → 启动会话
+  const handleAddProjectWithAgent = async (agentKind: AgentKind) => {
     if (adding) return;
     try {
       const dir = await open({ directory: true, multiple: false, title: "选择项目目录" });
-      if (typeof dir !== "string") return; // 用户取消
+      if (typeof dir !== "string") return;
       setAdding(true);
-      await startSession(dir);
+      await startSession(dir, { agentKind });
     } catch (e) {
       console.error("添加项目失败", e);
     }
@@ -94,18 +103,24 @@ export function SessionPane() {
             </kbd>
           </label>
           <button
-            onClick={handleAddProject}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (adding) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              setPickerPos(pickerPos ? null : { x: rect.left, y: rect.bottom + 6 });
+            }}
             disabled={adding}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-edge bg-card text-fg-3 shadow-sm transition duration-fast ease-out hover:border-line hover:text-fg disabled:opacity-40"
-            title="新建会话 (选择目录)"
+            title="新建会话 (选择 Agent 与目录)"
             aria-label="新建会话"
+            aria-expanded={!!pickerPos}
           >
             {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           </button>
         </div>
 
-        {/* 最近 / 项目: 分段控件 (全站视图切换统一用 Segmented) */}
-        <div className="px-3 pb-1 pt-3">
+        {/* 最近 / 项目 分段 + 紧凑 Agent 过滤胶囊 */}
+        <div className="space-y-2 px-3 pb-1 pt-3">
           <Segmented
             fill
             size="sm"
@@ -114,11 +129,30 @@ export function SessionPane() {
             onChange={setListMode}
             ariaLabel="会话列表视图"
           />
+          <div className="flex items-center gap-1" role="group" aria-label="按 Agent 筛选">
+            {AGENT_FILTERS.map((f) => {
+              const active = agentFilter === f.value;
+              return (
+                <button
+                  key={f.value}
+                  type="button"
+                  onClick={() => setAgentFilter(f.value)}
+                  aria-pressed={active}
+                  className={`h-6 flex-1 rounded-md text-meta transition duration-fast ease-out ${
+                    active
+                      ? "bg-card font-medium text-fg shadow-[var(--shadow-sm),inset_0_0_0_1px_var(--edge)]"
+                      : "text-fg-4 hover:bg-hover hover:text-fg-2"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col">
           <ProjectList searchQuery={query} mode={listMode} />
-          {/* 搜索模式提示: 全局拍平, 不按项目分组 (原 Sidebar 行为; 最近视图本就跨项目, 无需提示) */}
           {query.trim() !== "" && listMode === "projects" && (
             <div className="px-4 py-1 text-meta leading-relaxed text-fg-4">
               搜索中：会话不按项目分组
@@ -126,16 +160,16 @@ export function SessionPane() {
           )}
         </div>
 
-        {/* 会话数据库路径弱化为小字 (改版稿保留项) */}
+        {/* 底部摘要: 兼容多 Agent 数据源 */}
         <div className="flex h-10 shrink-0 items-center gap-2 border-t border-line px-4 text-meta text-fg-4">
           <Database className="h-3 w-3 shrink-0" />
-          <span className="truncate" title="会话文件存放位置">
-            ~/.pi/agent/sessions
+          <span className="truncate" title="本地 Agent 会话库 (Pi / Claude Code / Antigravity)">
+            本地 Agent 会话
           </span>
         </div>
       </div>
 
-      {/* 右缘宽度拖拽手柄: 热区骑在边界上, 日常隐藏, hover/拖拽浮现竖线提示可调 */}
+      {/* 右缘宽度拖拽手柄 */}
       <div
         onMouseDown={onDragStart}
         className="group absolute inset-y-0 right-0 z-10 w-[7px] cursor-col-resize"
@@ -147,6 +181,16 @@ export function SessionPane() {
           }`}
         />
       </div>
+
+      {pickerPos && (
+        <AgentPickerMenu
+          x={pickerPos.x}
+          y={pickerPos.y}
+          title="选择 Agent 并打开目录"
+          onPick={(kind) => void handleAddProjectWithAgent(kind)}
+          onClose={() => setPickerPos(null)}
+        />
+      )}
     </aside>
   );
 }

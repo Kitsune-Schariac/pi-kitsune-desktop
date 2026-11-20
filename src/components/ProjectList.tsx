@@ -2,6 +2,10 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Button, Input } from "./ui";
 import { useProjectsStore, pathEq, type SessionNode, type ProjectNode } from "../store/projects";
 import { useSessionStore, type SessionState } from "../store/session";
+import { useUiStore } from "../store/ui";
+import { normalizeAgentKind, type AgentKind } from "../lib/agent";
+import { AgentBadge } from "./AgentBadge";
+import { AgentPickerMenu } from "./AgentPickerMenu";
 import {
   ChevronRight, ChevronDown, Trash2, Plus,
   MessageSquare, FolderOpen, X,
@@ -211,8 +215,10 @@ export function ProjectList({
   const reattachSession = useSessionStore((s) => s.reattachSession);
   const removeSessionState = useSessionStore((s) => s.removeSessionState);
   const renameSession = useSessionStore((s) => s.renameSession);
+  const agentFilter = useUiStore((s) => s.agentFilter);
 
   const [ctx, setCtx] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [picker, setPicker] = useState<{ x: number; y: number; projectPath: string } | null>(null);
   const [startingPath, setStartingPath] = useState<string | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -259,15 +265,20 @@ export function ProjectList({
   // 磁盘项目在前, 虚拟项目追加在后 (虚拟项目不参与持久化顺序/拖拽)
   const displayProjects = [...projects, ...uniqueVirtual];
 
-  // 拍平数据源 (搜索与最近视图共用): 磁盘会话 + 打开中未落盘, 不搜索时不过滤
+  const matchesAgent = (kind?: AgentKind | null) =>
+    agentFilter === "all" || normalizeAgentKind(kind) === agentFilter;
+
+  // 拍平数据源 (搜索与最近视图共用): 磁盘会话 + 打开中未落盘, 叠加 Agent 过滤
   const searching = searchQuery.trim() !== "";
   const q = searchQuery.trim().toLowerCase();
   const flatHits: FlatHit[] = displayProjects.flatMap((p) => {
     const projHit = searching && p.display_name.toLowerCase().includes(q);
     const disk = p.sessions
+      .filter((s) => matchesAgent(s.agent_kind))
       .filter((s) => !searching || projHit || sessionTitle(s).toLowerCase().includes(q))
       .map((s) => ({ kind: "disk" as const, p, s }));
     const openOnly = openOnlySessions(p, sessionOrder, sessions)
+      .filter(({ s }) => matchesAgent(s.agentKind))
       .filter(({ s }) => !searching || projHit || openSessionTitle(s).toLowerCase().includes(q))
       .map(({ sid, s }) => ({ kind: "open" as const, p, sid, s }));
     return [...disk, ...openOnly];
@@ -317,24 +328,24 @@ export function ProjectList({
       // 快路径: 同步切换 + 渲染缓存 entries (即使 detached 也先显示), detached 时后台 reattach
       setActiveSession(openId);
       if (sessions[openId]?.detached) {
-        void reattachSession(openId, projectPath, s.session_path);
+        void reattachSession(openId, projectPath, s.session_path, s.agent_kind);
       }
       return;
     }
     // 慢路径: 无缓存首次打开 (UI 立即切 + loading 占位, 不阻塞 await)
     setStartingPath(s.session_path);
     try {
-      await startSession(projectPath, { sessionPath: s.session_path });
+      await startSession(projectPath, { sessionPath: s.session_path, agentKind: s.agent_kind });
     } catch (e) {
       console.error("加载会话失败", e);
     }
     setStartingPath(null);
   };
 
-  const handleNewSession = async (projectPath: string) => {
+  const handleNewSession = async (projectPath: string, agentKind: AgentKind) => {
     setStartingPath(projectPath);
     try {
-      await startSession(projectPath);
+      await startSession(projectPath, { agentKind });
     } catch (e) {
       console.error("新建会话失败", e);
     }
@@ -389,10 +400,19 @@ export function ProjectList({
               ? formatRecentTime(recentRank(diskHit))
               : formatTime(diskHit.s.timestamp)
             : null;
+    const agentKind = diskHit ? diskHit.s.agent_kind : openHit!.s.agentKind;
+    const leadingNode = opts?.badge ? (
+      <span className="flex shrink-0 items-center gap-1">
+        {opts.badge}
+        <AgentBadge kind={agentKind} />
+      </span>
+    ) : (
+      <AgentBadge kind={agentKind} />
+    );
     return (
       <SessionRow
         key={diskHit ? diskHit.s.session_path : `open:${openHit!.sid}`}
-        leading={opts?.badge}
+        leading={leadingNode}
         title={title}
         hint={hit.p.display_name}
         isActive={isActive}
@@ -461,6 +481,8 @@ export function ProjectList({
   const renderProjectNode = (entry: ProjectEntry, draggable: boolean) => {
     const { p, storeIndex } = entry;
     const isVirtual = storeIndex < 0;
+    const filteredDisk = p.sessions.filter((s) => matchesAgent(s.agent_kind));
+    const filteredOpen = openOnlySessions(p, sessionOrder, sessions).filter(({ s }) => matchesAgent(s.agentKind));
     return (
       <div
         key={p.path}
@@ -489,15 +511,17 @@ export function ProjectList({
           onClick={() => toggleProject(p.path)}
           onContextMenu={(e) => {
             e.preventDefault();
+            const px = e.clientX;
+            const py = e.clientY;
             setCtx({
-              x: e.clientX, y: e.clientY,
+              x: px, y: py,
               items: isVirtual
                 ? [
-                    { label: "新建会话", icon: Plus, onClick: () => handleNewSession(p.path) },
+                    { label: "新建会话", icon: Plus, onClick: () => setPicker({ x: px, y: py, projectPath: p.path }) },
                     { label: "移除项目", icon: X, danger: true, onClick: () => stopAllCwdSessions(p.path) },
                   ]
                 : [
-                    { label: "新建会话", icon: Plus, onClick: () => handleNewSession(p.path) },
+                    { label: "新建会话", icon: Plus, onClick: () => setPicker({ x: px, y: py, projectPath: p.path }) },
                     { label: "移除项目", icon: X, danger: true, onClick: () => removeProject(p.path) },
                   ],
             });
@@ -517,17 +541,18 @@ export function ProjectList({
           </span>
           {/* 会话计数: hover 淡出让位给操作钮 */}
           <span className="shrink-0 pr-1 text-label tabular-nums text-fg-4 transition-opacity duration-fast ease-out group-hover:opacity-0">
-            {p.sessions.length}
+            {filteredDisk.length + filteredOpen.length}
           </span>
           {/* 浮现操作钮 (绝对定位, 不撑高行) */}
           <span className="absolute right-2 top-1/2 hidden -translate-y-1/2 items-center gap-1 group-hover:flex">
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleNewSession(p.path);
+                const rect = e.currentTarget.getBoundingClientRect();
+                setPicker({ x: rect.left, y: rect.bottom + 6, projectPath: p.path });
               }}
               className="rounded p-1 text-fg-3 transition duration-fast ease-out hover:bg-hover hover:text-fg"
-              title="新建会话"
+              title="新建会话 (选择 Agent)"
             >
               <Plus className="h-3 w-3" />
             </button>
@@ -547,7 +572,7 @@ export function ProjectList({
         {/* 会话列表: 最近 5 个, 点省略号每次 +7 */}
         {p.expanded && (
           <div className="ml-4 pl-2">
-            {p.sessions.slice(0, p.visibleCount).map((s) => {
+            {filteredDisk.slice(0, p.visibleCount).map((s) => {
               const openId = sessionOrder.find((sid) => pathEq(sessions[sid]?.sessionPath, s.session_path));
               const isActive = openId === activeSessionId;
               const isLoading = startingPath === s.session_path;
@@ -559,6 +584,7 @@ export function ProjectList({
               return (
                 <SessionRow
                   key={s.session_path}
+                  leading={<AgentBadge kind={s.agent_kind} />}
                   title={sessionTitle(s)}
                   isActive={isActive}
                   right={right}
@@ -583,18 +609,19 @@ export function ProjectList({
                 />
               );
             })}
-            {p.sessions.length > p.visibleCount && (
+            {filteredDisk.length > p.visibleCount && (
               <button
                 onClick={() => loadMore(p.path)}
                 className="w-full rounded-md py-1 pl-2 text-left text-meta text-fg-3 transition duration-fast ease-out hover:bg-hover hover:text-fg"
               >
-                显示更多 ({p.sessions.length - p.visibleCount})…
+                显示更多 ({filteredDisk.length - p.visibleCount})…
               </button>
             )}
             {/* 打开中但磁盘列表没有的会话 (新会话未落盘 / 已落盘未刷新): 直接可点回 */}
-            {openOnlySessions(p, sessionOrder, sessions).map(({ sid, s }) => (
+            {filteredOpen.map(({ sid, s }) => (
               <SessionRow
                 key={`open:${sid}`}
+                leading={<AgentBadge kind={s.agentKind} />}
                 title={openSessionTitle(s)}
                 isActive={sid === activeSessionId}
                 right={s.isStreaming ? "spinner" : s.hasUnread ? "dot" : null}
@@ -629,10 +656,16 @@ export function ProjectList({
   };
 
   // 项目树分两段: 主列表 (参与拖拽排序) + 底部「临时目录」折叠组 (不参与)
+  // 选中特定 Agent 过滤时, 隐藏该 Agent 下无会话的项目
   const allEntries: ProjectEntry[] = [
     ...projects.map((p, storeIndex) => ({ p, storeIndex })),
     ...uniqueVirtual.map((p) => ({ p, storeIndex: -1 })),
-  ];
+  ].filter(({ p }) => {
+    if (agentFilter === "all") return true;
+    const hasDisk = p.sessions.some((s) => matchesAgent(s.agent_kind));
+    const hasOpen = openOnlySessions(p, sessionOrder, sessions).some(({ s }) => matchesAgent(s.agentKind));
+    return hasDisk || hasOpen;
+  });
   const mainEntries = allEntries.filter(({ p }) => !isTempProject(p.path, p.display_name));
   const tempEntries = allEntries.filter(({ p }) => isTempProject(p.path, p.display_name));
 
@@ -690,6 +723,9 @@ export function ProjectList({
       {/* 项目视图: 主列表 + 临时目录组 */}
       {!searching && mode === "projects" && (
         <>
+          {mainEntries.length === 0 && tempEntries.length === 0 && (
+            <div className="px-3 py-4 text-meta text-fg-4">当前筛选下暂无会话</div>
+          )}
           {mainEntries.map((entry) => renderProjectNode(entry, entry.storeIndex >= 0))}
           {tempEntries.length > 0 && (
             // 临时目录组 (design §6): UUID / AppData 下的项目收进底部, 默认折叠, 展开态持久化
@@ -724,6 +760,14 @@ export function ProjectList({
       )}
 
       {ctx && <ContextMenu {...ctx} onClose={() => setCtx(null)} />}
+      {picker && (
+        <AgentPickerMenu
+          x={picker.x}
+          y={picker.y}
+          onPick={(kind) => void handleNewSession(picker.projectPath, kind)}
+          onClose={() => setPicker(null)}
+        />
+      )}
 
       {/* 重命名输入: 会话行内联编辑 */}
       {renamingPath && (

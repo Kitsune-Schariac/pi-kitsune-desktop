@@ -2,6 +2,7 @@
 // 持久化: paneOpen / listMode 落 localStorage; inspectorOpen 不持久化 (每次启动默认展开),
 // selectedStepId 随会话切换清空。
 import { create } from "zustand";
+import type { AgentKind } from "../lib/agent";
 
 const PANE_OPEN_KEY = "kitsune.paneOpen";
 const LEGACY_SIDEBAR_COLLAPSED_KEY = "kitsune.sidebarCollapsed";
@@ -9,6 +10,7 @@ const LIST_MODE_KEY = "kitsune.listMode";
 
 export type InspectorTab = "detail" | "git" | "fleet" | "trellis";
 export type SessionListMode = "recent" | "projects";
+export type AgentFilter = "all" | AgentKind;
 
 /** 首次读取 paneOpen: 无新键时从旧 kitsune.sidebarCollapsed 迁移 (旧键 1 = 收起), 迁完删旧键 */
 function readPaneOpen(): boolean {
@@ -34,6 +36,8 @@ interface UiStore {
   paneOpen: boolean;
   /** 会话列表视图: 最近 / 项目 (持久化 kitsune.listMode) */
   listMode: SessionListMode;
+  /** 侧栏 Agent 过滤胶囊 (不持久化, 启动默认全部) */
+  agentFilter: AgentFilter;
   /** 检查器展开 (不持久化, 启动默认展开) */
   inspectorOpen: boolean;
   inspectorTab: InspectorTab;
@@ -43,6 +47,7 @@ interface UiStore {
   locateStepSeq: number;
   togglePane: () => void;
   setListMode: (mode: SessionListMode) => void;
+  setAgentFilter: (filter: AgentFilter) => void;
   setInspectorOpen: (open: boolean) => void;
   setInspectorTab: (tab: InspectorTab) => void;
   /** 选中步骤 + 切详情页签 + 打开检查器 */
@@ -59,6 +64,7 @@ interface UiStore {
 export const useUiStore = create<UiStore>((set) => ({
   paneOpen: readPaneOpen(),
   listMode: readListMode(),
+  agentFilter: "all",
   inspectorOpen: true,
   inspectorTab: "detail",
   selectedStepId: null,
@@ -84,6 +90,8 @@ export const useUiStore = create<UiStore>((set) => ({
       /* ignore */
     }
   },
+
+  setAgentFilter: (agentFilter) => set({ agentFilter }),
 
   setInspectorOpen: (open) => set({ inspectorOpen: open }),
   setInspectorTab: (tab) => set({ inspectorTab: tab }),

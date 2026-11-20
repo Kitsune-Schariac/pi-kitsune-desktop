@@ -5,6 +5,19 @@ import { useGitStore } from "./git";
 import { hasTerminalMarkup, stripTerminalMarkup } from "../lib/sanitize";
 import { startRound, dropSession, resetLive, noteDelta, settle, liveSpeedFor, finishRound } from "../lib/speedLive";
 import type { UiNotification, UiRequest } from "../lib/pi";
+import {
+  PI_CAPABILITIES,
+  normalizeAgentKind,
+  type AgentCapabilities,
+  type AgentEventPayload,
+  type AgentKind,
+} from "../lib/agent";
+
+// 每次 agent_start 自增的纪元号。prompt 的 disposition 回来时要靠它判断「这期间 pi 到底起没起 agent」:
+// handled 只说明扩展命令把这条消息消费了, 但扩展也可能自己 pi.sendMessage() 起一轮 —— 那时
+// agent_start 已经先到, 不能因为 handled 就把刚置上的运行中抹掉。abort 的兜底同理
+const agentEpoch = new Map<string, number>();
+const epochOf = (sessionId: string) => agentEpoch.get(sessionId) ?? 0;
 
 export interface ChatEntry {
   id: string;
@@ -93,9 +106,11 @@ export interface CallRecord {
   window: number;   // 该次调用的生成窗口 (秒)
 }
 
-// 单个 session 的完整状态 (M3: 多 session, 每个 session 独立)
+// 单个 session 的完整状态 (多 session + 多 Agent, 每个 session 独立)
 export interface SessionState {
   sessionId: string;
+  agentKind: AgentKind;
+  capabilities: AgentCapabilities;
   cwd: string;
   sessionPath: string | null; // 加载的历史会话文件 (新建会话为 null)
   sessionName: string | null; // get_state.sessionName
@@ -130,12 +145,15 @@ interface SessionStore {
   sessionOrder: string[];
   isSwitching: boolean;
 
-  startSession: (cwd: string, opts?: { provider?: string; model?: string; sessionPath?: string }) => Promise<string>;
+  startSession: (
+    cwd: string,
+    opts?: { agentKind?: AgentKind; provider?: string; model?: string; sessionPath?: string },
+  ) => Promise<string>;
   stopSession: (sessionId: string) => Promise<void>;
   setActiveSession: (sessionId: string) => void;
   sendPrompt: (sessionId: string, text: string, images?: unknown[]) => Promise<void>;
   // steer: agent 运行中排队指导消息; followUp: agent 停止后排队的后续消息
-  // 队列内容由 pi queue_update 事件权威回推 (元素为纯字符串), 这里不做乐观插入
+  // 队列内容由后端 queue_update 事件权威回推 (元素为纯字符串), 这里不做乐观插入
   sendSteer: (sessionId: string, text: string, images?: unknown[]) => Promise<void>;
   sendFollowUp: (sessionId: string, text: string, images?: unknown[]) => Promise<void>;
   abort: (sessionId: string) => Promise<void>;
@@ -149,10 +167,10 @@ interface SessionStore {
   loadSessionStats: (sessionId: string) => Promise<void>;
   loadEntries: (sessionId: string) => Promise<void>;
   renameSession: (sessionId: string, name: string) => Promise<void>;
-  reattachSession: (sessionId: string, cwd: string, sessionPath: string) => Promise<void>;
+  reattachSession: (sessionId: string, cwd: string, sessionPath: string, agentKind?: AgentKind) => Promise<void>;
   removeSessionState: (sessionId: string) => void;
   markDetached: (sessionId: string) => void;
-  handleEvent: (payload: { sessionId: string; event: Record<string, unknown> }) => void;
+  handleEvent: (payload: AgentEventPayload) => void;
   // 速度采样 (InputBar 的 1s tick 调): 实时值在模块级累加器里, 不经过 store 状态,
   // 所以用 action 读取而非 selector。返回 null = 无有效数据, 界面显示 —
   sampleSpeed: (sessionId: string) => number | null;
@@ -193,16 +211,24 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       // 切换中: 立即切掉旧消息内容, 消息区显示混沌 loading 动画 (startSession 慢操作期间不残留旧会话)
       set({ isSwitching: true });
       try {
-        // Rust 首帧直读: 历史会话 entries 随 start_session 一并返回 (契约对齐 pi get_entries, 过滤 session 头),
-        // 前端直接渲染, 不再等 get_entries RPC
+        // Rust 首帧直读: 历史会话 entries 随 start_session 一并返回, 前端直接渲染
         const sessionPath = opts?.sessionPath ?? null;
-        const data = await invoke<{ sessionId: string; entries?: unknown[] }>("start_session", {
+        const requestedKind = normalizeAgentKind(opts?.agentKind);
+        const data = await invoke<{
+          sessionId: string;
+          agentKind?: AgentKind;
+          capabilities?: AgentCapabilities;
+          entries?: unknown[];
+        }>("start_session", {
           cwd,
+          agentKind: requestedKind,
           provider: opts?.provider ?? null,
           model: opts?.model ?? null,
           sessionPath,
         });
         const id = data.sessionId;
+        const agentKind = normalizeAgentKind(data.agentKind ?? requestedKind);
+        const capabilities = data.capabilities ?? PI_CAPABILITIES;
         // Array.isArray 守卫直接收窄类型 (布尔中间变量无法把收窄传给后续使用)
         const rawEntries = Array.isArray(data.entries) ? data.entries : null;
         const entries = rawEntries ? mapHistoryEntries(rawEntries) : [];
@@ -210,7 +236,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           sessions: {
             ...state.sessions,
             [id]: {
-              sessionId: id, cwd, sessionPath, sessionName: null,
+              sessionId: id, agentKind, capabilities, cwd, sessionPath, sessionName: null,
               isStreaming: false, entries, currentAssistantId: null,
               detached: false, lastEntryMtime: null, hasUnread: false,
               error: null, currentModel: null, thinkingLevel: "medium",
@@ -224,10 +250,10 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         }));
         const tasks: Promise<unknown>[] = [
           get().loadState(id),
-          get().loadModels(id),
-          get().loadThinkingLevels(id),
           get().loadSessionStats(id),
         ];
+        if (capabilities.hotModelSwitch) tasks.push(get().loadModels(id));
+        if (capabilities.thinkingLevel) tasks.push(get().loadThinkingLevels(id));
         // 直读路径同步 mtime baseline: reattach 的 mtime 守卫依赖它 (文件没变不重读)
         if (sessionPath) {
           tasks.push((async () => {
@@ -267,7 +293,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         const sessions = { ...state.sessions };
         toRemove.forEach((sid) => delete sessions[sid]);
         // 同步清速度累加器: live Map 在 zustand 之外, 不跟着 prune 清就会随会话淘汰持续涨
-        toRemove.forEach((sid) => dropSession(sid));
+        toRemove.forEach((sid) => { dropSession(sid); agentEpoch.delete(sid); });
         const sessionOrder = state.sessionOrder.filter((sid) => !toRemove.includes(sid));
         const activeSessionId = toRemove.includes(state.activeSessionId ?? "")
           ? (sessionOrder[sessionOrder.length - 1] ?? null)
@@ -279,6 +305,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     // 真删前端 state (不调 invoke): 删会话文件 / 移除项目 / 关新会话节点用, 进程已由 stopSession 停
     removeSessionState: (sessionId) => {
       dropSession(sessionId);   // 同步清速度累加器, 防 Map 泄漏
+      agentEpoch.delete(sessionId);
       set((state) => {
         const sessions = { ...state.sessions };
         delete sessions[sessionId];
@@ -290,13 +317,14 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       });
     },
 
-    // reattach: detached 会话切回时后台重建 pi 进程 (复用 warm), mtime 守卫决定是否重读 entries
-    reattachSession: async (sessionId, cwd, sessionPath) => {
+    // reattach: detached 会话切回时后台重建子进程, mtime 守卫决定是否重读 entries
+    reattachSession: async (sessionId, cwd, sessionPath, agentKind) => {
       const epoch = ++reattachEpoch;
+      const kind = normalizeAgentKind(agentKind ?? get().sessions[sessionId]?.agentKind);
       // 复用 start_session 传原 sessionId: Rust 侧 rebind 事件流到原 id, 缓存 entries 不用迁移 key
       try {
         await invoke("start_session", {
-          cwd, provider: null, model: null, sessionPath, sessionId,
+          cwd, agentKind: kind, provider: null, model: null, sessionPath, sessionId,
         });
       } catch (e) {
         patch(sessionId, { error: `重连会话失败: ${String(e)}` });
@@ -341,14 +369,28 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     sendPrompt: async (sessionId, text, images) => {
       const s = get().sessions[sessionId];
       if (!s || !text.trim()) return;
+      // 乐观置位保「发出即等待提示」, 但只有真跑 agent 才该一直亮着: 扩展命令 (如 /purge) 的
+      // disposition 是 handled —— pi 不跑 agent 也就不发 agent_settled, 这条运行中没人会收
+      const epoch = epochOf(sessionId);
       patch(sessionId, {
         entries: [...s.entries, { id: crypto.randomUUID(), kind: "message", role: "user", text }],
         isStreaming: true,
       });
       try {
-        await invoke("send_prompt", { sessionId, message: text, images: images ?? null });
+        const data = await invoke<{ disposition?: string } | null>("send_prompt", {
+          sessionId, message: text, images: images ?? null,
+        });
+        // handled = pi 侧被扩展命令 / input handler 消化, 没有 agent 在跑。
+        // 纪元没推进说明这期间没发过 agent_start, 界面上那个运行中就是乐观置位的残影, 收回
+        if (data?.disposition === "handled" && epochOf(sessionId) === epoch) {
+          patch(sessionId, { isStreaming: false, currentAssistantId: null });
+        }
       } catch (e) {
-        patch(sessionId, { isStreaming: false, error: String(e) });
+        // 失败不能盲目收回运行中: 扩展命令的 handler 可能已经把 agent 跑起来了 (RPC 超时就属于这种),
+        // 纪元推进过就说明 agent_start 已到, 状态交给事件流, 这里只报错
+        patch(sessionId, epochOf(sessionId) === epoch
+          ? { isStreaming: false, error: String(e) }
+          : { error: String(e) });
       }
     },
 
@@ -377,8 +419,18 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     },
 
     abort: async (sessionId) => {
-      try { await invoke("abort_session", { sessionId }); }
-      catch (e) { patch(sessionId, { error: String(e) }); }
+      // abort 的 response 要等 pi 侧会话变 idle 才回, 回来说明已经没 agent 在跑了。
+      // 事件流正常时由 agent_settled 收尾, 这里只兜异常路径 —— 否则误置的「运行中」
+      // 没有任何东西能把它关掉 (空闲时 abort 不产生任何事件)。纪元推进 = 期间又起了新一轮, 不动
+      const epoch = epochOf(sessionId);
+      try {
+        await invoke("abort_session", { sessionId });
+        if (epochOf(sessionId) === epoch) {
+          patch(sessionId, { isStreaming: false, currentAssistantId: null });
+        }
+      } catch (e) {
+        patch(sessionId, { error: String(e) });
+      }
     },
 
     loadState: async (sessionId) => {
@@ -489,16 +541,15 @@ export const useSessionStore = create<SessionStore>((set, get) => {
 
     handleEvent: (payload) => {
       const { sessionId, event } = payload;
-      const type = event.type as string;
       const s = get().sessions[sessionId];
-      // notify 是 fire-and-forget: 即使源 session 已不存在也要兜底展示 (走右下角弹窗);
-      // 其余事件 session 不存在直接丢弃 (孤儿事件无处理对象)
-      if (!s && !(type === "extension_ui_request" && (event as unknown as UiRequest).method === "notify")) return;
-      switch (type) {
-        case "agent_start": {
-          // 只在上一轮已定格 (或从未跑过) 时重置统计: pi 自动重试会在同一轮里再次发 agent_start,
-          // 无条件重置会把重试前已累计的 token 抹掉
-          const prev = s.turnStats;
+      // 扩展 notify 允许在无源 session 时走右下角兜底弹窗; 其余事件无对应 session 直接丢弃
+      if (!s && !(event.type === "notice" && event.fromExtension)) return;
+      switch (event.type) {
+        case "turn_start": {
+          // 纪元推进: prompt 的 disposition / abort 的 response 回来时靠它判断期间起没起过 agent
+          agentEpoch.set(sessionId, epochOf(sessionId) + 1);
+          // 只在上一轮已定格 (或从未跑过) 时重置统计: 自动重试会在同一轮里再次发 turn_start
+          const prev = s!.turnStats;
           const fresh = !prev || prev.elapsedMs !== null;
           if (fresh) startRound(sessionId);
           patch(sessionId, {
@@ -511,91 +562,83 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           });
           break;
         }
-        case "message_start": {
-          const msg = event.message as { role?: string; id?: string } | undefined;
-          if (msg?.role === "assistant") {
-            const id = msg.id || crypto.randomUUID();
-            const cur = get().sessions[sessionId]!;
+        case "assistant_start": {
+          const id = event.messageId || crypto.randomUUID();
+          const cur = get().sessions[sessionId]!;
+          patch(sessionId, {
+            entries: [...cur.entries, { id, kind: "message", role: "assistant", text: "", thinking: "" }],
+            currentAssistantId: id,
+          });
+          break;
+        }
+        case "live_usage": {
+          const cur = get().sessions[sessionId];
+          if (cur?.turnStats && (event.input > 0 || event.output > 0)) {
             patch(sessionId, {
-              entries: [...cur.entries, { id, kind: "message", role: "assistant", text: "", thinking: "" }],
-              currentAssistantId: id,
+              turnStats: { ...cur.turnStats, liveInput: event.input, liveOutput: event.output },
             });
           }
           break;
         }
-        case "message_update": {
-          const ev = event.assistantMessageEvent as { type?: string; delta?: string } | undefined;
+        case "content_block_start": {
           const cur = get().sessions[sessionId];
           if (!cur) break;
-          // 顶层 usage 是当前这条消息的最新累计 (rpc.md: message_update 已移除 message 字段和
-          // assistantMessageEvent.partial, 这是唯一可用的实时量)。
-          // 实测: provider 在流式期间上报的 usage 恒为 0 (169 个事件里仅 text_end 那一个非零),
-          // 所以这里不能靠 usage 判断有无进展 —— 实时速度走 delta 计数估算 (见 lib/speed.ts)。
-          const u = event.usage as { input?: number; output?: number } | undefined;
-          if (cur.turnStats && u && ((u.input ?? 0) > 0 || (u.output ?? 0) > 0)) {
-            patch(sessionId, {
-              turnStats: { ...cur.turnStats, liveInput: u.input ?? 0, liveOutput: u.output ?? 0 },
-            });
-          }
-          // delta 计数落在模块级累加器里 (零分配零通知): 若每个 token 都 patch turnStats,
-          // 高速模型下每秒会触发数百次 React 重渲染 —— 这是本次修复的既有性能问题
-          noteDelta(sessionId, ev?.type, !!ev?.delta, Date.now());
-          // 内容块切换: 记下当前块是不是工具调用 (见 ChatEntry.draftingTool)。*_start 每块只来一次,
-          // 这里的 find + patch 是低频路径, 不会把 delta 级的重渲染带回来; *_start 不带 delta, 处理完即可返回
-          if (ev?.type === "toolcall_start" || ev?.type === "text_start" || ev?.type === "thinking_start") {
-            const drafting = ev.type === "toolcall_start";
-            const target = cur.currentAssistantId
-              ? cur.entries.find((e) => e.id === cur.currentAssistantId && e.kind === "message")
-              : undefined;
-            if (target && !!target.draftingTool !== drafting) {
-              patch(sessionId, { entries: cur.entries.map((e) => (e === target ? { ...e, draftingTool: drafting } : e)) });
-            }
-            break;
-          }
-          if (!cur.currentAssistantId || !ev?.delta) break;
-          if (ev.type === "text_delta") {
-            patch(sessionId, { entries: cur.entries.map((e) =>
-              e.id === cur.currentAssistantId && e.kind === "message" ? { ...e, text: (e.text || "") + ev.delta! } : e
-            )});
-          } else if (ev.type === "thinking_delta") {
-            patch(sessionId, { entries: cur.entries.map((e) =>
-              e.id === cur.currentAssistantId && e.kind === "message" ? { ...e, thinking: (e.thinking || "") + ev.delta! } : e
-            )});
+          const drafting = event.block === "tool_call";
+          const target = cur.currentAssistantId
+            ? cur.entries.find((e) => e.id === cur.currentAssistantId && e.kind === "message")
+            : undefined;
+          if (target && !!target.draftingTool !== drafting) {
+            patch(sessionId, { entries: cur.entries.map((e) => (e === target ? { ...e, draftingTool: drafting } : e)) });
           }
           break;
         }
-        case "message_end": {
-          const msg = event.message as {
-            role?: string;
-            stopReason?: string;
-            errorMessage?: string;
-            usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; cost?: { total?: number } };
-          } | undefined;
+        case "text_delta": {
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          noteDelta(sessionId, "text_delta", event.delta.length > 0, Date.now());
+          if (!cur.currentAssistantId || !event.delta) break;
+          patch(sessionId, {
+            entries: cur.entries.map((e) =>
+              e.id === cur.currentAssistantId && e.kind === "message" ? { ...e, text: (e.text || "") + event.delta } : e
+            ),
+          });
+          break;
+        }
+        case "thinking_delta": {
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          noteDelta(sessionId, "thinking_delta", event.delta.length > 0, Date.now());
+          if (!cur.currentAssistantId || !event.delta) break;
+          patch(sessionId, {
+            entries: cur.entries.map((e) =>
+              e.id === cur.currentAssistantId && e.kind === "message" ? { ...e, thinking: (e.thinking || "") + event.delta } : e
+            ),
+          });
+          break;
+        }
+        case "tool_call_delta": {
+          // 零 React 重渲染: 仅写入模块级累加器用于实时输出速度估算
+          noteDelta(sessionId, "toolcall_delta", event.hasDelta, Date.now());
+          break;
+        }
+        case "assistant_end": {
           const cur = get().sessions[sessionId];
           if (!cur) break;
           const fields: Partial<SessionState> = { currentAssistantId: null };
-          // 整条 message_end 都要结算速度: settle(0) 只清单次调用状态不记入统计。
-          // 若只在有 usage 时调, usage 缺失那条的 genStartedAt 会残留, 下一条的生成窗口
-          // 会把两条消息的时间连起来算 (窗口虚长 → 速度虚低)
-          const settledSpeed = msg?.role === "assistant" ? settle(sessionId, msg.usage?.output ?? 0, Date.now()) : null;
-          // message_end 的 usage 是该条消息的权威值 (rpc.md), 并入 committed 后 live 归零
-          if (cur.turnStats && msg?.role === "assistant" && msg.usage) {
+          const u = event.usage;
+          const settledSpeed = settle(sessionId, u?.output ?? 0, Date.now());
+          if (cur.turnStats && u) {
             fields.turnStats = {
               ...cur.turnStats,
-              input: cur.turnStats.input + (msg.usage.input ?? 0),
-              output: cur.turnStats.output + (msg.usage.output ?? 0),
-              cost: cur.turnStats.cost + (msg.usage.cost?.total ?? 0),
-              // 覆盖而非累加: 命中率只对「最近一次请求」有意义 (口径见 InputBar 的 CH 展示)。
-              // 无 usage 的 message_end 走 else 分支不会碰这个字段 —— 保留上一次的真实值,
-              // 与 pi 官方 footer 取「最后一条带 usage 的 assistant」一致, 也避免 CH 闪断
+              input: cur.turnStats.input + u.input,
+              output: cur.turnStats.output + u.output,
+              cost: cur.turnStats.cost + (u.cost ?? 0),
               lastCache: {
-                input: msg.usage.input ?? 0,
-                cacheRead: msg.usage.cacheRead ?? 0,
-                cacheWrite: msg.usage.cacheWrite ?? 0,
+                input: u.input,
+                cacheRead: u.cacheRead,
+                cacheWrite: u.cacheWrite,
               },
-              cacheSeen: cur.turnStats.cacheSeen
-                || (msg.usage.cacheRead ?? 0) > 0
-                || (msg.usage.cacheWrite ?? 0) > 0,
+              cacheSeen: cur.turnStats.cacheSeen || u.cacheRead > 0 || u.cacheWrite > 0,
               liveInput: 0,
               liveOutput: 0,
               genStartedAt: null,
@@ -604,35 +647,32 @@ export const useSessionStore = create<SessionStore>((set, get) => {
               speed: settledSpeed?.speed ?? cur.turnStats.speed,
             };
           } else if (cur.turnStats && settledSpeed) {
-            // 无 usage: 只清单次调用状态, 不动 committed 与 calls
             fields.turnStats = {
               ...cur.turnStats,
               genStartedAt: null,
               deltaCounts: settledSpeed.counts,
             };
           }
-          // pi 契约: 失败编码为最终 AssistantMessage 的 stopReason=error + errorMessage
-          // (aborted 是用户主动中止, 不算错误)
-          if (msg?.stopReason === "error") {
+          if (event.stopReason === "error") {
             fields.entries = [...cur.entries, {
               id: crypto.randomUUID(), kind: "notification", notifyType: "error",
-              text: `模型返回错误: ${msg.errorMessage || "无详细信息"}`,
+              text: `模型返回错误: ${event.errorMessage || "无详细信息"}`,
             }];
           }
           patch(sessionId, fields);
           break;
         }
-        case "tool_execution_start": {
+        case "tool_start": {
           const cur = get().sessions[sessionId];
           if (!cur) break;
           patch(sessionId, { entries: [...cur.entries, {
-            id: event.toolCallId as string, kind: "tool", toolCallId: event.toolCallId as string,
-            toolName: event.toolName as string, args: event.args, status: "running",
+            id: event.toolCallId, kind: "tool", toolCallId: event.toolCallId,
+            toolName: event.toolName, args: event.args, status: "running",
             startedAt: Date.now(),
           }]});
           break;
         }
-        case "tool_execution_end": {
+        case "tool_end": {
           const cur = get().sessions[sessionId];
           if (!cur) break;
           patch(sessionId, { entries: cur.entries.map((e) =>
@@ -641,25 +681,17 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           )});
           break;
         }
-        case "tool_execution_update": {
+        case "tool_update": {
           const cur = get().sessions[sessionId];
           if (!cur) break;
-          const toolCallId = event.toolCallId as string;
-          // 乱序到达 (update 早于 start) 或 entry 已不存在 → 忽略, 不凭空创建
-          // (凭空创建会在 tool_execution_start 到达时产生重复卡片)
-          const idx = cur.entries.findIndex((e) => e.kind === "tool" && e.toolCallId === toolCallId);
+          const idx = cur.entries.findIndex((e) => e.kind === "tool" && e.toolCallId === event.toolCallId);
           if (idx < 0) break;
-          // 整体替换 result, 绝不追加: 上游语义是累计值 (rpc.md: partialResult = accumulated
-          // output so far, 消费者可直接替换显示), 做字符串追加会得到指数级重复内容。
-          // tool_execution_end 的最终 result 仍会覆盖此 partial
           patch(sessionId, {
             entries: cur.entries.map((e, i) => (i === idx ? { ...e, result: event.partialResult } : e)),
           });
           break;
         }
-        // pi 遇到 5xx / overloaded / rate limit 会自动重试, 期间界面本来完全静默。
-        // 用固定 id 占一个槽位原地刷新, 一轮重试始终只占一条, 不刷屏
-        case "auto_retry_start": {
+        case "retry_start": {
           const cur = get().sessions[sessionId];
           if (!cur) break;
           const text = `模型调用失败, 重试中 (${event.attempt}/${event.maxAttempts}): ${event.errorMessage || "未知错误"}`;
@@ -672,15 +704,12 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           });
           break;
         }
-        case "auto_retry_end": {
+        case "retry_end": {
           const cur = get().sessions[sessionId];
           if (!cur) break;
           if (event.success) {
-            // 重试成功: 撤掉提示, 消息流回归干净
             patch(sessionId, { entries: cur.entries.filter((e) => e.id !== RETRY_ENTRY_ID) });
           } else {
-            // 重试耗尽: 转成最终错误, 同时换掉 id 脱离复用槽位 ——
-            // 继续占着 RETRY_ENTRY_ID 的话, 下一轮重试会把这条历史错误原地覆盖掉
             const text = `模型调用失败, 已重试 ${event.attempt} 次仍未成功: ${event.finalError || "无详细信息"}`;
             patch(sessionId, {
               entries: cur.entries.map((e) =>
@@ -692,37 +721,14 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           }
           break;
         }
-        case "extension_error": {
-          const cur = get().sessions[sessionId];
-          if (!cur) break;
-          // 扩展挂了不代表这轮对话失败, 用 warning 不用 error
-          patch(sessionId, { entries: [...cur.entries, {
-            id: crypto.randomUUID(), kind: "notification", notifyType: "warning",
-            text: `扩展出错 (${event.extensionPath || "未知扩展"}): ${event.error || "无详细信息"}`,
-          }]});
-          break;
-        }
-        case "compaction_end": {
-          // 压缩成功时无 errorMessage, 不打扰用户; 失败才提示 (额度耗尽这类会在这里现形)
-          if (!event.errorMessage) break;
-          const cur = get().sessions[sessionId];
-          if (!cur) break;
-          patch(sessionId, { entries: [...cur.entries, {
-            id: crypto.randomUUID(), kind: "notification", notifyType: "warning",
-            text: `上下文压缩失败: ${event.errorMessage}`,
-          }]});
-          break;
-        }
         case "queue_update": {
-          const q = event as { steering?: string[]; followUp?: string[] };
-          patch(sessionId, { steeringQueue: q.steering || [], followUpQueue: q.followUp || [] });
+          patch(sessionId, { steeringQueue: event.steering || [], followUpQueue: event.followUp || [] });
           break;
         }
-        case "agent_settled": {
+        case "turn_settled": {
           const cur = get().sessions[sessionId];
           const settled: Partial<SessionState> = { isStreaming: false, currentAssistantId: null };
           if (cur?.turnStats?.startedAt) {
-            // 定格: 用只含已结算调用的加权平均, 不把最后一个未校正的估算值留在界面上
             const fin = finishRound(sessionId);
             settled.turnStats = {
               ...cur.turnStats,
@@ -732,22 +738,14 @@ export const useSessionStore = create<SessionStore>((set, get) => {
               ...(fin ? { calls: fin.calls, speed: fin.speed } : {}),
             };
           }
-          // 兜底: 异常路径下 auto_retry_end 可能没到, 重试条目会一直挂着显示「重试中」
           if (cur?.entries.some((e) => e.id === RETRY_ENTRY_ID)) {
             settled.entries = cur.entries.filter((e) => e.id !== RETRY_ENTRY_ID);
           }
           patch(sessionId, settled);
-          // 补拉上下文统计: contextUsage 只在会话打开/重连时快照过一次, 新对话打开时 0 条
-          // 消息会永远停在 0%。agent_settled 是每轮唯一干净的终态信号 (无 retry/compaction
-          // retry/queued continuation), 在此拉 pi 权威值, 一轮一次天然限频。fire-and-forget:
-          // 不回写 isStreaming, 迟到的响应只会 patch 统计字段, 不会串到下一轮的状态
           get().loadSessionStats(sessionId);
-          // 后台完成任务: 若用户没在看这个会话, 标记未读 (侧边栏圈圈→点提醒看)
           if (get().activeSessionId !== sessionId) {
             patch(sessionId, { hasUnread: true });
           }
-          // 新会话落盘后刷新侧边栏: 首次 prompt 已把 session 文件写入磁盘, 重新扫描让
-          // 侧边栏的"打开中"虚拟节点转正为历史会话节点 (磁盘列表已含则天然去重不刷)
           {
             const sp = get().sessions[sessionId]?.sessionPath;
             const inDisk = useProjectsStore.getState().projects.some((p) =>
@@ -757,52 +755,49 @@ export const useSessionStore = create<SessionStore>((set, get) => {
               useProjectsStore.getState().loadProjects();
             }
           }
-          // agent_settled: 模型刚改完文件, 正是仓库状态最可能变化的时刻, 刷新该会话所属
-          // 仓库的 git 状态 (design 四 时机 3)。频率天然受限 (一轮一次); 不做 fs watch ——
-          // 模型连续改文件会事件风暴。loadStatus 内部处理非仓库/未装 git, 无副作用。
           {
             const c = get().sessions[sessionId]?.cwd;
             if (c) useGitStore.getState().loadStatus(c);
           }
           break;
         }
-        case "pi_process_exit":
-          patch(sessionId, { isStreaming: false, currentAssistantId: null, uiRequests: [], error: "pi 进程已退出" });
+        case "process_exit": {
+          patch(sessionId, {
+            isStreaming: false,
+            currentAssistantId: null,
+            uiRequests: [],
+            error: event.message || "Agent 进程已退出",
+          });
           break;
-        // 扩展 UI 请求: dialog 类 (confirm/select/input/editor) 入队等待用户响应;
-        // notify 是 fire-and-forget 信息条, 直接展示; 其余 (setStatus/setWidget/setTitle 等)
-        // 桌面端无承载 V1 忽略
-        case "extension_ui_request": {
-          const req = event as unknown as UiRequest;
-          const method = req.method;
-          if (method === "confirm" || method === "select" || method === "input" || method === "editor") {
-            const cur = get().sessions[sessionId];
-            if (!cur) break;
-            patch(sessionId, { uiRequests: [...cur.uiRequests, req] });
-          } else if (method === "notify") {
-            const raw = (req.message as string) || "";
-            const notifyType = (req.notifyType as UiNotification["notifyType"]) || "info";
-            // 扩展是照着 TUI 写的, notify 里可能嵌 ANSI 上色和 Nerd Font 私用区图标, WebView 认不了。
-            // 带这类标记的 info 一律丢弃 —— 那是终端专用渲染 (如 pi-kitsune-ui 的任务完成条),
-            // GUI 侧已有输入卡底部的原生统计承载同类信息。error/warning 不丢, 剥干净照显,
-            // 要紧的信息不能因为扩展给它上了个色就蒸发
+        }
+        case "ui_request": {
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          patch(sessionId, { uiRequests: [...cur.uiRequests, event.request] });
+          break;
+        }
+        case "notice": {
+          const raw = event.message || "";
+          const notifyType = event.notifyType || "info";
+          if (event.fromExtension) {
+            // 扩展面向 TUI 的带 ANSI/NerdFont 装饰 info 条丢弃, warning/error 剥干净照显
             const terminalOnly = hasTerminalMarkup(raw);
             if (terminalOnly && notifyType === "info") break;
-            const n: UiNotification = {
-              id: (req.id as string) || crypto.randomUUID(),
-              message: terminalOnly ? stripTerminalMarkup(raw) : raw,
-              notifyType,
-            };
-            if (!n.message) break;
+            const text = terminalOnly ? stripTerminalMarkup(raw) : raw;
+            if (!text) break;
+            const id = event.id || crypto.randomUUID();
             if (s) {
-              // 归属源会话: 作为会话内消息条目插入 entries (居中系统消息, 不自动消失, 不持久化)
               patch(sessionId, {
-                entries: [...s.entries, { id: n.id, kind: "notification", notifyType: n.notifyType, text: n.message }],
+                entries: [...s.entries, { id, kind: "notification", notifyType, text }],
               });
             } else {
-              // 无归属会话 (软件级通知): 走右下角兜底弹窗, 3.5s 自动消失 (保留原行为)
-              set((state) => ({ notifications: [...state.notifications, n] }));
+              set((state) => ({ notifications: [...state.notifications, { id, message: text, notifyType }] }));
             }
+          } else {
+            if (!s || !raw) break;
+            patch(sessionId, {
+              entries: [...s.entries, { id: event.id || crypto.randomUUID(), kind: "notification", notifyType, text: raw }],
+            });
           }
           break;
         }
