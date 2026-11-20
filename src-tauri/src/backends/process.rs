@@ -429,13 +429,95 @@ mod tests {
             .unwrap();
         let sess_resp: serde_json::Value = serde_json::from_str(&line).unwrap();
         assert_eq!(sess_resp["id"], 2);
-        assert!(
-            sess_resp["result"]["sessionId"]
-                .as_str()
-                .map(|s| !s.is_empty())
-                .unwrap_or(false),
-            "expected non-empty sessionId, got: {sess_resp}"
+        let sid = sess_resp["result"]["sessionId"]
+            .as_str()
+            .expect("expected sessionId")
+            .to_string();
+        assert!(!sid.is_empty());
+
+        let mut cfg = crate::backends::acp::protocol::parse_session_config(&sess_resp["result"]);
+        assert!(!cfg.models.is_empty(), "expected non-empty agy model catalog");
+        assert!(!cfg.modes.is_empty(), "expected non-empty agy modes");
+
+        // 辅助读取指定 RPC id 的 response (跳过中间的 session/update 通知)
+        async fn read_rpc(
+            stdout: &mut BufReader<tokio::process::ChildStdout>,
+            target_id: u64,
+        ) -> serde_json::Value {
+            tokio::time::timeout(Duration::from_secs(15), async {
+                loop {
+                    let mut buf = String::new();
+                    let n = stdout.read_line(&mut buf).await.unwrap();
+                    assert!(n > 0, "unexpected EOF waiting for id {target_id}");
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&buf) {
+                        if v.get("method").is_none()
+                            && v.get("id").and_then(|x| x.as_u64()) == Some(target_id)
+                        {
+                            return v;
+                        }
+                    }
+                }
+            })
+            .await
+            .unwrap_or_else(|_| panic!("timeout waiting for id {target_id}"))
+        }
+
+        // 1. 切换模型
+        let set_model_req = crate::backends::acp::protocol::build_set_config_option_request(
+            3,
+            &sid,
+            cfg.model_config_id.as_deref().unwrap_or("model"),
+            "gemini-3.8-flash",
         );
+        stdin
+            .write_all(format!("{set_model_req}\n").as_bytes())
+            .await
+            .unwrap();
+        stdin.flush().await.unwrap();
+        let r3 = read_rpc(&mut stdout, 3).await;
+        assert!(r3.get("error").is_none(), "set model error: {r3}");
+        if let Some(arr) = r3["result"]["configOptions"].as_array() {
+            crate::backends::acp::protocol::apply_config_options(&mut cfg, arr);
+        }
+        assert_eq!(cfg.current_model_id.as_deref(), Some("gemini-3.8-flash"));
+
+        // 2. 切换思考强度
+        let set_thought_req = crate::backends::acp::protocol::build_set_config_option_request(
+            4,
+            &sid,
+            cfg.thought_config_id.as_deref().unwrap_or("thought_level"),
+            "low",
+        );
+        stdin
+            .write_all(format!("{set_thought_req}\n").as_bytes())
+            .await
+            .unwrap();
+        stdin.flush().await.unwrap();
+        let r4 = read_rpc(&mut stdout, 4).await;
+        assert!(r4.get("error").is_none(), "set thought error: {r4}");
+        if let Some(arr) = r4["result"]["configOptions"].as_array() {
+            crate::backends::acp::protocol::apply_config_options(&mut cfg, arr);
+        }
+        assert_eq!(cfg.effective_thought_level(), "low");
+
+        // 3. 切换权限模式
+        let set_mode_req = crate::backends::acp::protocol::build_set_config_option_request(
+            5,
+            &sid,
+            cfg.mode_config_id.as_deref().unwrap_or("mode"),
+            "auto",
+        );
+        stdin
+            .write_all(format!("{set_mode_req}\n").as_bytes())
+            .await
+            .unwrap();
+        stdin.flush().await.unwrap();
+        let r5 = read_rpc(&mut stdout, 5).await;
+        assert!(r5.get("error").is_none(), "set mode error: {r5}");
+        if let Some(arr) = r5["result"]["configOptions"].as_array() {
+            crate::backends::acp::protocol::apply_config_options(&mut cfg, arr);
+        }
+        assert_eq!(cfg.current_mode_id.as_deref(), Some("auto"));
 
         kill_process_tree(&mut child).await;
     }

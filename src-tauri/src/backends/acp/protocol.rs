@@ -1,14 +1,207 @@
 //! ACP (Agent Client Protocol, JSON-RPC 2.0 over stdio) v1 协议构造与事件翻译纯函数。
 //!
 //! 规范覆盖:
-//! - Client → Agent: `initialize`, `session/new`, `session/load`, `session/prompt`, `session/cancel`
-//! - Agent → Client Notification: `session/update` (`agent_message_chunk`, `agent_thought_chunk`, `tool_call`, `tool_call_update`)
+//! - Client → Agent: `initialize`, `session/new`, `session/load`, `session/prompt`, `session/cancel`,
+//!   `session/set_config_option`, `session/set_mode`
+//! - Agent → Client Notification: `session/update` (`agent_message_chunk`, `agent_thought_chunk`,
+//!   `tool_call`, `tool_call_update`, `config_option_update`, `current_mode_update`)
 //! - Agent → Client Request: `session/request_permission` ↔ `RequestPermissionResponse`
 
 use crate::backends::{
     ContentBlockKind, PermissionOption, PermissionRequestPayload, UnifiedEvent,
 };
 use serde_json::{json, Value};
+
+/// Antigravity ACP 默认支持的权限/执行模式枚举 (与 `agy acp` `session/new` 返回的 `modes` 对齐)。
+pub const ACP_PERMISSION_MODES: &[&str] = &["default", "accept-edits", "auto", "plan"];
+
+/// ACP select 类别配置项的单个候选项 (模型 / 模式等)。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AcpSelectOption {
+    pub value: String,
+    pub name: String,
+}
+
+/// ACP 会话运行时配置快照: 统一承接 `configOptions` (优先) 及兼容 `models` / `modes`。
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct AcpSessionConfig {
+    pub model_config_id: Option<String>,
+    pub current_model_id: Option<String>,
+    pub models: Vec<AcpSelectOption>,
+
+    pub thought_config_id: Option<String>,
+    pub current_thought_level: Option<String>,
+    pub thought_levels: Vec<String>,
+
+    pub mode_config_id: Option<String>,
+    pub current_mode_id: Option<String>,
+    pub modes: Vec<AcpSelectOption>,
+}
+
+impl AcpSessionConfig {
+    pub fn display_name_for_model(&self, model_id: &str) -> String {
+        self.models
+            .iter()
+            .find(|m| m.value == model_id)
+            .map(|m| m.name.clone())
+            .unwrap_or_else(|| model_id.to_string())
+    }
+
+    pub fn effective_thought_levels(&self) -> Vec<String> {
+        if self.thought_levels.is_empty() {
+            vec!["off".to_string()]
+        } else {
+            self.thought_levels.clone()
+        }
+    }
+
+    pub fn effective_thought_level(&self) -> String {
+        if self.thought_levels.is_empty() {
+            "off".to_string()
+        } else {
+            self.current_thought_level
+                .clone()
+                .filter(|v| self.thought_levels.iter().any(|lv| lv == v))
+                .or_else(|| self.thought_levels.first().cloned())
+                .unwrap_or_else(|| "off".to_string())
+        }
+    }
+
+    pub fn mode_ids(&self) -> Vec<String> {
+        self.modes.iter().map(|m| m.value.clone()).collect()
+    }
+}
+
+fn parse_select_options(arr: &[Value]) -> Vec<AcpSelectOption> {
+    arr.iter()
+        .filter_map(|item| {
+            let value = item
+                .get("value")
+                .or_else(|| item.get("id"))
+                .or_else(|| item.get("modelId"))
+                .and_then(|v| v.as_str())?
+                .trim()
+                .to_string();
+            if value.is_empty() {
+                return None;
+            }
+            let name = item
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or(&value)
+                .to_string();
+            Some(AcpSelectOption { value, name })
+        })
+        .collect()
+}
+
+/// 将完整 `configOptions` 快照合并进 `AcpSessionConfig`。
+/// 注意: 切到不支持思考档位的模型时, 服务端会从 `configOptions` 省略 `thought_level`,
+/// 因此每次快照必须显式检测本轮是否出现 `thought_level`, 未出现则清空为 `"off"`。
+pub fn apply_config_options(cfg: &mut AcpSessionConfig, config_options: &[Value]) {
+    let mut saw_thought = false;
+    for opt in config_options {
+        let id = opt.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        let category = opt.get("category").and_then(|v| v.as_str()).unwrap_or(id);
+        let current = opt
+            .get("currentValue")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let options = opt
+            .get("options")
+            .and_then(|v| v.as_array())
+            .map(|a| parse_select_options(a))
+            .unwrap_or_default();
+
+        match category {
+            "model" => {
+                if !id.is_empty() {
+                    cfg.model_config_id = Some(id.to_string());
+                }
+                if let Some(cur) = current {
+                    cfg.current_model_id = Some(cur);
+                }
+                if !options.is_empty() {
+                    cfg.models = options;
+                }
+            }
+            "thought_level" => {
+                saw_thought = true;
+                if !id.is_empty() {
+                    cfg.thought_config_id = Some(id.to_string());
+                }
+                cfg.thought_levels = options.into_iter().map(|o| o.value).collect();
+                cfg.current_thought_level = current;
+            }
+            "mode" => {
+                if !id.is_empty() {
+                    cfg.mode_config_id = Some(id.to_string());
+                }
+                if let Some(cur) = current {
+                    cfg.current_mode_id = Some(cur);
+                }
+                if !options.is_empty() {
+                    cfg.modes = options;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if !saw_thought {
+        cfg.thought_config_id = None;
+        cfg.thought_levels.clear();
+        cfg.current_thought_level = Some("off".to_string());
+    }
+}
+
+/// 从 `session/new` / `session/load` 的 `result` 解析初始配置快照:
+/// 优先使用 `configOptions` (主模型列表 + 独立 `thought_level` + `mode`),
+/// 缺失字段再回退到旧式 `models` / `modes`。
+pub fn parse_session_config(result: &Value) -> AcpSessionConfig {
+    let mut cfg = AcpSessionConfig::default();
+
+    if let Some(arr) = result.get("configOptions").and_then(|v| v.as_array()) {
+        if !arr.is_empty() {
+            apply_config_options(&mut cfg, arr);
+        }
+    }
+
+    if cfg.models.is_empty() {
+        if let Some(models) = result.get("models") {
+            if let Some(arr) = models.get("availableModels").and_then(|v| v.as_array()) {
+                cfg.models = parse_select_options(arr);
+            }
+            if cfg.current_model_id.is_none() {
+                cfg.current_model_id = models
+                    .get("currentModelId")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
+            }
+        }
+    }
+
+    if cfg.modes.is_empty() {
+        if let Some(modes) = result.get("modes") {
+            if let Some(arr) = modes.get("availableModes").and_then(|v| v.as_array()) {
+                cfg.modes = parse_select_options(arr);
+            }
+            if cfg.current_mode_id.is_none() {
+                cfg.current_mode_id = modes
+                    .get("currentModeId")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
+            }
+        }
+    }
+
+    cfg
+}
 
 pub fn build_initialize_request(id: u64) -> Value {
     json!({
@@ -99,6 +292,48 @@ pub fn build_session_cancel_notification(session_id: &str) -> Value {
         "method": "session/cancel",
         "params": {
             "sessionId": session_id
+        }
+    })
+}
+
+pub fn build_set_config_option_request(
+    id: u64,
+    session_id: &str,
+    config_id: &str,
+    value: &str,
+) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "method": "session/set_config_option",
+        "params": {
+            "sessionId": session_id,
+            "configId": config_id,
+            "value": value
+        }
+    })
+}
+
+pub fn build_set_mode_request(id: u64, session_id: &str, mode_id: &str) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "method": "session/set_mode",
+        "params": {
+            "sessionId": session_id,
+            "modeId": mode_id
+        }
+    })
+}
+
+pub fn build_set_model_request(id: u64, session_id: &str, model_id: &str) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "method": "session/set_model",
+        "params": {
+            "sessionId": session_id,
+            "modelId": model_id
         }
     })
 }
@@ -455,5 +690,88 @@ mod tests {
 
         let deny_resp = build_permission_response(json!(7), false, None, &payload.options);
         assert_eq!(deny_resp["result"]["outcome"]["optionId"], "reject_once");
+    }
+
+    #[test]
+    fn parses_config_options_and_clears_thought_level_when_omitted() {
+        let result = json!({
+            "sessionId": "s1",
+            "configOptions": [
+                {
+                    "id": "model",
+                    "category": "model",
+                    "currentValue": "gemini-4-neon",
+                    "options": [
+                        { "value": "gemini-4-neon", "name": "Gemini 4 Neon" },
+                        { "value": "gpt-oss-120b-medium", "name": "GPT-OSS 120B (Medium)" }
+                    ]
+                },
+                {
+                    "id": "thought_level",
+                    "category": "thought_level",
+                    "currentValue": "high",
+                    "options": [
+                        { "value": "low", "name": "Low" },
+                        { "value": "medium", "name": "Medium" },
+                        { "value": "high", "name": "High" },
+                        { "value": "xhigh", "name": "Extra" }
+                    ]
+                },
+                {
+                    "id": "mode",
+                    "category": "mode",
+                    "currentValue": "default",
+                    "options": [
+                        { "value": "default", "name": "Default" },
+                        { "value": "accept-edits", "name": "Accept edits" },
+                        { "value": "auto", "name": "Auto" },
+                        { "value": "plan", "name": "Plan" }
+                    ]
+                }
+            ]
+        });
+
+        let mut cfg = parse_session_config(&result);
+        assert_eq!(cfg.current_model_id.as_deref(), Some("gemini-4-neon"));
+        assert_eq!(cfg.display_name_for_model("gemini-4-neon"), "Gemini 4 Neon");
+        assert_eq!(cfg.effective_thought_level(), "high");
+        assert_eq!(
+            cfg.effective_thought_levels(),
+            vec!["low", "medium", "high", "xhigh"]
+        );
+        assert_eq!(cfg.current_mode_id.as_deref(), Some("default"));
+        assert_eq!(cfg.mode_ids(), vec!["default", "accept-edits", "auto", "plan"]);
+
+        // 切到不支持 thought_level 的模型时, 快照省略 thought_level -> 自动降为 off
+        let updated = json!([
+            {
+                "id": "model",
+                "category": "model",
+                "currentValue": "gpt-oss-120b-medium",
+                "options": [
+                    { "value": "gemini-4-neon", "name": "Gemini 4 Neon" },
+                    { "value": "gpt-oss-120b-medium", "name": "GPT-OSS 120B (Medium)" }
+                ]
+            },
+            {
+                "id": "mode",
+                "category": "mode",
+                "currentValue": "auto",
+                "options": [
+                    { "value": "default", "name": "Default" },
+                    { "value": "auto", "name": "Auto" }
+                ]
+            }
+        ]);
+        apply_config_options(&mut cfg, updated.as_array().unwrap());
+        assert_eq!(cfg.current_model_id.as_deref(), Some("gpt-oss-120b-medium"));
+        assert_eq!(cfg.effective_thought_levels(), vec!["off"]);
+        assert_eq!(cfg.effective_thought_level(), "off");
+        assert_eq!(cfg.current_mode_id.as_deref(), Some("auto"));
+
+        let req = build_set_config_option_request(9, "s1", "model", "gemini-4-neon");
+        assert_eq!(req["method"], "session/set_config_option");
+        assert_eq!(req["params"]["configId"], "model");
+        assert_eq!(req["params"]["value"], "gemini-4-neon");
     }
 }

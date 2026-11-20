@@ -58,35 +58,13 @@ pub struct AcpBackend {
     app: AppHandle,
     session_id: String,
     acp_session_id: String,
-    current_model: Option<(String, String)>,
+    config: Arc<Mutex<protocol::AcpSessionConfig>>,
     child: Child,
     stdin: Arc<Mutex<ChildStdin>>,
     pending: PendingRpc,
     pending_permissions: Arc<Mutex<HashMap<String, PendingAcpPermission>>>,
     stderr_tail: StderrTail,
     id_counter: Arc<AtomicU64>,
-}
-
-fn extract_current_model(result: &Value) -> Option<(String, String)> {
-    let models = result.get("models")?;
-    let current_id = models.get("currentModelId")?.as_str()?.trim();
-    if current_id.is_empty() {
-        return None;
-    }
-    let display_name = models
-        .get("availableModels")
-        .and_then(|v| v.as_array())
-        .and_then(|arr| {
-            arr.iter().find_map(|m| {
-                if m.get("modelId").and_then(|v| v.as_str()) == Some(current_id) {
-                    m.get("name").and_then(|v| v.as_str()).map(|s| s.to_string())
-                } else {
-                    None
-                }
-            })
-        })
-        .unwrap_or_else(|| current_id.to_string());
-    Some((current_id.to_string(), display_name))
 }
 
 fn extract_prompt_usage(result: &Value) -> Option<MessageUsage> {
@@ -154,6 +132,9 @@ impl AcpBackend {
             Arc::new(Mutex::new(HashMap::new()));
         let perms_for_reader = pending_permissions.clone();
         let perm_counter = Arc::new(AtomicU64::new(0));
+        let config: Arc<Mutex<protocol::AcpSessionConfig>> =
+            Arc::new(Mutex::new(protocol::AcpSessionConfig::default()));
+        let config_for_reader = config.clone();
 
         let app_for_reader = app.clone();
         let sid_for_reader = session_id.clone();
@@ -225,9 +206,46 @@ impl AcpBackend {
                                     }),
                                 );
                             }
-                            // 3. Notification: session/update → 翻译为 UnifiedEvent
+                            // 3. Notification: session/update → 同步配置快照并翻译为 UnifiedEvent
                             (Some("session/update"), None) => {
                                 let params = frame.get("params").cloned().unwrap_or(Value::Null);
+                                if let Some(update) = params.get("update") {
+                                    match update.get("sessionUpdate").and_then(|v| v.as_str()) {
+                                        Some("config_option_update") => {
+                                            if let Some(arr) = update
+                                                .get("configOptions")
+                                                .and_then(|v| v.as_array())
+                                            {
+                                                let mut guard = config_for_reader.lock().await;
+                                                protocol::apply_config_options(&mut guard, arr);
+                                            }
+                                        }
+                                        Some("current_mode_update") => {
+                                            if let Some(mode_id) = update
+                                                .get("currentModeId")
+                                                .and_then(|v| v.as_str())
+                                                .map(str::trim)
+                                                .filter(|s| !s.is_empty())
+                                            {
+                                                config_for_reader.lock().await.current_mode_id =
+                                                    Some(mode_id.to_string());
+                                                let _ = app_for_reader.emit(
+                                                    "agent_event",
+                                                    json!({
+                                                        "sessionId": sid_for_reader,
+                                                        "event": UnifiedEvent::SessionMeta {
+                                                            session_path: None,
+                                                            remote_session_id: None,
+                                                            model: None,
+                                                            permission_mode: Some(mode_id.to_string()),
+                                                        }
+                                                    }),
+                                                );
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
                                 for ev in protocol::translate_acp_update(&params) {
                                     let _ = app_for_reader.emit(
                                         "agent_event",
@@ -279,7 +297,7 @@ impl AcpBackend {
             app,
             session_id,
             acp_session_id: String::new(),
-            current_model: None,
+            config,
             child,
             stdin,
             pending,
@@ -312,8 +330,7 @@ impl AcpBackend {
         }
 
         // 握手 2: session/load (若有历史 ID) 或 session/new
-        let (acp_sid, current_model) = if let Some(rid) = resume_session_id.filter(|s| !s.is_empty())
-        {
+        let (acp_sid, parsed_cfg) = if let Some(rid) = resume_session_id.filter(|s| !s.is_empty()) {
             let lid = backend.next_id();
             match backend
                 .send_rpc_wait(
@@ -324,8 +341,11 @@ impl AcpBackend {
                 .await
             {
                 Ok(resp) if resp.get("error").is_none() => {
-                    let model = resp.get("result").and_then(extract_current_model);
-                    (rid, model)
+                    let cfg = resp
+                        .get("result")
+                        .map(protocol::parse_session_config)
+                        .unwrap_or_default();
+                    (rid, cfg)
                 }
                 _ => backend.create_new_acp_session(&cwd).await?,
             }
@@ -333,7 +353,9 @@ impl AcpBackend {
             backend.create_new_acp_session(&cwd).await?
         };
         backend.acp_session_id = acp_sid.clone();
-        backend.current_model = current_model.clone();
+        let meta_model = parsed_cfg.current_model_id.clone();
+        let meta_mode = parsed_cfg.current_mode_id.clone();
+        *backend.config.lock().await = parsed_cfg;
 
         let _ = backend.app.emit(
             "agent_event",
@@ -342,8 +364,8 @@ impl AcpBackend {
                 "event": UnifiedEvent::SessionMeta {
                     session_path: None,
                     remote_session_id: Some(acp_sid),
-                    model: current_model.map(|(id, _)| id),
-                    permission_mode: None,
+                    model: meta_model,
+                    permission_mode: meta_mode,
                 }
             }),
         );
@@ -364,7 +386,7 @@ impl AcpBackend {
     async fn create_new_acp_session(
         &mut self,
         cwd: &str,
-    ) -> Result<(String, Option<(String, String)>), String> {
+    ) -> Result<(String, protocol::AcpSessionConfig), String> {
         let sid_req = self.next_id();
         let resp = match self
             .send_rpc_wait(
@@ -396,8 +418,10 @@ impl AcpBackend {
             let _ = self.stop().await;
             return Err(format!("ACP session/new 未返回 sessionId{diag}"));
         };
-        let model = result.and_then(extract_current_model);
-        Ok((sid, model))
+        let cfg = result
+            .map(protocol::parse_session_config)
+            .unwrap_or_default();
+        Ok((sid, cfg))
     }
 
     fn next_id(&self) -> u64 {
@@ -562,17 +586,188 @@ impl AcpBackend {
         self.write_frame(&resp).await
     }
 
+    pub async fn current_permission_mode(&self) -> Option<String> {
+        self.config.lock().await.current_mode_id.clone()
+    }
+
+    pub async fn available_permission_modes(&self) -> Vec<String> {
+        self.config.lock().await.mode_ids()
+    }
+
+    async fn send_config_option_change(&mut self, config_id: &str, value: &str) -> Result<(), String> {
+        let req_id = self.next_id();
+        let req = protocol::build_set_config_option_request(
+            req_id,
+            &self.acp_session_id,
+            config_id,
+            value,
+        );
+        let resp = self
+            .send_rpc_wait(req, req_id, 15)
+            .await
+            .map_err(|e| format!("ACP 设置 {config_id} 失败: {e}"))?;
+        if let Some(err) = resp.get("error") {
+            let msg = err
+                .get("message")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .unwrap_or_else(|| err.to_string());
+            return Err(format!("ACP 设置 {config_id} 返回错误: {msg}"));
+        }
+        if let Some(arr) = resp
+            .get("result")
+            .and_then(|r| r.get("configOptions"))
+            .and_then(|v| v.as_array())
+        {
+            let mut guard = self.config.lock().await;
+            protocol::apply_config_options(&mut guard, arr);
+        }
+        Ok(())
+    }
+
+    pub async fn get_available_models(&mut self) -> Result<Value, String> {
+        let cfg = self.config.lock().await;
+        let mut models: Vec<Value> = cfg
+            .models
+            .iter()
+            .map(|m| {
+                json!({
+                    "id": m.value,
+                    "name": m.name,
+                    "provider": "agy",
+                })
+            })
+            .collect();
+        if let Some(cur) = cfg.current_model_id.as_deref() {
+            if !cfg.models.iter().any(|m| m.value == cur) {
+                models.insert(0, json!({ "id": cur, "name": cur, "provider": "agy" }));
+            }
+        }
+        Ok(json!({ "models": models }))
+    }
+
+    pub async fn set_model(&mut self, _provider: String, model_id: String) -> Result<Value, String> {
+        let config_id = self.config.lock().await.model_config_id.clone();
+        if let Some(cid) = config_id {
+            self.send_config_option_change(&cid, &model_id).await?;
+        } else {
+            let req_id = self.next_id();
+            let req = protocol::build_set_model_request(req_id, &self.acp_session_id, &model_id);
+            let resp = self
+                .send_rpc_wait(req, req_id, 15)
+                .await
+                .map_err(|e| format!("ACP 切换模型失败: {e}"))?;
+            if let Some(err) = resp.get("error") {
+                return Err(format!("ACP 切换模型返回错误: {err}"));
+            }
+            self.config.lock().await.current_model_id = Some(model_id.clone());
+        }
+
+        let cfg = self.config.lock().await;
+        let id = cfg.current_model_id.clone().unwrap_or(model_id);
+        let name = cfg.display_name_for_model(&id);
+        Ok(json!({
+            "id": id,
+            "name": name,
+            "provider": "agy",
+        }))
+    }
+
+    pub async fn get_available_thinking_levels(&mut self) -> Result<Value, String> {
+        let cfg = self.config.lock().await;
+        Ok(json!({
+            "levels": cfg.effective_thought_levels(),
+            "current": cfg.effective_thought_level(),
+        }))
+    }
+
+    pub async fn set_thinking_level(&mut self, level: String) -> Result<Value, String> {
+        let (config_id, allowed) = {
+            let cfg = self.config.lock().await;
+            (cfg.thought_config_id.clone(), cfg.effective_thought_levels())
+        };
+        if allowed.len() == 1 && allowed[0] == "off" {
+            return Err("当前模型不支持调节思考强度".into());
+        }
+        if !allowed.iter().any(|lv| lv == &level) {
+            return Err(format!(
+                "当前模型不支持的思考等级: {level}（可选: {}）",
+                allowed.join(", ")
+            ));
+        }
+        let cid = config_id.ok_or_else(|| "当前 ACP 会话未声明思考等级配置项".to_string())?;
+        self.send_config_option_change(&cid, &level).await?;
+        let current = self.config.lock().await.effective_thought_level();
+        Ok(json!({ "level": current }))
+    }
+
+    pub async fn cycle_thinking_level(&mut self) -> Result<Value, String> {
+        let (levels, cur) = {
+            let cfg = self.config.lock().await;
+            (cfg.effective_thought_levels(), cfg.effective_thought_level())
+        };
+        if levels.len() <= 1 {
+            return Ok(json!({ "level": cur }));
+        }
+        let next_idx = levels
+            .iter()
+            .position(|lv| lv == &cur)
+            .map(|i| (i + 1) % levels.len())
+            .unwrap_or(0);
+        let next = levels[next_idx].clone();
+        self.set_thinking_level(next).await
+    }
+
+    pub async fn set_permission_mode(&mut self, mode: String) -> Result<Value, String> {
+        let (config_id, allowed) = {
+            let cfg = self.config.lock().await;
+            let modes = cfg.mode_ids();
+            (cfg.mode_config_id.clone(), modes)
+        };
+        if !allowed.is_empty() && !allowed.iter().any(|m| m == &mode) {
+            return Err(format!(
+                "不支持的权限模式: {mode}（可选: {}）",
+                allowed.join(", ")
+            ));
+        }
+        if let Some(cid) = config_id {
+            self.send_config_option_change(&cid, &mode).await?;
+        } else {
+            let req_id = self.next_id();
+            let req = protocol::build_set_mode_request(req_id, &self.acp_session_id, &mode);
+            let resp = self
+                .send_rpc_wait(req, req_id, 15)
+                .await
+                .map_err(|e| format!("ACP 切换权限模式失败: {e}"))?;
+            if let Some(err) = resp.get("error") {
+                return Err(format!("ACP 切换权限模式返回错误: {err}"));
+            }
+            self.config.lock().await.current_mode_id = Some(mode.clone());
+        }
+        let current = self
+            .config
+            .lock()
+            .await
+            .current_mode_id
+            .clone()
+            .unwrap_or(mode);
+        Ok(json!({ "permissionMode": current }))
+    }
+
     pub async fn get_state(&mut self) -> Result<Value, String> {
-        let model = self.current_model.as_ref().map(|(id, name)| {
+        let cfg = self.config.lock().await;
+        let model = cfg.current_model_id.as_ref().map(|id| {
             json!({
                 "id": id,
-                "name": name,
+                "name": cfg.display_name_for_model(id),
                 "provider": "agy",
             })
         });
         Ok(json!({
             "remoteSessionId": self.acp_session_id,
             "model": model,
+            "thinkingLevel": cfg.effective_thought_level(),
+            "permissionMode": cfg.current_mode_id,
         }))
     }
 
@@ -587,25 +782,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn extracts_current_model_and_prompt_usage() {
-        let session_result = json!({
-            "sessionId": "s-1",
-            "models": {
-                "currentModelId": "gemini-4-neon-high",
-                "availableModels": [
-                    { "modelId": "gemini-4-neon-high", "name": "Gemini 4 Neon (High)" },
-                    { "modelId": "gemini-3.8-flash-high", "name": "Gemini 3.8 Flash (High)" }
-                ]
-            }
-        });
-        assert_eq!(
-            extract_current_model(&session_result),
-            Some((
-                "gemini-4-neon-high".to_string(),
-                "Gemini 4 Neon (High)".to_string()
-            ))
-        );
-
+    fn extracts_prompt_usage() {
         let prompt_result = json!({
             "stopReason": "end_turn",
             "usage": {
@@ -625,6 +802,9 @@ mod tests {
                 cost: None,
             })
         );
-        assert_eq!(extract_prompt_usage(&json!({ "stopReason": "end_turn" })), None);
+        assert_eq!(
+            extract_prompt_usage(&json!({ "stopReason": "end_turn" })),
+            None
+        );
     }
 }

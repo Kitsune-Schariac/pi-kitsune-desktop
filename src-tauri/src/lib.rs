@@ -264,8 +264,13 @@ async fn start_session(
                 session_path,
             )
             .await?;
+            let current_mode = acp.current_permission_mode().await;
+            let live_modes = acp.available_permission_modes().await;
             let runtime = AgentRuntime::Acp(acp);
-            let capabilities = runtime.capabilities();
+            let mut capabilities = runtime.capabilities();
+            if !live_modes.is_empty() {
+                capabilities.permission_modes = live_modes;
+            }
             {
                 let mut guard = state.lock().await;
                 guard.runtimes.insert(session_id.clone(), runtime);
@@ -276,6 +281,7 @@ async fn start_session(
                 "sessionId": session_id,
                 "agentKind": kind,
                 "capabilities": capabilities,
+                "permissionMode": current_mode,
                 "entries": [],
             }))
         }

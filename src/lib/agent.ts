@@ -53,9 +53,11 @@ export interface PermissionRequest {
 }
 
 export const PERMISSION_MODE_LABELS: Record<string, string> = {
+  default: "默认询问",
   auto: "自动 (auto)",
   manual: "手动确认",
   acceptEdits: "自动编辑",
+  "accept-edits": "自动编辑",
   plan: "仅规划",
   dontAsk: "拒绝未知",
   bypassPermissions: "跳过审批",

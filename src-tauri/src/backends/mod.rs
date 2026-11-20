@@ -77,9 +77,12 @@ impl AgentKind {
             Self::Agy => AgentCapabilities {
                 steer: false,
                 follow_up: false,
-                hot_model_switch: false,
-                thinking_level: false,
-                permission_modes: Vec::new(),
+                hot_model_switch: true,
+                thinking_level: true,
+                permission_modes: acp::protocol::ACP_PERMISSION_MODES
+                    .iter()
+                    .map(|s| (*s).to_string())
+                    .collect(),
                 extension_ui: false,
                 tool_approval: true,
                 remote_commands: false,
@@ -340,7 +343,7 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.get_available_models().await,
             Self::Claude(rt) => rt.get_available_models().await,
-            Self::Acp(_) => Ok(serde_json::json!({ "models": [] })),
+            Self::Acp(rt) => rt.get_available_models().await,
         }
     }
 
@@ -348,7 +351,7 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.set_model(provider, model_id).await,
             Self::Claude(rt) => rt.set_model(provider, model_id).await,
-            Self::Acp(_) => Err("当前 ACP Agent 不支持运行中切换模型".into()),
+            Self::Acp(rt) => rt.set_model(provider, model_id).await,
         }
     }
 
@@ -363,7 +366,7 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.set_thinking_level(level).await,
             Self::Claude(rt) => rt.set_thinking_level(level).await,
-            Self::Acp(_) => Err("当前 ACP Agent 不支持思考级别切换".into()),
+            Self::Acp(rt) => rt.set_thinking_level(level).await,
         }
     }
 
@@ -371,7 +374,7 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.cycle_thinking_level().await,
             Self::Claude(rt) => rt.cycle_thinking_level().await,
-            Self::Acp(_) => Err("当前 Agent 不支持循环思考级别".into()),
+            Self::Acp(rt) => rt.cycle_thinking_level().await,
         }
     }
 
@@ -379,7 +382,7 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.get_available_thinking_levels().await,
             Self::Claude(rt) => rt.get_available_thinking_levels().await,
-            Self::Acp(_) => Ok(serde_json::json!({ "levels": ["off"] })),
+            Self::Acp(rt) => rt.get_available_thinking_levels().await,
         }
     }
 
@@ -435,8 +438,9 @@ impl AgentRuntime {
 
     pub async fn set_permission_mode(&mut self, mode: String) -> Result<Value, String> {
         match self {
-            Self::Pi(_) | Self::Acp(_) => Err("当前 Agent 不支持权限模式切换".into()),
+            Self::Pi(_) => Err("当前 Agent 不支持权限模式切换".into()),
             Self::Claude(rt) => rt.set_permission_mode(mode).await,
+            Self::Acp(rt) => rt.set_permission_mode(mode).await,
         }
     }
 
