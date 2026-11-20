@@ -1,3 +1,4 @@
+mod agents_config;
 mod attach;
 mod backends;
 mod behavior_stats;
@@ -13,6 +14,7 @@ mod subagent_fleet;
 mod token_stats;
 mod trellis_tasks;
 
+use backends::acp::{AcpBackend, AcpLaunchSpec};
 use backends::claude::ClaudeBackend;
 use backends::pi::{PiBackend, PiWarmPool};
 use backends::{AgentKind, AgentRuntime};
@@ -114,6 +116,7 @@ async fn start_session(
         .as_millis();
     let session_id = session_id.unwrap_or_else(|| format!("sess_{now_ms}"));
 
+    let cfg = agents_config::load_agents_config();
     match kind {
         AgentKind::Pi => {
             // 首帧直读: 历史会话 entries 由 Rust 直接解析 jsonl (零 pi 进程依赖, ~1ms, 锁外)
@@ -141,9 +144,20 @@ async fn start_session(
 
             // 阶段 2 (无锁, 慢操作): spawn (或复用 warm) + switch_session
             let reused_warm = warm_rt.is_some();
+            let pi_override = cfg.pi_path.clone();
             let mut pi = match warm_rt {
                 Some(rt) => rt,
-                None => PiBackend::spawn(app.clone(), session_id.clone(), cwd.clone(), provider, model).await?,
+                None => {
+                    PiBackend::spawn(
+                        app.clone(),
+                        session_id.clone(),
+                        cwd.clone(),
+                        provider,
+                        model,
+                        pi_override.clone(),
+                    )
+                    .await?
+                }
             };
             if reused_warm {
                 pi.rebind_session(session_id.clone()).await;
@@ -186,7 +200,9 @@ async fn start_session(
                         .as_millis()
                 );
                 tauri::async_runtime::spawn(async move {
-                    let rt = PiBackend::spawn(app2, warm_sid, cwd2.clone(), None, None).await;
+                    let rt =
+                        PiBackend::spawn(app2, warm_sid, cwd2.clone(), None, None, pi_override)
+                            .await;
                     let mut guard = state2.lock().await;
                     guard.pi_warm.finish_warming(cwd2, epoch, rt);
                 });
@@ -211,7 +227,7 @@ async fn start_session(
                 }
                 None => (Vec::new(), None),
             };
-            let mode = permission_mode.unwrap_or_else(|| "auto".to_string());
+            let mode = permission_mode.unwrap_or_else(|| cfg.claude_default_permission_mode.clone());
             let claude = ClaudeBackend::spawn(
                 app.clone(),
                 session_id.clone(),
@@ -220,7 +236,7 @@ async fn start_session(
                 Some(mode.clone()),
                 resume_id,
                 session_path,
-                None,
+                cfg.claude_path.clone(),
             )
             .await?;
             let runtime = AgentRuntime::Claude(claude);
@@ -239,7 +255,30 @@ async fn start_session(
                 "entries": entries,
             }))
         }
-        AgentKind::Agy => Err("Antigravity CLI (ACP) 后端将在 Phase 3 接入，敬请期待".into()),
+        AgentKind::Agy => {
+            let acp = AcpBackend::spawn(
+                app.clone(),
+                session_id.clone(),
+                cwd.clone(),
+                AcpLaunchSpec::agy(cfg.agy_path.clone()),
+                session_path,
+            )
+            .await?;
+            let runtime = AgentRuntime::Acp(acp);
+            let capabilities = runtime.capabilities();
+            {
+                let mut guard = state.lock().await;
+                guard.runtimes.insert(session_id.clone(), runtime);
+                guard.touch(&session_id);
+                guard.evict_lru(&app).await;
+            }
+            Ok(serde_json::json!({
+                "sessionId": session_id,
+                "agentKind": kind,
+                "capabilities": capabilities,
+                "entries": [],
+            }))
+        }
     }
 }
 
@@ -451,6 +490,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             backends::list_available_agents,
+            agents_config::read_agents_config, agents_config::write_agents_config,
             start_session, send_prompt, abort_session, stop_session,
             send_steer, send_follow_up,
             get_state, get_available_models, set_model, cycle_model,

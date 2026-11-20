@@ -118,8 +118,13 @@ impl PiBackend {
         cwd: String,
         provider: Option<String>,
         model: Option<String>,
+        cli_override: Option<String>,
     ) -> Result<Self, String> {
-        let mut cmd = build_cli_command("pi", &["--mode", "rpc"]);
+        let program = cli_override
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or("pi");
+        let mut cmd = build_cli_command(program, &["--mode", "rpc"]);
         if let Some(p) = provider.as_deref() {
             cmd.arg("--provider").arg(p);
         }

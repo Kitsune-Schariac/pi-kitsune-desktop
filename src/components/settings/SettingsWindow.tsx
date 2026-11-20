@@ -1,20 +1,22 @@
 import { useEffect, useState } from "react";
-import { X, BarChart3, Palette, Activity, Boxes, type LucideIcon } from "lucide-react";
+import { X, BarChart3, Palette, Activity, Boxes, Terminal, type LucideIcon } from "lucide-react";
 import { TokenStatsPanel } from "./TokenStatsPanel";
 import { AppearancePanel } from "./AppearancePanel";
 import { BehaviorStatsPanel } from "./BehaviorStatsPanel";
 import { ModelsPanel } from "./ModelsPanel";
+import { AgentsPanel } from "./AgentsPanel";
 
-type TabKey = "theme" | "stats" | "behavior" | "models";
+type TabKey = "theme" | "agents" | "stats" | "behavior" | "models";
 
 /** 设置分区键: Rail 的「统计」「设置」入口直接定位到对应分区 */
 export type SettingsSection = TabKey;
 
 const NAV_ITEMS: { key: TabKey; icon: LucideIcon; title: string; desc: string }[] = [
   { key: "theme", icon: Palette, title: "外观", desc: "日间 / 夜间 / 强调色" },
-  { key: "models", icon: Boxes, title: "模型与供应商", desc: "供应商 / 模型 / 新会话默认" },
+  { key: "agents", icon: Terminal, title: "Agent 运行时", desc: "CLI 检测 / 路径覆盖 / 默认权限" },
+  { key: "models", icon: Boxes, title: "模型与供应商", desc: "PI 供应商 / 模型 / 新会话默认" },
   { key: "stats", icon: BarChart3, title: "Token 统计", desc: "用量与成本分布" },
-  { key: "behavior", icon: Activity, title: "行为统计", desc: "轮次 / 工具 / 思考占比" },
+  { key: "behavior", icon: Activity, title: "行为统计", desc: "轮次 / 工具 / 思考占比 (Pi)" },
 ];
 
 // 设置视图: 盖住标题栏以下整个内容行的全屏界面 (App 把它渲染在内容行里, absolute inset-0 铺满)。
@@ -89,6 +91,11 @@ export function SettingsWindow({
             {tab === "theme" && (
               <div className="h-full overflow-y-auto">
                 <AppearancePanel />
+              </div>
+            )}
+            {tab === "agents" && (
+              <div className="h-full overflow-y-auto">
+                <AgentsPanel />
               </div>
             )}
             {tab === "stats" && (

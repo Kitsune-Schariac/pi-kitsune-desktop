@@ -5,6 +5,7 @@
 //! - 前端仅消费 `UnifiedEvent` (经 `agent_event` 频道) 与 `AgentCapabilities`。
 //! - 采用 `enum AgentRuntime` 静态分发: 零额外 crate 依赖、零装箱开销、编译期穷尽校验。
 
+pub mod acp;
 pub mod claude;
 pub mod pi;
 pub mod process;
@@ -271,6 +272,7 @@ pub enum UnifiedEvent {
 pub enum AgentRuntime {
     Pi(pi::PiBackend),
     Claude(claude::ClaudeBackend),
+    Acp(acp::AcpBackend),
 }
 
 impl AgentRuntime {
@@ -278,6 +280,7 @@ impl AgentRuntime {
         match self {
             Self::Pi(_) => AgentKind::Pi,
             Self::Claude(_) => AgentKind::Claude,
+            Self::Acp(_) => AgentKind::Agy,
         }
     }
 
@@ -293,6 +296,7 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.send_prompt(message, images).await,
             Self::Claude(rt) => rt.send_prompt(message, images).await,
+            Self::Acp(rt) => rt.send_prompt(message, images).await,
         }
     }
 
@@ -300,6 +304,7 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.abort().await,
             Self::Claude(rt) => rt.abort().await,
+            Self::Acp(rt) => rt.abort().await,
         }
     }
 
@@ -307,6 +312,7 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.steer(message, images).await,
             Self::Claude(_) => Err("Claude Code 不支持运行中 steer 插话".into()),
+            Self::Acp(_) => Err("ACP Agent 不支持运行中 steer 插话".into()),
         }
     }
 
@@ -318,6 +324,7 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.follow_up(message, images).await,
             Self::Claude(_) => Err("Claude Code 不支持 followUp 队列".into()),
+            Self::Acp(_) => Err("ACP Agent 不支持 followUp 队列".into()),
         }
     }
 
@@ -325,6 +332,7 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.get_state().await,
             Self::Claude(rt) => rt.get_state().await,
+            Self::Acp(rt) => rt.get_state().await,
         }
     }
 
@@ -332,6 +340,7 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.get_available_models().await,
             Self::Claude(rt) => rt.get_available_models().await,
+            Self::Acp(_) => Ok(serde_json::json!({ "models": [] })),
         }
     }
 
@@ -339,13 +348,14 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.set_model(provider, model_id).await,
             Self::Claude(rt) => rt.set_model(provider, model_id).await,
+            Self::Acp(_) => Err("当前 ACP Agent 不支持运行中切换模型".into()),
         }
     }
 
     pub async fn cycle_model(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.cycle_model().await,
-            Self::Claude(_) => Err("Claude Code 不支持快捷循环模型".into()),
+            Self::Claude(_) | Self::Acp(_) => Err("当前 Agent 不支持快捷循环模型".into()),
         }
     }
 
@@ -353,13 +363,14 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.set_thinking_level(level).await,
             Self::Claude(rt) => rt.set_thinking_level(level).await,
+            Self::Acp(_) => Err("当前 ACP Agent 不支持思考级别切换".into()),
         }
     }
 
     pub async fn cycle_thinking_level(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.cycle_thinking_level().await,
-            Self::Claude(_) => Err("Claude Code 不支持循环思考级别".into()),
+            Self::Claude(_) | Self::Acp(_) => Err("当前 Agent 不支持循环思考级别".into()),
         }
     }
 
@@ -367,13 +378,14 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.get_available_thinking_levels().await,
             Self::Claude(rt) => rt.get_available_thinking_levels().await,
+            Self::Acp(_) => Ok(serde_json::json!({ "levels": ["off"] })),
         }
     }
 
     pub async fn get_entries(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.get_entries().await,
-            Self::Claude(_) => Ok(serde_json::json!({ "entries": [] })),
+            Self::Claude(_) | Self::Acp(_) => Ok(serde_json::json!({ "entries": [] })),
         }
     }
 
@@ -381,13 +393,14 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.get_session_stats().await,
             Self::Claude(rt) => rt.get_session_stats().await,
+            Self::Acp(_) => Ok(serde_json::json!({})),
         }
     }
 
     pub async fn set_session_name(&mut self, name: String) -> Result<(), String> {
         match self {
             Self::Pi(rt) => rt.set_session_name(name).await,
-            Self::Claude(_) => Err("Claude Code 暂不支持会话重命名".into()),
+            Self::Claude(_) | Self::Acp(_) => Err("当前 Agent 暂不支持会话重命名".into()),
         }
     }
 
@@ -398,7 +411,7 @@ impl AgentRuntime {
     ) -> Result<(), String> {
         match self {
             Self::Pi(rt) => rt.send_extension_ui_response(id, payload).await,
-            Self::Claude(_) => Err("Claude Code 不使用 PI 扩展 UI 协议".into()),
+            Self::Claude(_) | Self::Acp(_) => Err("当前 Agent 不使用 PI 扩展 UI 协议".into()),
         }
     }
 
@@ -415,12 +428,13 @@ impl AgentRuntime {
                 rt.respond_permission(request_id, allow, reason, option_id)
                     .await
             }
+            Self::Acp(rt) => rt.respond_permission(request_id, allow, option_id).await,
         }
     }
 
     pub async fn set_permission_mode(&mut self, mode: String) -> Result<Value, String> {
         match self {
-            Self::Pi(_) => Err("Pi 不支持权限模式切换".into()),
+            Self::Pi(_) | Self::Acp(_) => Err("当前 Agent 不支持权限模式切换".into()),
             Self::Claude(rt) => rt.set_permission_mode(mode).await,
         }
     }
@@ -428,7 +442,7 @@ impl AgentRuntime {
     pub async fn get_commands(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.get_commands().await,
-            Self::Claude(_) => Ok(serde_json::json!({ "commands": [] })),
+            Self::Claude(_) | Self::Acp(_) => Ok(serde_json::json!({ "commands": [] })),
         }
     }
 
@@ -436,30 +450,32 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.stop().await,
             Self::Claude(rt) => rt.stop().await,
+            Self::Acp(rt) => rt.stop().await,
         }
     }
 }
 
-/// 并发探测本机已注册 Agent CLI 的安装与可用状态 (不阻塞 UI, Windows 严格抑窗)。
+/// 并发探测本机已注册 Agent CLI 的安装与可用状态 (支持 `~/.pi-kitsune/agents.json` 路径覆盖)。
 #[tauri::command]
 pub async fn list_available_agents() -> Result<Vec<AgentDescriptor>, String> {
+    let cfg = crate::agents_config::load_agents_config();
+    let pi_prog = cfg.program_for(AgentKind::Pi).to_string();
+    let claude_prog = cfg.program_for(AgentKind::Claude).to_string();
+    let agy_prog = cfg.program_for(AgentKind::Agy).to_string();
+
     let (pi_ver, claude_ver, agy_ver) = tokio::join!(
-        process::probe_cli_version("pi", &["--version"], 4),
-        process::probe_cli_version("claude", &["--version"], 4),
-        process::probe_cli_version("agy", &["--version"], 4),
+        process::probe_cli_version(&pi_prog, &["--version"], 4),
+        process::probe_cli_version(&claude_prog, &["--version"], 4),
+        process::probe_cli_version(&agy_prog, &["--version"], 4),
     );
 
     let build = |kind: AgentKind, version: Option<String>, implemented: bool, cmd_name: &str| {
         let installed = version.is_some();
         let available = installed && implemented;
         let reason = if !implemented {
-            Some(if installed {
-                "即将支持".to_string()
-            } else {
-                format!("未检测到 {cmd_name} · 即将支持")
-            })
+            Some("即将支持".to_string())
         } else if !installed {
-            Some(format!("未检测到 {cmd_name} 命令"))
+            Some(format!("未检测到 {cmd_name}，可在设置 → Agent 运行时配置路径"))
         } else {
             None
         };
@@ -477,8 +493,8 @@ pub async fn list_available_agents() -> Result<Vec<AgentDescriptor>, String> {
     };
 
     Ok(vec![
-        build(AgentKind::Pi, pi_ver, true, "pi"),
-        build(AgentKind::Claude, claude_ver, true, "claude"),
-        build(AgentKind::Agy, agy_ver, false, "agy"),
+        build(AgentKind::Pi, pi_ver, true, &pi_prog),
+        build(AgentKind::Claude, claude_ver, true, &claude_prog),
+        build(AgentKind::Agy, agy_ver, true, &agy_prog),
     ])
 }
