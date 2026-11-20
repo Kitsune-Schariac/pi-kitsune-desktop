@@ -1,12 +1,23 @@
 //! Claude Code `stream-json` 输出帧 → `UnifiedEvent` 状态机翻译器。
 //!
-//! Claude CLI (`--output-format stream-json --include-partial-messages --verbose`) 会交替输出:
-//! - `system` (init): 携带 `session_id` / `model` / `permissionMode`
-//! - `stream_event`: 包装 Anthropic Messages API 流式块 (`message_start` / `content_block_*` / `message_delta`)
-//! - `assistant`: 完整消息或块快照 (包含已拼完的 `tool_use.input` 及权威 `usage`)
-//! - `user`: 工具执行结果 (`content[]` 中的 `tool_result`)
-//! - `result`: 整轮结束 (含 `total_cost_usd` / `usage` / `is_error`)
-//! - `control_request` (`can_use_tool`): 需宿主审批的工具权限请求
+//! 实机协议时序 (`claude 2.1.322 --output-format stream-json --include-partial-messages --verbose`):
+//! ```text
+//! system (init)
+//! stream_event: message_start (id=M)           ← 消息真正开始
+//!   stream_event: content_block_start (thinking)
+//!   stream_event: content_block_delta (thinking_delta / signature_delta)
+//!   assistant (id=M, blocks=[thinking])        ← 单块快照 (非消息结束! 不发 AssistantEnd)
+//!   stream_event: content_block_stop
+//!   stream_event: content_block_start (text)
+//!   stream_event: content_block_delta (text_delta) × N  ← 真实流式打字机增量
+//!   assistant (id=M, blocks=[text])            ← 单块快照 (已流式输出过, 绝不重复补发 text!)
+//!   stream_event: content_block_stop
+//!   (工具调用: content_block_start (tool_use) → input_json_delta × N → assistant (blocks=[tool_use]) → stop)
+//! stream_event: message_delta (stop_reason, usage)
+//! stream_event: message_stop                   ← 消息真正结束, 此时才发 AssistantEnd
+//! user (tool_result)                           ← 工具执行结果
+//! result (total_cost_usd, usage, is_error)     ← 整轮结束, 发 TurnSettled
+//! ```
 
 use crate::backends::{
     ContentBlockKind, MessageUsage, NotifyLevel, PermissionOption, PermissionRequestPayload,
@@ -18,10 +29,16 @@ use std::collections::HashSet;
 #[derive(Default)]
 pub struct ClaudeStreamTranslator {
     in_turn: bool,
-    streamed_current_msg: bool,
+    /// 当前是否处于 `stream_event(message_start)` .. `stream_event(message_stop)` 窗口内
+    active_stream: bool,
     current_msg_id: Option<String>,
+    /// 所有已经走过 `stream_event` 流式路径的 `message.id`: 其后续 `assistant` 块快照不得重复补发 text/thinking
+    streamed_msg_ids: HashSet<String>,
+    /// 非流式兜底路径下已输出过的 `(msg_id, block_sig)` 防重复
     seen_tool_ids: HashSet<String>,
-    settled_msg_ids: HashSet<String>,
+    /// 当前消息待结算的 usage / stop_reason (由 message_start / assistant 快照 / message_delta 不断更新, 到 message_stop 一次性结算)
+    pending_usage: Option<MessageUsage>,
+    pending_stop_reason: Option<String>,
     /// 本轮内是否已由 assistant_end 结算过 usage (防止 result 重复加倍)
     turn_had_usage: bool,
 }
@@ -88,7 +105,7 @@ impl ClaudeStreamTranslator {
         let Some(sub) = ev.get("type").and_then(|v| v.as_str()) else {
             return Vec::new();
         };
-        let mut out = Vec::with_capacity(2);
+        let mut out = Vec::with_capacity(3);
 
         match sub {
             "message_start" => {
@@ -98,14 +115,21 @@ impl ClaudeStreamTranslator {
                     .and_then(|m| m.get("id"))
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
+                if let Some(id) = &message_id {
+                    self.streamed_msg_ids.insert(id.clone());
+                }
                 self.current_msg_id = message_id.clone();
-                self.streamed_current_msg = true;
+                self.active_stream = true;
+                self.pending_usage = msg.and_then(|m| m.get("usage")).map(parse_claude_usage);
+                self.pending_stop_reason = None;
+
                 out.push(UnifiedEvent::AssistantStart { message_id });
-                if let Some(u) = msg.and_then(|m| m.get("usage")) {
-                    let input = u.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                    let output = u.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                    if input > 0 || output > 0 {
-                        out.push(UnifiedEvent::LiveUsage { input, output });
+                if let Some(u) = &self.pending_usage {
+                    if u.input > 0 || u.output > 0 {
+                        out.push(UnifiedEvent::LiveUsage {
+                            input: u.input,
+                            output: u.output,
+                        });
                     }
                 }
             }
@@ -138,18 +162,22 @@ impl ClaudeStreamTranslator {
                 match dt {
                     "text_delta" => {
                         let s = delta.get("text").and_then(|v| v.as_str()).unwrap_or("");
-                        out.push(UnifiedEvent::TextDelta {
-                            delta: s.to_string(),
-                        });
+                        if !s.is_empty() {
+                            out.push(UnifiedEvent::TextDelta {
+                                delta: s.to_string(),
+                            });
+                        }
                     }
                     "thinking_delta" => {
                         let s = delta
                             .get("thinking")
                             .and_then(|v| v.as_str())
                             .unwrap_or("");
-                        out.push(UnifiedEvent::ThinkingDelta {
-                            delta: s.to_string(),
-                        });
+                        if !s.is_empty() {
+                            out.push(UnifiedEvent::ThinkingDelta {
+                                delta: s.to_string(),
+                            });
+                        }
                     }
                     "input_json_delta" => {
                         let s = delta
@@ -164,12 +192,57 @@ impl ClaudeStreamTranslator {
                 }
             }
             "message_delta" => {
+                if let Some(sr) = ev
+                    .get("delta")
+                    .and_then(|d| d.get("stop_reason"))
+                    .and_then(|v| v.as_str())
+                {
+                    self.pending_stop_reason = Some(sr.to_string());
+                }
                 if let Some(u) = ev.get("usage") {
-                    let input = u.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                    let output = u.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                    if input > 0 || output > 0 {
-                        out.push(UnifiedEvent::LiveUsage { input, output });
+                    let parsed = parse_claude_usage(u);
+                    // message_delta 的 usage 通常携带最终 output_tokens; 合并进 pending_usage 保留 input/cache
+                    match &mut self.pending_usage {
+                        Some(prev) => {
+                            if parsed.input > 0 {
+                                prev.input = parsed.input;
+                            }
+                            if parsed.output > 0 {
+                                prev.output = parsed.output;
+                            }
+                            if parsed.cache_read > 0 {
+                                prev.cache_read = parsed.cache_read;
+                            }
+                            if parsed.cache_write > 0 {
+                                prev.cache_write = parsed.cache_write;
+                            }
+                        }
+                        None => {
+                            self.pending_usage = Some(parsed.clone());
+                        }
                     }
+                    if parsed.input > 0 || parsed.output > 0 {
+                        out.push(UnifiedEvent::LiveUsage {
+                            input: parsed.input,
+                            output: parsed.output,
+                        });
+                    }
+                }
+            }
+            "message_stop" => {
+                if self.active_stream {
+                    let usage = self.pending_usage.take();
+                    if usage.is_some() {
+                        self.turn_had_usage = true;
+                    }
+                    let stop_reason = self.pending_stop_reason.take();
+                    out.push(UnifiedEvent::AssistantEnd {
+                        usage,
+                        stop_reason,
+                        error_message: None,
+                    });
+                    self.active_stream = false;
+                    self.current_msg_id = None;
                 }
             }
             _ => {}
@@ -189,15 +262,34 @@ impl ClaudeStreamTranslator {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let need_fallback_content =
-            !self.streamed_current_msg || self.current_msg_id != msg_id;
+        // 只要该 message.id 已走过 stream_event (或当前正在流式输出中),
+        // 这里的 assistant 只是单个 content_block 完成后的快照:
+        // - 绝不重复补发 text / thinking (防回答重复两遍)
+        // - 绝不提前发 AssistantEnd 清空 currentAssistantId (防吞掉后续 text_delta 失去打字机效果)
+        let is_streamed = self.active_stream
+            || msg_id
+                .as_ref()
+                .map(|id| self.streamed_msg_ids.contains(id))
+                .unwrap_or(false);
+
+        if let Some(u) = msg.get("usage") {
+            let parsed = parse_claude_usage(u);
+            if self.active_stream {
+                self.pending_usage = Some(parsed);
+            }
+        }
+        if let Some(sr) = msg.get("stop_reason").and_then(|v| v.as_str()) {
+            if self.active_stream {
+                self.pending_stop_reason = Some(sr.to_string());
+            }
+        }
 
         if let Some(content) = msg.get("content").and_then(|v| v.as_array()) {
             let mut started_fallback = false;
             for block in content {
                 let bt = block.get("type").and_then(|v| v.as_str()).unwrap_or("");
                 match bt {
-                    "text" if need_fallback_content => {
+                    "text" if !is_streamed => {
                         let text = block.get("text").and_then(|v| v.as_str()).unwrap_or("");
                         if !text.is_empty() {
                             if !started_fallback {
@@ -211,7 +303,7 @@ impl ClaudeStreamTranslator {
                             });
                         }
                     }
-                    "thinking" if need_fallback_content => {
+                    "thinking" if !is_streamed => {
                         let thinking = block
                             .get("thinking")
                             .and_then(|v| v.as_str())
@@ -252,34 +344,22 @@ impl ClaudeStreamTranslator {
                     _ => {}
                 }
             }
-        }
-
-        // 结算当前 assistant 消息: 同一 message.id 只结算一次 usage, 防多块快照重复计数
-        let already_settled = msg_id
-            .as_ref()
-            .map(|id| self.settled_msg_ids.contains(id))
-            .unwrap_or(false);
-        let usage = if !already_settled {
-            msg.get("usage").map(parse_claude_usage)
-        } else {
-            None
-        };
-        if let (Some(id), Some(_)) = (msg_id.as_ref(), usage.as_ref()) {
-            self.settled_msg_ids.insert(id.clone());
-            self.turn_had_usage = true;
-        }
-        let stop_reason = msg
-            .get("stop_reason")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        if usage.is_some() || stop_reason.is_some() || self.streamed_current_msg {
-            out.push(UnifiedEvent::AssistantEnd {
-                usage,
-                stop_reason,
-                error_message: None,
-            });
-            self.streamed_current_msg = false;
-            self.current_msg_id = None;
+            // 非流式兜底消息才在这里立即结算
+            if !is_streamed && started_fallback {
+                let usage = msg.get("usage").map(parse_claude_usage);
+                if usage.is_some() {
+                    self.turn_had_usage = true;
+                }
+                let stop_reason = msg
+                    .get("stop_reason")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                out.push(UnifiedEvent::AssistantEnd {
+                    usage,
+                    stop_reason,
+                    error_message: None,
+                });
+            }
         }
 
         out
@@ -311,7 +391,6 @@ impl ClaudeStreamTranslator {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             let raw_content = block.get("content").cloned().unwrap_or(Value::Null);
-            // 对齐前端 StepDetail 期望的 { content: [{ type: "text", text }] } 结构
             let normalized_result = normalize_tool_result_content(raw_content);
             out.push(UnifiedEvent::ToolEnd {
                 tool_call_id,
@@ -324,6 +403,23 @@ impl ClaudeStreamTranslator {
 
     fn handle_result(&mut self, frame: &Value) -> Vec<UnifiedEvent> {
         let mut out = Vec::new();
+
+        // 若流异常中断未收到 message_stop, 在此兜底收口当前气泡
+        if self.active_stream {
+            let usage = self.pending_usage.take();
+            if usage.is_some() {
+                self.turn_had_usage = true;
+            }
+            let stop_reason = self.pending_stop_reason.take();
+            out.push(UnifiedEvent::AssistantEnd {
+                usage,
+                stop_reason,
+                error_message: None,
+            });
+            self.active_stream = false;
+            self.current_msg_id = None;
+        }
+
         let is_error = frame
             .get("is_error")
             .and_then(|v| v.as_bool())
@@ -342,7 +438,6 @@ impl ClaudeStreamTranslator {
             });
         }
 
-        // 若本轮未从 assistant 拿到 usage (或 result 补充了权威 total_cost_usd), 补发一次结算
         let cost = frame.get("total_cost_usd").and_then(|v| v.as_f64());
         if !self.turn_had_usage {
             if let Some(u) = frame.get("usage") {
@@ -355,7 +450,6 @@ impl ClaudeStreamTranslator {
                 });
             }
         } else if let Some(c) = cost {
-            // 本轮已加过 token, 只补权威成本
             if c > 0.0 {
                 out.push(UnifiedEvent::AssistantEnd {
                     usage: Some(MessageUsage {
@@ -373,10 +467,12 @@ impl ClaudeStreamTranslator {
 
         out.push(UnifiedEvent::TurnSettled);
         self.in_turn = false;
-        self.streamed_current_msg = false;
+        self.active_stream = false;
         self.current_msg_id = None;
+        self.streamed_msg_ids.clear();
         self.seen_tool_ids.clear();
-        self.settled_msg_ids.clear();
+        self.pending_usage = None;
+        self.pending_stop_reason = None;
         self.turn_had_usage = false;
         out
     }
@@ -482,48 +578,29 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// 复现实机 claude 2.1.322 完整帧序:
+    /// message_start → thinking → assistant(thinking 快照) → text_delta × N → assistant(text 快照) → message_delta → message_stop → result
+    /// 断言:
+    /// 1. assistant(thinking) 不得提前发射 AssistantEnd (保证后续 text_delta 实时打字机生效)
+    /// 2. assistant(text) 不得重复发射 AssistantStart / TextDelta (保证回答只出现一遍)
+    /// 3. 直到 message_stop 才发射 AssistantEnd
     #[test]
-    fn translates_full_claude_stream_turn() {
+    fn streams_thinking_then_text_without_early_end_or_duplication() {
         let mut tr = ClaudeStreamTranslator::new();
 
-        // 1. system init
-        let init = tr.translate(&json!({
-            "type": "system",
-            "subtype": "init",
-            "session_id": "cc-123",
-            "model": "claude-sonnet-4-6",
-            "permissionMode": "auto"
-        }));
-        assert_eq!(
-            init,
-            vec![UnifiedEvent::SessionMeta {
-                session_path: None,
-                remote_session_id: Some("cc-123".into()),
-                model: Some("claude-sonnet-4-6".into()),
-                permission_mode: Some("auto".into()),
-            }]
-        );
-
-        // 2. stream_event message_start + thinking + text + tool_use
-        let ms = tr.translate(&json!({
+        let ev0 = tr.translate(&json!({
             "type": "stream_event",
-            "event": { "type": "message_start", "message": { "id": "msg_1", "usage": { "input_tokens": 10, "output_tokens": 1 } } }
+            "event": { "type": "message_start", "message": { "id": "msg_real_1", "usage": { "input_tokens": 10, "output_tokens": 0 } } }
         }));
-        assert_eq!(ms[0], UnifiedEvent::TurnStart);
+        assert_eq!(ev0[0], UnifiedEvent::TurnStart);
         assert_eq!(
-            ms[1],
+            ev0[1],
             UnifiedEvent::AssistantStart {
-                message_id: Some("msg_1".into())
-            }
-        );
-        assert_eq!(
-            ms[2],
-            UnifiedEvent::LiveUsage {
-                input: 10,
-                output: 1
+                message_id: Some("msg_real_1".into())
             }
         );
 
+        // thinking 块 + 中间 assistant(thinking) 快照
         assert_eq!(
             tr.translate(&json!({
                 "type": "stream_event",
@@ -533,22 +610,103 @@ mod tests {
                 block: ContentBlockKind::Thinking
             }]
         );
+        let mid_snap = tr.translate(&json!({
+            "type": "assistant",
+            "message": {
+                "id": "msg_real_1",
+                "stop_reason": null,
+                "content": [{ "type": "thinking", "thinking": "" }],
+                "usage": { "input_tokens": 10, "output_tokens": 5 }
+            }
+        }));
+        assert!(
+            mid_snap.is_empty(),
+            "中间 thinking 快照不得发 AssistantEnd 或重复文本, 实际: {mid_snap:?}"
+        );
+
+        // 紧接着的 text_delta 必须正常流式输出
         assert_eq!(
             tr.translate(&json!({
                 "type": "stream_event",
-                "event": { "type": "content_block_delta", "delta": { "type": "thinking_delta", "thinking": "hmm" } }
+                "event": { "type": "content_block_start", "content_block": { "type": "text" } }
             })),
-            vec![UnifiedEvent::ThinkingDelta {
-                delta: "hmm".into()
+            vec![UnifiedEvent::ContentBlockStart {
+                block: ContentBlockKind::Text
             }]
         );
         assert_eq!(
             tr.translate(&json!({
                 "type": "stream_event",
-                "event": { "type": "content_block_delta", "delta": { "type": "text_delta", "text": "hi" } }
+                "event": { "type": "content_block_delta", "delta": { "type": "text_delta", "text": "你好" } }
             })),
-            vec![UnifiedEvent::TextDelta { delta: "hi".into() }]
+            vec![UnifiedEvent::TextDelta {
+                delta: "你好".into()
+            }]
         );
+        assert_eq!(
+            tr.translate(&json!({
+                "type": "stream_event",
+                "event": { "type": "content_block_delta", "delta": { "type": "text_delta", "text": "世界" } }
+            })),
+            vec![UnifiedEvent::TextDelta {
+                delta: "世界".into()
+            }]
+        );
+
+        // text 完成后的 assistant(text) 快照绝不能重复输出 "你好世界"
+        let text_snap = tr.translate(&json!({
+            "type": "assistant",
+            "message": {
+                "id": "msg_real_1",
+                "stop_reason": null,
+                "content": [{ "type": "text", "text": "你好世界" }],
+                "usage": { "input_tokens": 10, "output_tokens": 20, "cache_read_input_tokens": 100 }
+            }
+        }));
+        assert!(
+            text_snap.is_empty(),
+            "已流式输出的 text 快照不得重复发射 TextDelta/AssistantStart, 实际: {text_snap:?}"
+        );
+
+        // message_delta + message_stop 才结算 AssistantEnd
+        let _ = tr.translate(&json!({
+            "type": "stream_event",
+            "event": { "type": "message_delta", "delta": { "stop_reason": "end_turn" }, "usage": { "output_tokens": 25 } }
+        }));
+        let stop = tr.translate(&json!({
+            "type": "stream_event",
+            "event": { "type": "message_stop" }
+        }));
+        assert_eq!(
+            stop,
+            vec![UnifiedEvent::AssistantEnd {
+                usage: Some(MessageUsage {
+                    input: 10,
+                    output: 25,
+                    cache_read: 100,
+                    cache_write: 0,
+                    cost: None,
+                }),
+                stop_reason: Some("end_turn".into()),
+                error_message: None,
+            }]
+        );
+
+        let res = tr.translate(&json!({
+            "type": "result",
+            "is_error": false,
+            "total_cost_usd": 0.01
+        }));
+        assert!(res.iter().any(|e| matches!(e, UnifiedEvent::TurnSettled)));
+    }
+
+    #[test]
+    fn translates_tool_use_and_result_within_stream() {
+        let mut tr = ClaudeStreamTranslator::new();
+        let _ = tr.translate(&json!({
+            "type": "stream_event",
+            "event": { "type": "message_start", "message": { "id": "msg_t1" } }
+        }));
         assert_eq!(
             tr.translate(&json!({
                 "type": "stream_event",
@@ -556,41 +714,29 @@ mod tests {
             })),
             vec![UnifiedEvent::ToolCallDelta { has_delta: true }]
         );
-
-        // 3. assistant snapshot carries tool_use + usage (same msg_id only settles usage once)
+        // assistant 快照提取 tool_use (且不提前发 AssistantEnd)
         let asst = tr.translate(&json!({
             "type": "assistant",
             "message": {
-                "id": "msg_1",
-                "stop_reason": "tool_use",
+                "id": "msg_t1",
                 "content": [{ "type": "tool_use", "id": "tu_1", "name": "Bash", "input": { "command": "ls" } }],
-                "usage": { "input_tokens": 50, "output_tokens": 30, "cache_read_input_tokens": 20, "cache_creation_input_tokens": 5 }
+                "usage": { "input_tokens": 50, "output_tokens": 30 }
             }
         }));
         assert_eq!(
-            asst[0],
-            UnifiedEvent::ToolStart {
+            asst,
+            vec![UnifiedEvent::ToolStart {
                 tool_call_id: "tu_1".into(),
                 tool_name: "Bash".into(),
                 args: json!({ "command": "ls" }),
-            }
+            }]
         );
-        assert_eq!(
-            asst[1],
-            UnifiedEvent::AssistantEnd {
-                usage: Some(MessageUsage {
-                    input: 50,
-                    output: 30,
-                    cache_read: 20,
-                    cache_write: 5,
-                    cost: None,
-                }),
-                stop_reason: Some("tool_use".into()),
-                error_message: None,
-            }
-        );
+        let stop = tr.translate(&json!({
+            "type": "stream_event",
+            "event": { "type": "message_stop" }
+        }));
+        assert!(matches!(stop[0], UnifiedEvent::AssistantEnd { .. }));
 
-        // 4. user tool_result
         let tr_ev = tr.translate(&json!({
             "type": "user",
             "message": {
@@ -606,14 +752,6 @@ mod tests {
                 result: json!({ "content": [{ "type": "text", "text": "ok" }] }),
             }]
         );
-
-        // 5. result settles turn & attaches total_cost_usd
-        let res = tr.translate(&json!({
-            "type": "result",
-            "is_error": false,
-            "total_cost_usd": 0.0123
-        }));
-        assert!(res.iter().any(|e| matches!(e, UnifiedEvent::TurnSettled)));
     }
 
     #[test]

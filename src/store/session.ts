@@ -519,8 +519,10 @@ export const useSessionStore = create<SessionStore>((set, get) => {
 
     loadThinkingLevels: async (sessionId) => {
       try {
-        const data = await invoke<{ levels: string[] }>("get_available_thinking_levels", { sessionId });
-        patch(sessionId, { availableThinkingLevels: data.levels || ["off"] });
+        const data = await invoke<{ levels: string[]; current?: string }>("get_available_thinking_levels", { sessionId });
+        const next: Partial<SessionState> = { availableThinkingLevels: data.levels || ["off"] };
+        if (data.current) next.thinkingLevel = data.current;
+        patch(sessionId, next);
       } catch { /* ignore */ }
     },
 
@@ -600,8 +602,13 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           break;
         }
         case "assistant_start": {
-          const id = event.messageId || crypto.randomUUID();
           const cur = get().sessions[sessionId]!;
+          // 防外部协议重发同一 messageId 撞车导致 text_delta 的 .map 同时写入两条重复气泡
+          const candidate = event.messageId;
+          const id =
+            candidate && !cur.entries.some((e) => e.id === candidate)
+              ? candidate
+              : crypto.randomUUID();
           patch(sessionId, {
             entries: [...cur.entries, { id, kind: "message", role: "assistant", text: "", thinking: "" }],
             currentAssistantId: id,

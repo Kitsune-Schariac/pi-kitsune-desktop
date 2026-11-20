@@ -41,7 +41,7 @@ const FALLBACK_AGENTS: AgentDescriptor[] = [
     implemented: true,
     available: false,
     reason: "正在探测…",
-    capabilities: { ...PI_CAPABILITIES, steer: false, followUp: false, thinkingLevel: false, permissionModes: ["auto", "manual", "acceptEdits", "plan", "dontAsk", "bypassPermissions"], extensionUi: false, toolApproval: true, remoteCommands: false, sessionRename: false, fleetView: false, modelsEditor: false },
+    capabilities: { ...PI_CAPABILITIES, steer: false, followUp: false, thinkingLevel: true, permissionModes: ["auto", "manual", "acceptEdits", "plan", "dontAsk", "bypassPermissions"], extensionUi: false, toolApproval: true, remoteCommands: false, sessionRename: false, fleetView: false, modelsEditor: false },
   },
   {
     kind: "agy",

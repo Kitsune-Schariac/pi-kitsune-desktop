@@ -32,6 +32,138 @@ pub const CLAUDE_PERMISSION_MODES: &[&str] = &[
     "bypassPermissions",
 ];
 
+/// Claude Code 支持的默认思考深度档位 (对齐 `claude --effort` 与 `initialize.models[].supportedEffortLevels`)
+pub const CLAUDE_EFFORT_LEVELS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ClaudeModelEntry {
+    id: String,
+    name: String,
+    resolved_model: Option<String>,
+    supports_effort: bool,
+    supported_effort_levels: Vec<String>,
+}
+
+fn default_claude_models() -> Vec<ClaudeModelEntry> {
+    let default_levels: Vec<String> = CLAUDE_EFFORT_LEVELS.iter().map(|s| (*s).to_string()).collect();
+    vec![
+        ClaudeModelEntry {
+            id: "default".into(),
+            name: "Default (推荐)".into(),
+            resolved_model: None,
+            supports_effort: true,
+            supported_effort_levels: default_levels.clone(),
+        },
+        ClaudeModelEntry {
+            id: "opus".into(),
+            name: "opus".into(),
+            resolved_model: None,
+            supports_effort: true,
+            supported_effort_levels: default_levels.clone(),
+        },
+        ClaudeModelEntry {
+            id: "sonnet".into(),
+            name: "sonnet".into(),
+            resolved_model: None,
+            supports_effort: true,
+            supported_effort_levels: default_levels.clone(),
+        },
+        ClaudeModelEntry {
+            id: "haiku".into(),
+            name: "haiku".into(),
+            resolved_model: None,
+            supports_effort: true,
+            supported_effort_levels: default_levels,
+        },
+    ]
+}
+
+fn extract_control_response_body(frame: &Value) -> Result<&Value, String> {
+    let resp = frame.get("response").unwrap_or(frame);
+    if resp.get("subtype").and_then(|v| v.as_str()) == Some("error") {
+        let msg = resp
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Claude 控制请求失败");
+        return Err(msg.to_string());
+    }
+    Ok(resp.get("response").unwrap_or(&Value::Null))
+}
+
+fn parse_initialize_models(body: &Value) -> Vec<ClaudeModelEntry> {
+    let Some(arr) = body.get("models").and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(arr.len());
+    for item in arr {
+        let Some(id) = item.get("value").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        let name = item
+            .get("displayName")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(id)
+            .to_string();
+        let resolved_model = item
+            .get("resolvedModel")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let supported_effort_levels: Vec<String> = item
+            .get("supportedEffortLevels")
+            .and_then(|v| v.as_array())
+            .map(|levels| {
+                levels
+                    .iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let supports_effort = item
+            .get("supportsEffort")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(!supported_effort_levels.is_empty());
+        out.push(ClaudeModelEntry {
+            id: id.to_string(),
+            name,
+            resolved_model,
+            supports_effort,
+            supported_effort_levels,
+        });
+    }
+    out
+}
+
+fn find_model_entry<'a>(
+    catalog: &'a [ClaudeModelEntry],
+    model_id: &str,
+) -> Option<&'a ClaudeModelEntry> {
+    catalog
+        .iter()
+        .find(|m| m.id == model_id)
+        .or_else(|| {
+            catalog
+                .iter()
+                .find(|m| m.resolved_model.as_deref() == Some(model_id))
+        })
+}
+
+fn effort_levels_for_model(catalog: &[ClaudeModelEntry], model_id: Option<&str>) -> Vec<String> {
+    let entry = model_id
+        .and_then(|id| find_model_entry(catalog, id))
+        .or_else(|| catalog.iter().find(|m| m.id == "default"));
+    if let Some(m) = entry {
+        if !m.supported_effort_levels.is_empty() {
+            return m.supported_effort_levels.clone();
+        }
+        if !m.supports_effort {
+            return vec!["off".to_string()];
+        }
+    }
+    CLAUDE_EFFORT_LEVELS.iter().map(|s| (*s).to_string()).collect()
+}
+
 pub struct ClaudeBackend {
     child: Child,
     stdin: ChildStdin,
@@ -42,6 +174,7 @@ pub struct ClaudeBackend {
     remote_session_id: Arc<Mutex<Option<String>>>,
     current_model: Arc<Mutex<Option<String>>>,
     permission_mode: Arc<Mutex<String>>,
+    models_catalog: Vec<ClaudeModelEntry>,
     effort: String,
     session_path: Option<String>,
 }
@@ -217,7 +350,7 @@ impl ClaudeBackend {
             });
         }
 
-        Ok(Self {
+        let mut backend = Self {
             child,
             stdin,
             pending,
@@ -226,9 +359,72 @@ impl ClaudeBackend {
             remote_session_id,
             current_model,
             permission_mode: permission_mode_state,
+            models_catalog: default_claude_models(),
             effort: "medium".to_string(),
             session_path,
-        })
+        };
+        backend.bootstrap_session_info().await;
+        Ok(backend)
+    }
+
+    /// 进程启动后 (锁外) 做一次 best-effort 握手:
+    /// 1. `initialize` 拉取真实模型目录与每个模型支持的 effort 档位
+    /// 2. `get_settings` 拉取生效的 `effortLevel` 与默认 `model`, 避免 UI 在首条消息前显示假默认值
+    async fn bootstrap_session_info(&mut self) {
+        if let Ok(frame) = self
+            .send_control_request(json!({ "subtype": "initialize" }), 5)
+            .await
+        {
+            if let Ok(body) = extract_control_response_body(&frame) {
+                let parsed = parse_initialize_models(body);
+                if !parsed.is_empty() {
+                    self.models_catalog = parsed;
+                }
+                if let Some(pm) = body.get("current_permission_mode").and_then(|v| v.as_str()) {
+                    if CLAUDE_PERMISSION_MODES.contains(&pm) {
+                        *self.permission_mode.lock().await = pm.to_string();
+                    }
+                }
+            }
+        }
+
+        if let Ok(frame) = self
+            .send_control_request(json!({ "subtype": "get_settings" }), 4)
+            .await
+        {
+            if let Ok(body) = extract_control_response_body(&frame) {
+                if let Some(effective) = body.get("effective") {
+                    if let Some(eff) = effective
+                        .get("effortLevel")
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.is_empty())
+                    {
+                        self.effort = eff.to_string();
+                    }
+                    let mut cur_model = self.current_model.lock().await;
+                    if cur_model.is_none() {
+                        if let Some(m) = effective
+                            .get("model")
+                            .and_then(|v| v.as_str())
+                            .filter(|s| !s.is_empty())
+                        {
+                            *cur_model = Some(m.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    async fn current_effort_levels(&self) -> Vec<String> {
+        let cur = self.current_model.lock().await.clone();
+        effort_levels_for_model(&self.models_catalog, cur.as_deref())
+    }
+
+    fn display_name_for_model(&self, model_id: &str) -> String {
+        find_model_entry(&self.models_catalog, model_id)
+            .map(|m| m.name.clone())
+            .unwrap_or_else(|| model_id.to_string())
     }
 
     async fn write_frame(&mut self, frame: &Value) -> Result<(), String> {
@@ -329,16 +525,50 @@ impl ClaudeBackend {
     }
 
     pub async fn set_model(&mut self, _provider: String, model_id: String) -> Result<Value, String> {
-        let _ = self
+        let resp = self
             .send_control_request(
                 json!({ "subtype": "set_model", "model": model_id }),
                 10,
             )
             .await?;
+        extract_control_response_body(&resp)?;
         *self.current_model.lock().await = Some(model_id.clone());
+
+        // 若目标模型支持的 effort 档位不包含当前值, 自动对齐到兼容档位 (如 xhigh -> high)
+        let supported = self.current_effort_levels().await;
+        if !supported.is_empty() && !supported.iter().any(|lv| lv == &self.effort) {
+            if supported.len() == 1 && supported[0] == "off" {
+                self.effort = "off".to_string();
+            } else {
+                let fallback = if supported.iter().any(|lv| lv == "high") {
+                    "high".to_string()
+                } else {
+                    supported
+                        .last()
+                        .cloned()
+                        .unwrap_or_else(|| "medium".to_string())
+                };
+                if self
+                    .send_control_request(
+                        json!({
+                            "subtype": "apply_flag_settings",
+                            "settings": { "effortLevel": fallback },
+                        }),
+                        8,
+                    )
+                    .await
+                    .and_then(|r| extract_control_response_body(&r).map(|_| ()))
+                    .is_ok()
+                {
+                    self.effort = fallback;
+                }
+            }
+        }
+
+        let name = self.display_name_for_model(&model_id);
         Ok(json!({
             "id": model_id,
-            "name": model_id,
+            "name": name,
             "provider": "anthropic"
         }))
     }
@@ -347,12 +577,13 @@ impl ClaudeBackend {
         if !CLAUDE_PERMISSION_MODES.contains(&mode.as_str()) {
             return Err(format!("不支持的 Claude 权限模式: {mode}"));
         }
-        let _ = self
+        let resp = self
             .send_control_request(
                 json!({ "subtype": "set_permission_mode", "mode": mode }),
                 10,
             )
             .await?;
+        extract_control_response_body(&resp)?;
         *self.permission_mode.lock().await = mode.clone();
         Ok(json!({ "permissionMode": mode }))
     }
@@ -401,7 +632,7 @@ impl ClaudeBackend {
         Ok(json!({
             "model": model.as_ref().map(|m| json!({
                 "id": m,
-                "name": m,
+                "name": self.display_name_for_model(m),
                 "provider": "anthropic"
             })),
             "thinkingLevel": self.effort,
@@ -412,14 +643,19 @@ impl ClaudeBackend {
     }
 
     pub async fn get_available_models(&mut self) -> Result<Value, String> {
-        let mut models = vec![
-            json!({ "id": "default", "name": "default (推荐)", "provider": "anthropic" }),
-            json!({ "id": "sonnet", "name": "sonnet", "provider": "anthropic" }),
-            json!({ "id": "opus", "name": "opus", "provider": "anthropic" }),
-            json!({ "id": "haiku", "name": "haiku", "provider": "anthropic" }),
-        ];
+        let mut models: Vec<Value> = self
+            .models_catalog
+            .iter()
+            .map(|m| {
+                json!({
+                    "id": m.id,
+                    "name": m.name,
+                    "provider": "anthropic"
+                })
+            })
+            .collect();
         if let Some(cur) = self.current_model.lock().await.clone() {
-            if !["default", "sonnet", "opus", "haiku"].contains(&cur.as_str()) {
+            if find_model_entry(&self.models_catalog, &cur).is_none() {
                 models.insert(
                     0,
                     json!({ "id": cur, "name": cur, "provider": "anthropic" }),
@@ -430,12 +666,47 @@ impl ClaudeBackend {
     }
 
     pub async fn get_available_thinking_levels(&mut self) -> Result<Value, String> {
-        Ok(json!({ "levels": ["low", "medium", "high", "xhigh", "max"] }))
+        let levels = self.current_effort_levels().await;
+        Ok(json!({ "levels": levels, "current": self.effort }))
     }
 
     pub async fn set_thinking_level(&mut self, level: String) -> Result<Value, String> {
+        let allowed = self.current_effort_levels().await;
+        if allowed.len() == 1 && allowed[0] == "off" {
+            return Err("当前 Claude 模型不支持调节思考深度".into());
+        }
+        if !allowed.iter().any(|lv| lv == &level) {
+            return Err(format!(
+                "当前模型不支持的思考等级: {level}（可选: {}）",
+                allowed.join(", ")
+            ));
+        }
+        let resp = self
+            .send_control_request(
+                json!({
+                    "subtype": "apply_flag_settings",
+                    "settings": { "effortLevel": level },
+                }),
+                8,
+            )
+            .await?;
+        extract_control_response_body(&resp)?;
         self.effort = level.clone();
         Ok(json!({ "level": level }))
+    }
+
+    pub async fn cycle_thinking_level(&mut self) -> Result<Value, String> {
+        let levels = self.current_effort_levels().await;
+        if levels.len() <= 1 {
+            return Ok(json!({ "level": self.effort }));
+        }
+        let next_idx = levels
+            .iter()
+            .position(|lv| lv == &self.effort)
+            .map(|i| (i + 1) % levels.len())
+            .unwrap_or(0);
+        let next = levels[next_idx].clone();
+        self.set_thinking_level(next).await
     }
 
     pub async fn get_session_stats(&mut self) -> Result<Value, String> {
@@ -445,5 +716,74 @@ impl ClaudeBackend {
     pub async fn stop(&mut self) -> Result<(), String> {
         kill_process_tree(&mut self.child).await;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_initialize_models_and_resolves_effort_levels() {
+        let body = json!({
+            "models": [
+                {
+                    "value": "default",
+                    "resolvedModel": "claude-opus-5-5",
+                    "displayName": "Default (recommended)",
+                    "supportsEffort": true,
+                    "supportedEffortLevels": ["low", "medium", "high", "xhigh", "max"]
+                },
+                {
+                    "value": "claude-opus-4-6",
+                    "resolvedModel": "claude-opus-4-6",
+                    "displayName": "Opus 4.6",
+                    "supportsEffort": true,
+                    "supportedEffortLevels": ["low", "medium", "high", "max"]
+                },
+                {
+                    "value": "claude-haiku-4-5-20251001",
+                    "resolvedModel": "claude-haiku-4-5-20251001",
+                    "displayName": "Haiku 4.5",
+                    "supportsThinkingOff": true
+                }
+            ]
+        });
+
+        let catalog = parse_initialize_models(&body);
+        assert_eq!(catalog.len(), 3);
+        assert_eq!(
+            effort_levels_for_model(&catalog, Some("claude-opus-5-5")),
+            vec!["low", "medium", "high", "xhigh", "max"]
+        );
+        assert_eq!(
+            effort_levels_for_model(&catalog, Some("claude-opus-4-6")),
+            vec!["low", "medium", "high", "max"]
+        );
+        assert_eq!(
+            effort_levels_for_model(&catalog, Some("claude-haiku-4-5-20251001")),
+            vec!["off"]
+        );
+        assert_eq!(
+            effort_levels_for_model(&catalog, None),
+            vec!["low", "medium", "high", "xhigh", "max"]
+        );
+    }
+
+    #[test]
+    fn control_response_body_surfaces_errors() {
+        let ok = json!({
+            "type": "control_response",
+            "response": { "subtype": "success", "request_id": "r1", "response": { "ok": true } }
+        });
+        assert_eq!(extract_control_response_body(&ok).unwrap()["ok"], true);
+
+        let err = json!({
+            "type": "control_response",
+            "response": { "subtype": "error", "request_id": "r2", "error": "Unsupported control request" }
+        });
+        assert!(extract_control_response_body(&err)
+            .unwrap_err()
+            .contains("Unsupported"));
     }
 }

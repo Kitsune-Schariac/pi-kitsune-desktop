@@ -62,7 +62,7 @@ impl AgentKind {
                 steer: false,
                 follow_up: false,
                 hot_model_switch: true,
-                thinking_level: false,
+                thinking_level: true,
                 permission_modes: claude::CLAUDE_PERMISSION_MODES
                     .iter()
                     .map(|s| (*s).to_string())
@@ -370,7 +370,8 @@ impl AgentRuntime {
     pub async fn cycle_thinking_level(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.cycle_thinking_level().await,
-            Self::Claude(_) | Self::Acp(_) => Err("当前 Agent 不支持循环思考级别".into()),
+            Self::Claude(rt) => rt.cycle_thinking_level().await,
+            Self::Acp(_) => Err("当前 Agent 不支持循环思考级别".into()),
         }
     }
 
