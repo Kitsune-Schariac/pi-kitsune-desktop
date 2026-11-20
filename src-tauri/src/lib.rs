@@ -13,6 +13,7 @@ mod subagent_fleet;
 mod token_stats;
 mod trellis_tasks;
 
+use backends::claude::ClaudeBackend;
 use backends::pi::{PiBackend, PiWarmPool};
 use backends::{AgentKind, AgentRuntime};
 use std::collections::HashMap;
@@ -102,6 +103,7 @@ async fn start_session(
     agent_kind: Option<AgentKind>,
     provider: Option<String>,
     model: Option<String>,
+    permission_mode: Option<String>,
     session_path: Option<String>,
     session_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
@@ -197,7 +199,46 @@ async fn start_session(
                 "entries": entries,
             }))
         }
-        AgentKind::Claude => Err("Claude Code 后端将在 Phase 2 接入，敬请期待".into()),
+        AgentKind::Claude => {
+            let (entries, resume_id) = match &session_path {
+                Some(path) => {
+                    let abs = backends::claude::history::ensure_within_claude_projects(
+                        std::path::Path::new(path),
+                    )?;
+                    let entries = backends::claude::history::read_claude_session_entries(&abs)?;
+                    let rid = backends::claude::history::extract_claude_session_id(&abs);
+                    (entries, rid)
+                }
+                None => (Vec::new(), None),
+            };
+            let mode = permission_mode.unwrap_or_else(|| "auto".to_string());
+            let claude = ClaudeBackend::spawn(
+                app.clone(),
+                session_id.clone(),
+                cwd.clone(),
+                model,
+                Some(mode.clone()),
+                resume_id,
+                session_path,
+                None,
+            )
+            .await?;
+            let runtime = AgentRuntime::Claude(claude);
+            let capabilities = runtime.capabilities();
+            {
+                let mut guard = state.lock().await;
+                guard.runtimes.insert(session_id.clone(), runtime);
+                guard.touch(&session_id);
+                guard.evict_lru(&app).await;
+            }
+            Ok(serde_json::json!({
+                "sessionId": session_id,
+                "agentKind": kind,
+                "capabilities": capabilities,
+                "permissionMode": mode,
+                "entries": entries,
+            }))
+        }
         AgentKind::Agy => Err("Antigravity CLI (ACP) 后端将在 Phase 3 接入，敬请期待".into()),
     }
 }
@@ -349,6 +390,37 @@ async fn send_extension_ui_response(
     runtime.send_extension_ui_response(id, payload).await
 }
 
+/// 统一工具权限审批响应 (Claude Code `can_use_tool` / ACP `session/request_permission` 共用)
+#[tauri::command]
+async fn respond_permission(
+    state: State<'_, SharedRuntime>,
+    session_id: String,
+    request_id: String,
+    allow: bool,
+    reason: Option<String>,
+    option_id: Option<String>,
+) -> Result<(), String> {
+    let mut guard = state.lock().await;
+    guard.touch(&session_id);
+    let runtime = guard.runtimes.get_mut(&session_id).ok_or("session 不存在")?;
+    runtime
+        .respond_permission(request_id, allow, reason, option_id)
+        .await
+}
+
+/// 运行中一键切换权限模式 (如 Claude Code: auto / manual / acceptEdits / plan / dontAsk / bypassPermissions)
+#[tauri::command]
+async fn set_permission_mode(
+    state: State<'_, SharedRuntime>,
+    session_id: String,
+    mode: String,
+) -> Result<serde_json::Value, String> {
+    let mut guard = state.lock().await;
+    guard.touch(&session_id);
+    let runtime = guard.runtimes.get_mut(&session_id).ok_or("session 不存在")?;
+    runtime.set_permission_mode(mode).await
+}
+
 /// 动态拉取可透传的 /命令 候选, 无活跃会话时返回空列表而非报错
 #[tauri::command]
 async fn get_commands(state: State<'_, SharedRuntime>, session_id: String) -> Result<serde_json::Value, String> {
@@ -384,7 +456,7 @@ pub fn run() {
             get_state, get_available_models, set_model, cycle_model,
             set_thinking_level, cycle_thinking_level, get_available_thinking_levels,
             get_entries, get_session_stats, set_session_name,
-            send_extension_ui_response, get_commands,
+            send_extension_ui_response, respond_permission, set_permission_mode, get_commands,
             session_fs::list_projects_and_sessions, session_fs::delete_session_file,
             session_fs::read_file_for_context, session_fs::list_skills_and_packages,
             session_fs::get_session_file_mtime,

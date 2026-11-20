@@ -1,10 +1,11 @@
 //! Agent CLI 后端抽象层: 统一类型、能力声明、标准事件协议与静态分发运行时。
 //!
 //! 设计约束:
-//! - 所有 CLI 协议差异封闭在各自子模块 (`backends/pi/`, 后续 `claude/` / `acp/`)。
+//! - 所有 CLI 协议差异封闭在各自子模块 (`backends/pi/`, `backends/claude/`, 后续 `acp/`)。
 //! - 前端仅消费 `UnifiedEvent` (经 `agent_event` 频道) 与 `AgentCapabilities`。
 //! - 采用 `enum AgentRuntime` 静态分发: 零额外 crate 依赖、零装箱开销、编译期穷尽校验。
 
+pub mod claude;
 pub mod pi;
 pub mod process;
 
@@ -60,15 +61,11 @@ impl AgentKind {
                 steer: false,
                 follow_up: false,
                 hot_model_switch: true,
-                thinking_level: true,
-                permission_modes: vec![
-                    "auto".into(),
-                    "manual".into(),
-                    "acceptEdits".into(),
-                    "plan".into(),
-                    "dontAsk".into(),
-                    "bypassPermissions".into(),
-                ],
+                thinking_level: false,
+                permission_modes: claude::CLAUDE_PERMISSION_MODES
+                    .iter()
+                    .map(|s| (*s).to_string())
+                    .collect(),
                 extension_ui: false,
                 tool_approval: true,
                 remote_commands: false,
@@ -154,6 +151,27 @@ pub enum NotifyLevel {
     Error,
 }
 
+/// 权限审批候选项 (供 Claude `permission_suggestions` 与 ACP `options` 共用)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionOption {
+    pub id: String,
+    pub label: String,
+    pub kind: String,
+}
+
+/// 统一工具权限审批请求 (Claude `can_use_tool` / ACP `session/request_permission` 共用)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionRequestPayload {
+    pub id: String,
+    pub tool_name: String,
+    pub tool_call_id: Option<String>,
+    pub description: Option<String>,
+    pub input: Value,
+    pub options: Vec<PermissionOption>,
+}
+
 /// Rust → 前端统一事件协议 (通过 `agent_event` 通道推送 `{ sessionId, event }`)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -224,6 +242,16 @@ pub enum UnifiedEvent {
     UiRequest {
         request: Value,
     },
+    PermissionRequest {
+        request: PermissionRequestPayload,
+    },
+    #[serde(rename_all = "camelCase")]
+    SessionMeta {
+        session_path: Option<String>,
+        remote_session_id: Option<String>,
+        model: Option<String>,
+        permission_mode: Option<String>,
+    },
     #[serde(rename_all = "camelCase")]
     Notice {
         id: Option<String>,
@@ -242,12 +270,14 @@ pub enum UnifiedEvent {
 /// 活跃会话后端的静态分发容器。
 pub enum AgentRuntime {
     Pi(pi::PiBackend),
+    Claude(claude::ClaudeBackend),
 }
 
 impl AgentRuntime {
     pub fn kind(&self) -> AgentKind {
         match self {
             Self::Pi(_) => AgentKind::Pi,
+            Self::Claude(_) => AgentKind::Claude,
         }
     }
 
@@ -262,18 +292,21 @@ impl AgentRuntime {
     ) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.send_prompt(message, images).await,
+            Self::Claude(rt) => rt.send_prompt(message, images).await,
         }
     }
 
     pub async fn abort(&mut self) -> Result<(), String> {
         match self {
             Self::Pi(rt) => rt.abort().await,
+            Self::Claude(rt) => rt.abort().await,
         }
     }
 
     pub async fn steer(&mut self, message: String, images: Option<Vec<Value>>) -> Result<(), String> {
         match self {
             Self::Pi(rt) => rt.steer(message, images).await,
+            Self::Claude(_) => Err("Claude Code 不支持运行中 steer 插话".into()),
         }
     }
 
@@ -284,66 +317,77 @@ impl AgentRuntime {
     ) -> Result<(), String> {
         match self {
             Self::Pi(rt) => rt.follow_up(message, images).await,
+            Self::Claude(_) => Err("Claude Code 不支持 followUp 队列".into()),
         }
     }
 
     pub async fn get_state(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.get_state().await,
+            Self::Claude(rt) => rt.get_state().await,
         }
     }
 
     pub async fn get_available_models(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.get_available_models().await,
+            Self::Claude(rt) => rt.get_available_models().await,
         }
     }
 
     pub async fn set_model(&mut self, provider: String, model_id: String) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.set_model(provider, model_id).await,
+            Self::Claude(rt) => rt.set_model(provider, model_id).await,
         }
     }
 
     pub async fn cycle_model(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.cycle_model().await,
+            Self::Claude(_) => Err("Claude Code 不支持快捷循环模型".into()),
         }
     }
 
     pub async fn set_thinking_level(&mut self, level: String) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.set_thinking_level(level).await,
+            Self::Claude(rt) => rt.set_thinking_level(level).await,
         }
     }
 
     pub async fn cycle_thinking_level(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.cycle_thinking_level().await,
+            Self::Claude(_) => Err("Claude Code 不支持循环思考级别".into()),
         }
     }
 
     pub async fn get_available_thinking_levels(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.get_available_thinking_levels().await,
+            Self::Claude(rt) => rt.get_available_thinking_levels().await,
         }
     }
 
     pub async fn get_entries(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.get_entries().await,
+            Self::Claude(_) => Ok(serde_json::json!({ "entries": [] })),
         }
     }
 
     pub async fn get_session_stats(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.get_session_stats().await,
+            Self::Claude(rt) => rt.get_session_stats().await,
         }
     }
 
     pub async fn set_session_name(&mut self, name: String) -> Result<(), String> {
         match self {
             Self::Pi(rt) => rt.set_session_name(name).await,
+            Self::Claude(_) => Err("Claude Code 暂不支持会话重命名".into()),
         }
     }
 
@@ -354,18 +398,44 @@ impl AgentRuntime {
     ) -> Result<(), String> {
         match self {
             Self::Pi(rt) => rt.send_extension_ui_response(id, payload).await,
+            Self::Claude(_) => Err("Claude Code 不使用 PI 扩展 UI 协议".into()),
+        }
+    }
+
+    pub async fn respond_permission(
+        &mut self,
+        request_id: String,
+        allow: bool,
+        reason: Option<String>,
+        option_id: Option<String>,
+    ) -> Result<(), String> {
+        match self {
+            Self::Pi(_) => Err("Pi 使用扩展 UI 弹窗协议".into()),
+            Self::Claude(rt) => {
+                rt.respond_permission(request_id, allow, reason, option_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn set_permission_mode(&mut self, mode: String) -> Result<Value, String> {
+        match self {
+            Self::Pi(_) => Err("Pi 不支持权限模式切换".into()),
+            Self::Claude(rt) => rt.set_permission_mode(mode).await,
         }
     }
 
     pub async fn get_commands(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.get_commands().await,
+            Self::Claude(_) => Ok(serde_json::json!({ "commands": [] })),
         }
     }
 
     pub async fn stop(&mut self) -> Result<(), String> {
         match self {
             Self::Pi(rt) => rt.stop().await,
+            Self::Claude(rt) => rt.stop().await,
         }
     }
 }
@@ -408,7 +478,7 @@ pub async fn list_available_agents() -> Result<Vec<AgentDescriptor>, String> {
 
     Ok(vec![
         build(AgentKind::Pi, pi_ver, true, "pi"),
-        build(AgentKind::Claude, claude_ver, false, "claude"),
+        build(AgentKind::Claude, claude_ver, true, "claude"),
         build(AgentKind::Agy, agy_ver, false, "agy"),
     ])
 }

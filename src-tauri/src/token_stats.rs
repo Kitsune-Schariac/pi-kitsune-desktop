@@ -61,6 +61,9 @@ pub(crate) struct FileAgg {
     mtime_nanos: i128,
     size_bytes: u64,
     /// 文件级信息 (session 头权威来源)
+    pub(crate) agent_kind: crate::backends::AgentKind,
+    /// 该文件是否具备权威成本字段 (PI 原生恒为 true; Claude 有 cost-state 为 true, 否则 false 界面标「—」)
+    pub(crate) has_cost: bool,
     pub(crate) cwd: String,
     pub(crate) file_name: String,
     pub(crate) session_id: String,
@@ -375,6 +378,8 @@ pub(crate) fn scan_file(path: &Path) -> Option<FileAgg> {
     Some(FileAgg {
         mtime_nanos,
         size_bytes,
+        agent_kind: crate::backends::AgentKind::Pi,
+        has_cost: true,
         cwd,
         file_name: path
             .file_name()
@@ -385,6 +390,218 @@ pub(crate) fn scan_file(path: &Path) -> Option<FileAgg> {
         parent_path: None, // ensure_index 填, 见字段注释
         opaque_by_day,
         behavior: behavior_scanner.finish(),
+        sub,
+    })
+}
+
+/// 扫描单个 Claude Code jsonl 会话文件:
+/// - 按 `message.id` 去重 (Claude 同条 assistant 消息按块落盘多行且重复携带 usage, 实测 1877/3060 重复)
+/// - 提取最新 `type == "cost-state"` 行的 `modelUsage[model].costUSD` 作为权威成本; 缺失时 `has_cost = false`
+pub(crate) fn scan_claude_file(path: &Path) -> Option<FileAgg> {
+    use std::io::BufRead;
+
+    let metadata = std::fs::metadata(path).ok()?;
+    let mtime_nanos = metadata
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_nanos() as i128;
+    let size_bytes = metadata.len();
+    let file = std::fs::File::open(path).ok()?;
+    let reader = std::io::BufReader::new(file);
+
+    struct ClaudeMsgUsage {
+        model: String,
+        timestamp: String,
+        input: u64,
+        output: u64,
+        cache_read: u64,
+        cache_write: u64,
+    }
+
+    let mut session_id = String::new();
+    let mut cwd = String::new();
+    let mut dedup: BTreeMap<String, ClaudeMsgUsage> = BTreeMap::new();
+    let mut seq: u64 = 0;
+    let mut model_costs: BTreeMap<String, f64> = BTreeMap::new();
+    let mut total_cost_state: Option<f64> = None;
+
+    for line in reader.lines() {
+        let Ok(line) = line else { break };
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        if cwd.is_empty() {
+            if let Some(c) = v.get("cwd").and_then(|x| x.as_str()).filter(|s| !s.is_empty()) {
+                cwd = c.to_string();
+            }
+        }
+        if session_id.is_empty() {
+            if let Some(sid) = v
+                .get("sessionId")
+                .and_then(|x| x.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                session_id = sid.to_string();
+            }
+        }
+
+        match v.get("type").and_then(|t| t.as_str()) {
+            Some("cost-state") => {
+                if let Some(tc) = v.get("totalCostUSD").and_then(|x| x.as_f64()) {
+                    total_cost_state = Some(tc);
+                }
+                if let Some(mu) = v.get("modelUsage").and_then(|x| x.as_object()) {
+                    model_costs.clear();
+                    for (mdl, info) in mu {
+                        if let Some(c) = info.get("costUSD").and_then(|x| x.as_f64()) {
+                            model_costs.insert(mdl.clone(), c);
+                        }
+                    }
+                }
+            }
+            Some("assistant") => {
+                let Some(msg) = v.get("message") else { continue };
+                let Some(u) = msg.get("usage") else { continue };
+                let input = u.get("input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+                let output = u.get("output_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+                let cache_read = u
+                    .get("cache_read_input_tokens")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or(0);
+                let cache_write = u
+                    .get("cache_creation_input_tokens")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or(0);
+                if input + output + cache_read + cache_write == 0 {
+                    continue;
+                }
+                let model = msg
+                    .get("model")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let timestamp = v
+                    .get("timestamp")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let key = msg
+                    .get("id")
+                    .and_then(|x| x.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| {
+                        seq += 1;
+                        format!("__anon_{seq}")
+                    });
+                // 同一 message.id 覆盖为最新快照 (末次拥有最终 output_tokens)
+                dedup.insert(
+                    key,
+                    ClaudeMsgUsage {
+                        model,
+                        timestamp,
+                        input,
+                        output,
+                        cache_read,
+                        cache_write,
+                    },
+                );
+            }
+            _ => {}
+        }
+    }
+
+    if cwd.is_empty() || dedup.is_empty() {
+        return None;
+    }
+    if session_id.is_empty() {
+        session_id = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+    }
+
+    let provider = "anthropic".to_string();
+    let mut sub: BTreeMap<(String, String), SubAgg> = BTreeMap::new();
+    let mut model_msg_counts: BTreeMap<String, u64> = BTreeMap::new();
+    for m in dedup.values() {
+        *model_msg_counts.entry(m.model.clone()).or_insert(0) += 1;
+    }
+
+    let has_cost = total_cost_state.is_some() || !model_costs.is_empty();
+    let total_msgs = dedup.len() as f64;
+
+    for m in dedup.into_values() {
+        let total = m.input + m.output + m.cache_read + m.cache_write;
+        // 成本按模型精准分摊 (回退到 session 总成本均摊); 无 cost-state 时为 0
+        let msg_cost = if let Some(&mc) = model_costs.get(&m.model) {
+            let cnt = *model_msg_counts.get(&m.model).unwrap_or(&1) as f64;
+            mc / cnt.max(1.0)
+        } else if let Some(tc) = total_cost_state {
+            if model_costs.is_empty() {
+                tc / total_msgs.max(1.0)
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+
+        let e = sub.entry((provider.clone(), m.model.clone())).or_default();
+        e.input += m.input;
+        e.output += m.output;
+        e.cache_read += m.cache_read;
+        e.cache_write += m.cache_write;
+        e.total += total;
+        e.cost += msg_cost;
+        e.msg_count += 1;
+        e.last_provider = provider.clone();
+        e.last_provider_ts = m.timestamp.clone();
+        if !m.model.is_empty() {
+            e.last_model = m.model.clone();
+            e.last_model_ts = m.timestamp.clone();
+        }
+        if !m.timestamp.is_empty() {
+            e.last_timestamp = m.timestamp.clone();
+            let day = m.timestamp[..m.timestamp.len().min(10)].to_string();
+            let d = e.by_day.entry(day).or_default();
+            d.agg.0 += m.input;
+            d.agg.1 += m.output;
+            d.agg.2 += m.cache_read;
+            d.agg.3 += m.cache_write;
+            d.agg.4 += total;
+            d.agg.5 += msg_cost;
+            d.agg.6 += 1;
+            d.last_ts = m.timestamp;
+            d.last_provider = e.last_provider.clone();
+            d.last_provider_ts = e.last_provider_ts.clone();
+            if !e.last_model.is_empty() {
+                d.last_model = e.last_model.clone();
+                d.last_model_ts = e.last_model_ts.clone();
+            }
+        }
+    }
+
+    Some(FileAgg {
+        mtime_nanos,
+        size_bytes,
+        agent_kind: crate::backends::AgentKind::Claude,
+        has_cost,
+        cwd,
+        file_name: path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default(),
+        session_id,
+        agent: String::new(),
+        parent_path: None,
+        opaque_by_day: BTreeMap::new(),
+        behavior: crate::behavior_stats::FileBehavior::default(),
         sub,
     })
 }
@@ -416,14 +633,18 @@ fn collect_files_with_meta(dir: &Path, out: &mut BTreeMap<PathBuf, (i128, u64)>)
     }
 }
 
-/// 增量守卫: 磁盘枚举 + 与索引比对, 只重扫变化/新增/删除的文件
-/// 未变文件 O(1) 跳过 (stat 数百文件为毫秒级); 重扫单文件 ~0.5MB, 偶发可接受
+/// 增量守卫: 磁盘枚举 (PI + Claude 双源) + 与索引比对, 只重扫变化/新增/删除的文件
 fn ensure_index() {
-    let Ok(sessions_root) = crate::session_fs::agent_dir().map(|d| d.join("sessions")) else {
-        return;
-    };
-    let mut disk: BTreeMap<PathBuf, (i128, u64)> = BTreeMap::new();
-    collect_files_with_meta(&sessions_root, &mut disk);
+    let mut disk_pi: BTreeMap<PathBuf, (i128, u64)> = BTreeMap::new();
+    let pi_root = crate::session_fs::agent_dir().ok().map(|d| d.join("sessions"));
+    if let Some(root) = &pi_root {
+        collect_files_with_meta(root, &mut disk_pi);
+    }
+
+    let mut disk_claude: BTreeMap<PathBuf, (i128, u64)> = BTreeMap::new();
+    if let Ok(claude_root) = crate::backends::claude::history::claude_projects_dir() {
+        collect_files_with_meta(&claude_root, &mut disk_claude);
+    }
 
     let mut guard = match token_index().lock() {
         Ok(g) => g,
@@ -431,19 +652,49 @@ fn ensure_index() {
     };
 
     // 已删除的文件: 从索引移除
-    let stale: Vec<PathBuf> = guard.files.keys().filter(|k| !disk.contains_key(*k)).cloned().collect();
+    let stale: Vec<PathBuf> = guard
+        .files
+        .keys()
+        .filter(|k| !disk_pi.contains_key(*k) && !disk_claude.contains_key(*k))
+        .cloned()
+        .collect();
     for k in stale {
         guard.files.remove(&k);
     }
-    // 新增/变化: (mtime, size) 任一不匹配 → 重扫替换; 扫描失败(无 session 头等) → 移除
-    for (path, (mtime, size)) in &disk {
-        let unchanged = matches!(guard.files.get(path), Some(f) if f.mtime_nanos == *mtime && f.size_bytes == *size);
+
+    // 增量更新 PI 会话
+    if let Some(root) = &pi_root {
+        for (path, (mtime, size)) in &disk_pi {
+            let unchanged = matches!(
+                guard.files.get(path),
+                Some(f) if f.mtime_nanos == *mtime && f.size_bytes == *size
+            );
+            if unchanged {
+                continue;
+            }
+            match scan_file(path) {
+                Some(mut fa) => {
+                    fa.parent_path = parent_session_path(root, path);
+                    guard.files.insert(path.clone(), fa);
+                }
+                None => {
+                    guard.files.remove(path);
+                }
+            }
+        }
+    }
+
+    // 增量更新 Claude Code 会话
+    for (path, (mtime, size)) in &disk_claude {
+        let unchanged = matches!(
+            guard.files.get(path),
+            Some(f) if f.mtime_nanos == *mtime && f.size_bytes == *size
+        );
         if unchanged {
             continue;
         }
-        match scan_file(path) {
-            Some(mut fa) => {
-                fa.parent_path = parent_session_path(&sessions_root, path);
+        match scan_claude_file(path) {
+            Some(fa) => {
                 guard.files.insert(path.clone(), fa);
             }
             None => {
@@ -512,6 +763,7 @@ pub fn get_token_stats(
     provider: Option<String>,
     model: Option<String>,
     agent: Option<String>,
+    cli: Option<String>,
 ) -> Result<Value, String> {
     // ISO 前 10 字符 = UTC 日期 (start 取当天零点所在日, end 取次日零点所在日)
     let tf = TimeFilter {
@@ -522,6 +774,7 @@ pub fn get_token_stats(
     let prov = provider.as_deref();
     let mdl = model.as_deref();
     let agt = agent.as_deref().filter(|a| !a.is_empty());
+    let cli_filter = cli.as_deref().filter(|c| !c.is_empty());
 
     // 增量守卫: 只重扫变化的文件; 之后查询走内存索引 (毫秒级)
     ensure_index();
@@ -529,11 +782,23 @@ pub fn get_token_stats(
         Ok(g) => g,
         Err(poisoned) => poisoned.into_inner(),
     };
-    Ok(aggregate(&guard, &tf, proj, prov, mdl, agt))
+    Ok(aggregate_with_cli(&guard, &tf, proj, prov, mdl, agt, cli_filter))
 }
 
-/// 从内存索引按过滤条件聚合 (与旧实现消息级口径保持一致, 见 TimeFilter 注释)
+#[cfg(test)]
 fn aggregate(
+    index: &TokenIndex,
+    tf: &TimeFilter,
+    proj: Option<&str>,
+    prov: Option<&str>,
+    mdl: Option<&str>,
+    agt: Option<&str>,
+) -> Value {
+    aggregate_with_cli(index, tf, proj, prov, mdl, agt, None)
+}
+
+/// 从内存索引按过滤条件聚合 (支持按 Agent CLI 来源过滤)
+fn aggregate_with_cli(
     index: &TokenIndex,
     tf: &TimeFilter,
     proj: Option<&str>,
@@ -541,6 +806,7 @@ fn aggregate(
     mdl: Option<&str>,
     // 行级来源过滤: 哨兵 __main__ / __sub__, 或精确 agent 名
     agt: Option<&str>,
+    cli: Option<&str>,
 ) -> Value {
     // 汇总 (DayAgg 复用): total + by_day + 明细行 + 全量筛选集合
     let mut total: DayAgg = (0, 0, 0, 0, 0, 0.0, 0);
@@ -550,9 +816,21 @@ fn aggregate(
     let mut filter_providers = BTreeSet::new();
     let mut filter_models = BTreeSet::new();
     let mut filter_agents = BTreeSet::new();
+    let mut filter_clis = BTreeSet::new();
     let mut opaque_total: u64 = 0;
 
     for (path, fa) in &index.files {
+        let cli_str = match fa.agent_kind {
+            crate::backends::AgentKind::Pi => "pi",
+            crate::backends::AgentKind::Claude => "claude",
+            crate::backends::AgentKind::Agy => "agy",
+        };
+        filter_clis.insert(cli_str.to_string());
+        if let Some(c) = cli {
+            if !cli_str.eq_ignore_ascii_case(c) {
+                continue;
+            }
+        }
         // 项目归属: 子会话跟父会话走。子代理 cwd 可能是项目子目录 (如 …\proj\desktop),
         // 按自身 cwd 归类会让它变成独立的项目选项而掉出筛选 (见 prd.md 事实 9)
         let owner_cwd = fa
@@ -688,6 +966,8 @@ fn aggregate(
         let ts = cand_ts;
         sessions.push(serde_json::json!({
             "sessionId": fa.session_id, "fileName": fa.file_name,
+            "agentKind": cli_str,
+            "hasCost": fa.has_cost,
             // path 是索引 key, 全局唯一 —— 前端拿它当行 key (子会话文件名恒为 session.jsonl,
             // 靠 fileName+timestamp 组 key 撞上就静默丢行)
             "path": path.to_string_lossy(),
@@ -732,6 +1012,7 @@ fn aggregate(
             "providers": filter_providers.into_iter().collect::<Vec<_>>(),
             "models": filter_models.into_iter().collect::<Vec<_>>(),
             "agents": filter_agents.into_iter().collect::<Vec<_>>(),
+            "clis": filter_clis.into_iter().collect::<Vec<_>>(),
         },
     })
 }
@@ -858,6 +1139,7 @@ mod tests {
             total.6 += file_total.6;
             sessions.push(serde_json::json!({
                 "fileName": f.file_name, "sessionId": f.name,
+                "agentKind": "pi", "hasCost": true,
                 // 测试样本全是顶层会话: 无父、无 agent 名、无未落盘 dispatch, 归属字段取平凡值
                 "path": dir.join(&f.file_name).to_string_lossy(),
                 "project": f.cwd, "cwd": f.cwd,
@@ -890,6 +1172,7 @@ mod tests {
                 "providers": f_providers.into_iter().collect::<Vec<_>>(),
                 "models": f_models.into_iter().collect::<Vec<_>>(),
                 "agents": Vec::<String>::new(),
+                "clis": vec!["pi"],
             },
         })
     }
@@ -1181,6 +1464,63 @@ mod tests {
                 eprintln!("    {c:>4}  {a}");
             }
         });
+    }
+
+    #[test]
+    fn claude_scan_deduplicates_message_id_and_applies_cost_state() {
+        let dir = std::env::temp_dir().join(format!(
+            "kitsune-claude-stats-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("cc-sess.jsonl");
+        let mut fp = std::fs::File::create(&file).unwrap();
+        // 同一个 msg_1 写入两行 (thinking + tool_use), usage 相同, 不得双计
+        writeln!(
+            fp,
+            r#"{{"type":"assistant","cwd":"C:\\proj","sessionId":"cc-1","timestamp":"2026-11-20T01:00:00Z","message":{{"id":"msg_1","model":"claude-sonnet-4-6","usage":{{"input_tokens":10,"output_tokens":50,"cache_read_input_tokens":100,"cache_creation_input_tokens":20}}}}}}"#
+        )
+        .unwrap();
+        writeln!(
+            fp,
+            r#"{{"type":"assistant","cwd":"C:\\proj","sessionId":"cc-1","timestamp":"2026-11-20T01:00:01Z","message":{{"id":"msg_1","model":"claude-sonnet-4-6","usage":{{"input_tokens":10,"output_tokens":50,"cache_read_input_tokens":100,"cache_creation_input_tokens":20}}}}}}"#
+        )
+        .unwrap();
+        writeln!(
+            fp,
+            r#"{{"type":"cost-state","sessionId":"cc-1","totalCostUSD":0.25,"modelUsage":{{"claude-sonnet-4-6":{{"costUSD":0.25}}}}}}"#
+        )
+        .unwrap();
+        drop(fp);
+
+        let fa = scan_claude_file(&file).expect("应成功解析 Claude 会话");
+        assert_eq!(fa.agent_kind, crate::backends::AgentKind::Claude);
+        assert!(fa.has_cost);
+
+        let mut files = BTreeMap::new();
+        files.insert(file.clone(), fa);
+        let idx = TokenIndex { files };
+        let tf = TimeFilter {
+            start_day: None,
+            end_day: None,
+        };
+        let res_cc = aggregate_with_cli(&idx, &tf, None, None, None, None, Some("claude"));
+        assert_eq!(res_cc["summary"]["messageCount"], 1);
+        assert_eq!(res_cc["summary"]["input"], 10);
+        assert_eq!(res_cc["summary"]["output"], 50);
+        assert_eq!(res_cc["summary"]["cacheRead"], 100);
+        assert_eq!(res_cc["summary"]["cacheWrite"], 20);
+        assert!((res_cc["summary"]["cost"].as_f64().unwrap() - 0.25).abs() < 1e-9);
+        assert_eq!(res_cc["sessions"][0]["agentKind"], "claude");
+        assert_eq!(res_cc["sessions"][0]["hasCost"], true);
+
+        let res_pi = aggregate_with_cli(&idx, &tf, None, None, None, None, Some("pi"));
+        assert_eq!(res_pi["summary"]["sessionCount"], 0);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 

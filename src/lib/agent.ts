@@ -37,6 +37,30 @@ export interface MessageUsage {
   cost: number | null;
 }
 
+export interface PermissionOption {
+  id: string;
+  label: string;
+  kind: string;
+}
+
+export interface PermissionRequest {
+  id: string;
+  toolName: string;
+  toolCallId: string | null;
+  description: string | null;
+  input: unknown;
+  options: PermissionOption[];
+}
+
+export const PERMISSION_MODE_LABELS: Record<string, string> = {
+  auto: "自动 (auto)",
+  manual: "手动确认",
+  acceptEdits: "自动编辑",
+  plan: "仅规划",
+  dontAsk: "拒绝未知",
+  bypassPermissions: "跳过审批",
+};
+
 export type ContentBlockKind = "text" | "thinking" | "tool_call";
 
 export type UnifiedEvent =
@@ -60,6 +84,14 @@ export type UnifiedEvent =
   | { type: "retry_end"; success: boolean; attempt: number; finalError: string | null }
   | { type: "queue_update"; steering: string[]; followUp: string[] }
   | { type: "ui_request"; request: UiRequest }
+  | { type: "permission_request"; request: PermissionRequest }
+  | {
+      type: "session_meta";
+      sessionPath: string | null;
+      remoteSessionId: string | null;
+      model: string | null;
+      permissionMode: string | null;
+    }
   | {
       type: "notice";
       id: string | null;

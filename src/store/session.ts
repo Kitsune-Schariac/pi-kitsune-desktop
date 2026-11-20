@@ -11,6 +11,7 @@ import {
   type AgentCapabilities,
   type AgentEventPayload,
   type AgentKind,
+  type PermissionRequest,
 } from "../lib/agent";
 
 // 每次 agent_start 自增的纪元号。prompt 的 disposition 回来时要靠它判断「这期间 pi 到底起没起 agent」:
@@ -125,6 +126,9 @@ export interface SessionState {
   steeringQueue: string[];
   followUpQueue: string[];
   uiRequests: UiRequest[];      // extension_ui_request dialog 类请求队列 (FIFO, 一次弹一个)
+  permissionRequests: PermissionRequest[]; // 统一工具审批队列 (Claude can_use_tool / ACP request_permission)
+  permissionMode: string | null;           // 当前权限模式 (如 Claude Code: auto / manual / acceptEdits / plan)
+  remoteSessionId: string | null;          // 外部 CLI 会话 ID (Claude session_id / ACP sessionId)
   contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } | null;
   tokenStats: {
     tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
@@ -147,7 +151,13 @@ interface SessionStore {
 
   startSession: (
     cwd: string,
-    opts?: { agentKind?: AgentKind; provider?: string; model?: string; sessionPath?: string },
+    opts?: {
+      agentKind?: AgentKind;
+      provider?: string;
+      model?: string;
+      permissionMode?: string;
+      sessionPath?: string;
+    },
   ) => Promise<string>;
   stopSession: (sessionId: string) => Promise<void>;
   setActiveSession: (sessionId: string) => void;
@@ -176,6 +186,14 @@ interface SessionStore {
   sampleSpeed: (sessionId: string) => number | null;
   // extension_ui_request 响应: 乐观移出队列后写回 pi; 失败时 pi 侧超时自动解决, 不阻塞
   resolveUiRequest: (sessionId: string, id: string, payload: Record<string, unknown>) => Promise<void>;
+  // 统一工具审批响应 (Claude can_use_tool / ACP request_permission)
+  respondPermission: (
+    sessionId: string,
+    requestId: string,
+    allow: boolean,
+    opts?: { reason?: string; optionId?: string },
+  ) => Promise<void>;
+  setPermissionMode: (sessionId: string, mode: string) => Promise<void>;
   // notify 通知条 (全局, 跨会话展示)
   notifications: UiNotification[];
   dismissNotification: (id: string) => void;
@@ -218,17 +236,20 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           sessionId: string;
           agentKind?: AgentKind;
           capabilities?: AgentCapabilities;
+          permissionMode?: string | null;
           entries?: unknown[];
         }>("start_session", {
           cwd,
           agentKind: requestedKind,
           provider: opts?.provider ?? null,
           model: opts?.model ?? null,
+          permissionMode: opts?.permissionMode ?? null,
           sessionPath,
         });
         const id = data.sessionId;
         const agentKind = normalizeAgentKind(data.agentKind ?? requestedKind);
         const capabilities = data.capabilities ?? PI_CAPABILITIES;
+        const permissionMode = data.permissionMode ?? (capabilities.permissionModes[0] ?? null);
         // Array.isArray 守卫直接收窄类型 (布尔中间变量无法把收窄传给后续使用)
         const rawEntries = Array.isArray(data.entries) ? data.entries : null;
         const entries = rawEntries ? mapHistoryEntries(rawEntries) : [];
@@ -242,6 +263,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
               error: null, currentModel: null, thinkingLevel: "medium",
               availableModels: [], availableThinkingLevels: ["off"],
               steeringQueue: [], followUpQueue: [], uiRequests: [],
+              permissionRequests: [], permissionMode, remoteSessionId: null,
               contextUsage: null, tokenStats: null, turnStats: null,
             },
           },
@@ -278,7 +300,13 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       resetLive(sessionId);
       // detach: 停 pi 进程但保留 entries (秒切缓存); sessionOrder 保留让侧边栏 openId 仍命中快路径
       // uiRequests 同步清空: 进程没了 pi 侧 pending 自动 reject, 前端不能留悬挂弹窗
-      patch(sessionId, { detached: true, isStreaming: false, currentAssistantId: null, uiRequests: [] });
+      patch(sessionId, {
+        detached: true,
+        isStreaming: false,
+        currentAssistantId: null,
+        uiRequests: [],
+        permissionRequests: [],
+      });
       // activeSessionId 若是被停的, 切到下一个非自己会话 (detached 也能秒切, 允许切到 detached)
       set((state) => {
         if (state.activeSessionId !== sessionId) return state;
@@ -355,7 +383,13 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     // LRU 淘汰 / 进程异常退出通知: 标记 detached, entries 保留 (秒切缓存), 切回走 reattach
     markDetached: (sessionId: string) => {
       resetLive(sessionId);
-      patch(sessionId, { detached: true, isStreaming: false, currentAssistantId: null, uiRequests: [] });
+      patch(sessionId, {
+        detached: true,
+        isStreaming: false,
+        currentAssistantId: null,
+        uiRequests: [],
+        permissionRequests: [],
+      });
     },
 
     setActiveSession: (sessionId) => set((state) => {
@@ -436,12 +470,15 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     loadState: async (sessionId) => {
       try {
         const data = await invoke<Record<string, unknown>>("get_state", { sessionId });
+        const cur = get().sessions[sessionId];
         patch(sessionId, {
-          currentModel: (data.model as ModelInfo) || null,
-          thinkingLevel: (data.thinkingLevel as string) || "medium",
+          currentModel: (data.model as ModelInfo) || cur?.currentModel || null,
+          thinkingLevel: (data.thinkingLevel as string) || cur?.thinkingLevel || "medium",
+          permissionMode: (data.permissionMode as string) || cur?.permissionMode || null,
+          remoteSessionId: (data.remoteSessionId as string) || cur?.remoteSessionId || null,
           // 新会话 spawn 后 get_state 即返回真实 sessionFile 路径 (文件在首次 prompt 后才落盘);
           // 有值才覆盖, 无值 (极端情况) 保留 startSession 传入的历史路径
-          sessionPath: (data.sessionFile as string) || (get().sessions[sessionId]?.sessionPath ?? null),
+          sessionPath: (data.sessionFile as string) || (cur?.sessionPath ?? null),
         });
       } catch { /* ignore */ }
     },
@@ -766,6 +803,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
             isStreaming: false,
             currentAssistantId: null,
             uiRequests: [],
+            permissionRequests: [],
             error: event.message || "Agent 进程已退出",
           });
           break;
@@ -774,6 +812,29 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           const cur = get().sessions[sessionId];
           if (!cur) break;
           patch(sessionId, { uiRequests: [...cur.uiRequests, event.request] });
+          break;
+        }
+        case "permission_request": {
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          patch(sessionId, { permissionRequests: [...cur.permissionRequests, event.request] });
+          break;
+        }
+        case "session_meta": {
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          const fields: Partial<SessionState> = {};
+          if (event.sessionPath) fields.sessionPath = event.sessionPath;
+          if (event.remoteSessionId) fields.remoteSessionId = event.remoteSessionId;
+          if (event.permissionMode) fields.permissionMode = event.permissionMode;
+          if (event.model) {
+            fields.currentModel = {
+              id: event.model,
+              name: event.model,
+              provider: cur.agentKind === "claude" ? "anthropic" : cur.agentKind,
+            };
+          }
+          patch(sessionId, fields);
           break;
         }
         case "notice": {
@@ -814,6 +875,35 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         await invoke("send_extension_ui_response", { sessionId, id, payload });
       } catch (e) {
         patch(sessionId, { error: `响应扩展请求失败: ${String(e)}` });
+      }
+    },
+
+    respondPermission: async (sessionId, requestId, allow, opts) => {
+      const cur = get().sessions[sessionId];
+      if (cur) {
+        patch(sessionId, {
+          permissionRequests: cur.permissionRequests.filter((r) => r.id !== requestId),
+        });
+      }
+      try {
+        await invoke("respond_permission", {
+          sessionId,
+          requestId,
+          allow,
+          reason: opts?.reason ?? null,
+          optionId: opts?.optionId ?? null,
+        });
+      } catch (e) {
+        patch(sessionId, { error: `发送权限审批响应失败: ${String(e)}` });
+      }
+    },
+
+    setPermissionMode: async (sessionId, mode) => {
+      try {
+        await invoke("set_permission_mode", { sessionId, mode });
+        patch(sessionId, { permissionMode: mode });
+      } catch (e) {
+        patch(sessionId, { error: `切换权限模式失败: ${String(e)}` });
       }
     },
 

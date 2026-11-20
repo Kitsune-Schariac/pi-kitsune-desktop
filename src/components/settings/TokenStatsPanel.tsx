@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { StatsFilterBar, projectLabel } from "./StatsFilterBar";
 import { Badge, Card, EmptyHint, Select } from "../ui";
+import { AgentBadge } from "../AgentBadge";
+import { AGENT_META, type AgentKind } from "../../lib/agent";
 import {
   resolveQueryBounds,
   useStatsFilterStore,
@@ -15,6 +17,8 @@ import {
 // ---- 后端 get_token_stats 返回结构 ----
 interface SessionRow {
   sessionId: string; fileName: string; project: string;
+  agentKind?: AgentKind;
+  hasCost?: boolean;
   // path = 索引 key 绝对路径, 全局唯一 (子会话文件名恒为 session.jsonl, 不能拿它组行 key)
   path: string;
   // cwd = 会话自身真实工作目录; project 是归属后的项目 (子会话跟父会话走)
@@ -39,7 +43,7 @@ interface TokenStatsResult {
     cacheWrite: number; total: number; cost: number; messageCount: number;
   }[];
   sessions: SessionRow[];
-  filters: { projects: string[]; providers: string[]; models: string[]; agents: string[] };
+  filters: { projects: string[]; providers: string[]; models: string[]; agents: string[]; clis?: string[] };
 }
 
 // 数值展示: token 用千分位, 花费保留 4 位小数
@@ -71,6 +75,7 @@ export function TokenStatsPanel() {
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
   const [agent, setAgent] = useState("");
+  const [cli, setCli] = useState("");
   // ---- 结果 ----
   const [data, setData] = useState<TokenStatsResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,11 +96,12 @@ export function TokenStatsPanel() {
       provider: provider || null,
       model: model || null,
       agent: agent || null,
+      cli: cli || null,
     })
       .then((res) => { if (reqId.current === id) { setData(res); setExpanded(new Set()); } })
       .catch((e) => { if (reqId.current === id) setError(String(e)); })
       .finally(() => { if (reqId.current === id) setLoading(false); });
-  }, [range, customStart, customEnd, project, provider, model, agent]);
+  }, [range, customStart, customEnd, project, provider, model, agent, cli]);
 
   const summary = data?.summary;
   const byDay = data?.byDay ?? [];
@@ -140,8 +146,21 @@ export function TokenStatsPanel() {
         </div>
       )}
 
-      {/* 筛选栏: 时间+项目共享组件, provider/model/agent 是本面板私有插槽 */}
+      {/* 筛选栏: 时间+项目共享组件, cli/provider/model/agent 是本面板私有插槽 */}
       <StatsFilterBar projects={filters?.projects ?? []}>
+        <Select
+          value={cli}
+          onChange={setCli}
+          title="按 Agent CLI 筛选"
+          className="w-[130px]"
+          options={[
+            { value: "", label: "全部 CLI" },
+            ...(filters?.clis ?? ["pi", "claude"]).map((c) => ({
+              value: c,
+              label: AGENT_META[c as AgentKind]?.label ?? c,
+            })),
+          ]}
+        />
         <Select
           value={provider}
           onChange={setProvider}
@@ -309,6 +328,7 @@ export function TokenStatsPanel() {
                         </td>
                         <td className="max-w-[200px] px-3 py-2" title={s.cwd || s.project}>
                           <div className="flex items-center gap-2">
+                            <AgentBadge kind={s.agentKind} />
                             <span className="truncate">{projectLabel(s.project)}</span>
                             {s.agent && (
                               <Badge>
@@ -342,7 +362,12 @@ export function TokenStatsPanel() {
                             </span>
                           )}
                         </td>
-                        <td className="px-3 py-2 tabular-nums">{fmtCost(sum.cost)}</td>
+                        <td
+                          className="px-3 py-2 tabular-nums"
+                          title={s.hasCost === false ? "该会话无精确成本记录" : undefined}
+                        >
+                          {s.hasCost === false && sum.cost === 0 ? "—" : fmtCost(sum.cost)}
+                        </td>
                       </tr>
                       {open &&
                         kids.map((k) => (

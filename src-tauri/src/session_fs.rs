@@ -197,79 +197,99 @@ fn read_session_preview(path: &Path) -> (String, String, String) {
     (session_id, preview, cwd)
 }
 
-/// 扫描 ~/.pi/agent/sessions/: 子目录=项目, 顶层 *.jsonl=会话
-/// 嵌套 run/分支目录 (xxx/<hash>/run-0/session.jsonl) 不取
+/// 扫描多源本地会话目录 (`~/.pi/agent/sessions/` + `~/.claude/projects/`):
+/// 同项目 (cwd 大小写与斜杠归一化一致) 合并归组, 会话按最后修改时间倒序混排。
 #[tauri::command]
 pub fn list_projects_and_sessions() -> Result<Vec<ProjectInfo>, String> {
-    let sessions_root = agent_dir()?.join("sessions");
-    let mut projects = Vec::new();
-    let Ok(entries) = std::fs::read_dir(&sessions_root) else {
-        return Err(format!("无法读取会话目录: {}", sessions_root.display()));
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let Some(dir_name) = entry.file_name().to_str().map(|s| s.to_string()) else {
-            continue;
-        };
-        // 会话按最后修改时间倒序 (见下方 sort_by), 同时收集会话头 cwd (权威项目路径)
-        let mut sessions: Vec<SessionInfo> = Vec::new();
-        let mut project_cwd: Option<String> = None;
-        let Ok(files) = std::fs::read_dir(&path) else { continue };
-        for f in files.flatten() {
-            let fpath = f.path();
-            if fpath.is_dir() || fpath.extension().and_then(|e| e.to_str()) != Some("jsonl") {
-                continue;
+    use std::collections::HashMap;
+
+    let norm_key = |p: &str| p.trim_end_matches(['\\', '/']).replace('\\', "/").to_ascii_lowercase();
+    let mut by_key: HashMap<String, ProjectInfo> = HashMap::new();
+
+    // 1. 扫描 PI 会话目录 (不存在时安静降级, 允许仅使用 Claude/其他 Agent)
+    if let Ok(sessions_root) = agent_dir().map(|d| d.join("sessions")) {
+        if let Ok(entries) = std::fs::read_dir(&sessions_root) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_dir() {
+                    continue;
+                }
+                let Some(dir_name) = entry.file_name().to_str().map(|s| s.to_string()) else {
+                    continue;
+                };
+                let mut sessions: Vec<SessionInfo> = Vec::new();
+                let mut project_cwd: Option<String> = None;
+                let Ok(files) = std::fs::read_dir(&path) else { continue };
+                for f in files.flatten() {
+                    let fpath = f.path();
+                    if fpath.is_dir() || fpath.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                        continue;
+                    }
+                    let Some(file_name) = f.file_name().to_str().map(|s| s.to_string()) else {
+                        continue;
+                    };
+                    let (ts, uuid) = match file_name.split_once('_') {
+                        Some((ts, rest)) => (ts.to_string(), rest.trim_end_matches(".jsonl").to_string()),
+                        None => continue,
+                    };
+                    let (id, preview, cwd) = read_session_preview(&fpath);
+                    if project_cwd.is_none() && !cwd.is_empty() {
+                        project_cwd = Some(cwd);
+                    }
+                    let mtime_ms = std::fs::metadata(&fpath)
+                        .ok()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_millis() as u64);
+                    sessions.push(SessionInfo {
+                        session_id: if id.is_empty() { uuid } else { id },
+                        file_name,
+                        session_path: fpath.to_string_lossy().to_string(),
+                        timestamp: ts,
+                        preview,
+                        mtime_ms,
+                        agent_kind: crate::backends::AgentKind::Pi,
+                    });
+                }
+                let path_str = project_cwd.unwrap_or_else(|| decode_project_dir(&dir_name));
+                let key = norm_key(&path_str);
+                let display_name = Path::new(&path_str)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path_str.clone());
+                let entry = by_key.entry(key).or_insert_with(|| ProjectInfo {
+                    display_name,
+                    path: path_str,
+                    sessions: Vec::new(),
+                });
+                entry.sessions.extend(sessions);
             }
-            let Some(file_name) = f.file_name().to_str().map(|s| s.to_string()) else {
-                continue;
-            };
-            // 文件名 = 时间戳_uuid.jsonl
-            let (ts, uuid) = match file_name.split_once('_') {
-                Some((ts, rest)) => (ts.to_string(), rest.trim_end_matches(".jsonl").to_string()),
-                None => continue,
-            };
-            let (id, preview, cwd) = read_session_preview(&fpath);
-            if project_cwd.is_none() && !cwd.is_empty() {
-                project_cwd = Some(cwd);
-            }
-            // mtime: 排序键 (刚活动过的会话排最前)。取不到时置 None, 排序回退文件名时间戳
-            let mtime_ms = std::fs::metadata(&fpath)
-                .ok()
-                .and_then(|m| m.modified().ok())
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_millis() as u64);
-            sessions.push(SessionInfo {
-                session_id: if id.is_empty() { uuid } else { id },
-                file_name,
-                session_path: fpath.to_string_lossy().to_string(),
-                timestamp: ts,
-                preview,
-                mtime_ms,
-                agent_kind: crate::backends::AgentKind::Pi,
-            });
         }
-        // 会话按最后修改时间倒序 (最近活动在前); mtime 不可得时回退文件名时间戳,
-        // 不让个别元数据异常的文件把整个列表顺序打乱
-        sessions.sort_by(|a, b| {
+    }
+
+    // 2. 扫描 Claude Code 会话目录并按归一化 cwd 合并
+    for (cwd, sess) in crate::backends::claude::history::list_claude_sessions() {
+        let key = norm_key(&cwd);
+        let display_name = Path::new(&cwd)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| cwd.clone());
+        let entry = by_key.entry(key).or_insert_with(|| ProjectInfo {
+            display_name,
+            path: cwd,
+            sessions: Vec::new(),
+        });
+        entry.sessions.push(sess);
+    }
+
+    let mut projects: Vec<ProjectInfo> = by_key.into_values().collect();
+    for p in &mut projects {
+        p.sessions.sort_by(|a, b| {
             b.mtime_ms
                 .unwrap_or_else(|| parse_file_ts_ms(&b.timestamp).unwrap_or(0))
                 .cmp(&a.mtime_ms.unwrap_or_else(|| parse_file_ts_ms(&a.timestamp).unwrap_or(0)))
         });
-        // 项目路径: 会话头的 cwd 是权威 (pi 编码有损, 目录名不可信); 无会话时回退有损反解
-        let path_str = project_cwd.unwrap_or_else(|| decode_project_dir(&dir_name));
-        projects.push(ProjectInfo {
-            display_name: Path::new(&path_str)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| path_str.clone()),
-            path: path_str,
-            sessions,
-        });
     }
-    // 项目按路径字母序 (顺序由前端拖拽持久化接管)
     projects.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(projects)
 }
@@ -426,19 +446,24 @@ pub fn list_files_recursive(root: String) -> Result<Vec<DirEntry>, String> {
     Ok(files)
 }
 
-/// 读取历史会话 entries (前端「引用会话消息」用): 复用直读实现, 带路径安全校验
+/// 读取历史会话 entries (前端「引用会话消息」用): 兼容 PI 与 Claude 双根并做路径安全校验
 #[tauri::command]
 pub fn read_session_entries_public(session_path: String) -> Result<Vec<serde_json::Value>, String> {
-    let abs = ensure_within_sessions(Path::new(&session_path))?;
-    read_session_entries(&abs)
+    let p = Path::new(&session_path);
+    if let Ok(abs) = ensure_within_sessions(p) {
+        return read_session_entries(&abs);
+    }
+    let abs = crate::backends::claude::history::ensure_within_claude_projects(p)?;
+    crate::backends::claude::history::read_claude_session_entries(&abs)
 }
 
-/// 删除会话文件 (校验路径必须位于 sessions 根目录下, 防误删任意路径)
+/// 删除会话文件 (校验路径必须位于 PI 或 Claude 会话根目录下, 防误删任意路径)
 #[tauri::command]
 pub fn delete_session_file(session_path: String) -> Result<(), String> {
-    let target_abs = ensure_within_sessions(&PathBuf::from(&session_path))?;
+    let p = PathBuf::from(&session_path);
+    let target_abs = ensure_within_sessions(&p)
+        .or_else(|_| crate::backends::claude::history::ensure_within_claude_projects(&p))?;
     std::fs::remove_file(&target_abs).map_err(|e| format!("删除失败: {e}"))?;
-    // token 统计索引联动: 移除该文件条目, 防止统计虚高 (不要求索引已初始化)
     crate::token_stats::remove_index_file(&target_abs);
     Ok(())
 }
@@ -704,7 +729,7 @@ mod tests {
             agent_kind: crate::backends::AgentKind::Pi,
         };
         // 时间戳 → 对应毫秒 (量级一致, 避免夹具自身引入倒挂)
-        let jan = parse_file_ts_ms("2026-01-01T00-00-00-000Z").unwrap();
+        let _jan = parse_file_ts_ms("2026-01-01T00-00-00-000Z").unwrap();
         let jun = parse_file_ts_ms("2026-06-01T00-00-00-000Z").unwrap();
         let mut sessions = vec![
             // 旧文件名 + 新 mtime (刚活动过) → 应排最前

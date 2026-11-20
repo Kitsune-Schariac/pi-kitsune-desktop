@@ -14,6 +14,7 @@ import { SettingsWindow, type SettingsSection } from "./components/settings/Sett
 import { SkillsPanel } from "./components/panels/SkillsPanel";
 import { PackagesPanel } from "./components/panels/PackagesPanel";
 import { NotificationToasts, UiRequestModal } from "./components/UiRequestModal";
+import { PermissionRequestModal } from "./components/PermissionRequestModal";
 import { FileViewer } from "./components/FileViewer";
 import { useThemeStore } from "./store/theme";
 import { useAgentsStore } from "./store/agents";
@@ -32,6 +33,7 @@ export default function App() {
   const isSwitching = useSessionStore((s) => s.isSwitching);
   const loadProjects = useProjectsStore((s) => s.loadProjects);
   const resolveUiRequest = useSessionStore((s) => s.resolveUiRequest);
+  const respondPermission = useSessionStore((s) => s.respondPermission);
   const notifications = useSessionStore((s) => s.notifications);
   const dismissNotification = useSessionStore((s) => s.dismissNotification);
   const clearStep = useUiStore((s) => s.clearStep);
@@ -181,6 +183,15 @@ export default function App() {
             request={active.uiRequests[0]}
             onResolve={(id, payload) => resolveUiRequest(activeSessionId!, id, payload)}
             onCancel={(id) => resolveUiRequest(activeSessionId!, id, { cancelled: true })}
+          />
+        )}
+
+        {/* 统一工具权限审批弹窗 (Claude Code / ACP 共用, FIFO) */}
+        {active && active.permissionRequests.length > 0 && (
+          <PermissionRequestModal
+            request={active.permissionRequests[0]}
+            onAllow={(id, optionId) => void respondPermission(activeSessionId!, id, true, { optionId })}
+            onDeny={(id) => void respondPermission(activeSessionId!, id, false)}
           />
         )}
 

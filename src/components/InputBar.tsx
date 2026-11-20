@@ -5,9 +5,9 @@ import { useSessionStore } from "../store/session";
 import { useProjectsStore } from "../store/projects";
 import { useAgentsStore } from "../store/agents";
 import type { ModelInfo } from "../store/session";
-import { PI_CAPABILITIES } from "../lib/agent";
+import { PI_CAPABILITIES, PERMISSION_MODE_LABELS } from "../lib/agent";
 import {
-  Send, Square, Paperclip, X, ChevronDown, Cpu, Brain, Loader2,
+  Send, Square, Paperclip, X, ChevronDown, Cpu, Brain, Shield, Loader2,
   ArrowUp, ArrowDown, Clock, DollarSign, Gauge, Database, FolderGit2, Slash, FilePlus2,
 } from "lucide-react";
 import { QueueIndicator } from "./QueueIndicator";
@@ -269,6 +269,8 @@ export function InputBar({
   const availableThinkingLevels = active?.availableThinkingLevels ?? ["off"];
   const setModel = useSessionStore((s) => s.setModel);
   const setThinkingLevel = useSessionStore((s) => s.setThinkingLevel);
+  const setPermissionMode = useSessionStore((s) => s.setPermissionMode);
+  const permissionMode = active?.permissionMode ?? caps.permissionModes[0] ?? null;
   const sendPrompt = useSessionStore((s) => s.sendPrompt);
   const sendSteer = useSessionStore((s) => s.sendSteer);
   const sendFollowUp = useSessionStore((s) => s.sendFollowUp);
@@ -914,6 +916,21 @@ export function InputBar({
                 onChange={(lv) => activeSessionId && setThinkingLevel(activeSessionId, lv)}
                 disabled={!activeSessionId || availableThinkingLevels.length <= 1}
                 openRef={thinkingSelectOpen}
+              />
+            )}
+            {caps.permissionModes.length > 0 && permissionMode && (
+              <MiniSelect
+                label="权限模式 (一键切换)"
+                icon={Shield}
+                value={PERMISSION_MODE_LABELS[permissionMode] ?? permissionMode}
+                options={caps.permissionModes.map((m) => PERMISSION_MODE_LABELS[m] ?? m)}
+                onChange={(pickedLabel) => {
+                  const raw = caps.permissionModes.find(
+                    (m) => (PERMISSION_MODE_LABELS[m] ?? m) === pickedLabel
+                  ) ?? pickedLabel;
+                  if (activeSessionId) void setPermissionMode(activeSessionId, raw);
+                }}
+                disabled={!activeSessionId}
               />
             )}
 

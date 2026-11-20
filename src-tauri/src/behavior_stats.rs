@@ -436,6 +436,10 @@ fn aggregate(index: &token_stats::TokenIndex, range: &DayRange, project: Option<
     let mut slow_all: Vec<Value> = Vec::new();
 
     for (path, fa) in &index.files {
+        // 行为统计本阶段仅覆盖 PI 会话 (Claude/ACP 轮次与重试结构不同, 不混算)
+        if fa.agent_kind != crate::backends::AgentKind::Pi {
+            continue;
+        }
         // 项目归属与过滤口径必须与 token_stats::aggregate 完全一致 —— 两个面板共享同一个
         // 项目下拉 (StatsFilterBar), 只改一边会让同一筛选条件在两处覆盖不同的会话集合。
         // 子会话跟父会话走: 子代理 cwd 可能是项目子目录, 按自身 cwd 归类会掉出筛选
