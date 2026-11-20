@@ -11,9 +11,9 @@
 pub mod protocol;
 
 use crate::backends::process::{build_cli_command, kill_process_tree, strip_newline};
-use crate::backends::{AgentKind, NotifyLevel, PermissionOption, UnifiedEvent};
+use crate::backends::{AgentKind, MessageUsage, NotifyLevel, PermissionOption, UnifiedEvent};
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -22,7 +22,12 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin};
 use tokio::sync::{oneshot, Mutex};
 
+const ACP_INIT_TIMEOUT_SECS: u64 = 15;
+const ACP_SESSION_TIMEOUT_SECS: u64 = 30;
+const STDERR_TAIL_LIMIT: usize = 8;
+
 type PendingRpc = Arc<Mutex<HashMap<u64, oneshot::Sender<Value>>>>;
+type StderrTail = Arc<Mutex<VecDeque<String>>>;
 
 struct PendingAcpPermission {
     rpc_id: Value,
@@ -53,11 +58,59 @@ pub struct AcpBackend {
     app: AppHandle,
     session_id: String,
     acp_session_id: String,
+    current_model: Option<(String, String)>,
     child: Child,
     stdin: Arc<Mutex<ChildStdin>>,
     pending: PendingRpc,
     pending_permissions: Arc<Mutex<HashMap<String, PendingAcpPermission>>>,
+    stderr_tail: StderrTail,
     id_counter: Arc<AtomicU64>,
+}
+
+fn extract_current_model(result: &Value) -> Option<(String, String)> {
+    let models = result.get("models")?;
+    let current_id = models.get("currentModelId")?.as_str()?.trim();
+    if current_id.is_empty() {
+        return None;
+    }
+    let display_name = models
+        .get("availableModels")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| {
+            arr.iter().find_map(|m| {
+                if m.get("modelId").and_then(|v| v.as_str()) == Some(current_id) {
+                    m.get("name").and_then(|v| v.as_str()).map(|s| s.to_string())
+                } else {
+                    None
+                }
+            })
+        })
+        .unwrap_or_else(|| current_id.to_string());
+    Some((current_id.to_string(), display_name))
+}
+
+fn extract_prompt_usage(result: &Value) -> Option<MessageUsage> {
+    let u = result.get("usage")?;
+    let input = u.get("inputTokens").and_then(|v| v.as_u64()).unwrap_or(0);
+    let output = u.get("outputTokens").and_then(|v| v.as_u64()).unwrap_or(0);
+    let cache_read = u
+        .get("cachedReadTokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let cache_write = u
+        .get("cachedWriteTokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    if input == 0 && output == 0 && cache_read == 0 && cache_write == 0 {
+        return None;
+    }
+    Some(MessageUsage {
+        input,
+        output,
+        cache_read,
+        cache_write,
+        cost: None,
+    })
 }
 
 impl AcpBackend {
@@ -193,7 +246,9 @@ impl AcpBackend {
             }
         });
 
+        let stderr_tail: StderrTail = Arc::new(Mutex::new(VecDeque::with_capacity(STDERR_TAIL_LIMIT)));
         if let Some(stderr) = stderr {
+            let tail_for_reader = stderr_tail.clone();
             tokio::spawn(async move {
                 let mut reader = BufReader::new(stderr);
                 let mut buf = Vec::with_capacity(1024);
@@ -203,7 +258,15 @@ impl AcpBackend {
                         Ok(0) => break,
                         Ok(_) => {
                             let s = String::from_utf8_lossy(&buf);
-                            eprintln!("[acp stderr] {}", s.trim_end());
+                            let line = s.trim_end();
+                            eprintln!("[acp stderr] {line}");
+                            if !line.trim().is_empty() {
+                                let mut guard = tail_for_reader.lock().await;
+                                if guard.len() >= STDERR_TAIL_LIMIT {
+                                    guard.pop_front();
+                                }
+                                guard.push_back(line.to_string());
+                            }
                         }
                         Err(_) => break,
                     }
@@ -216,42 +279,61 @@ impl AcpBackend {
             app,
             session_id,
             acp_session_id: String::new(),
+            current_model: None,
             child,
             stdin,
             pending,
             pending_permissions,
+            stderr_tail,
             id_counter,
         };
 
         // 握手 1: initialize
         let init_id = backend.next_id();
-        let init_resp = backend
-            .send_rpc_wait(protocol::build_initialize_request(init_id), init_id, 15)
+        let init_resp = match backend
+            .send_rpc_wait(
+                protocol::build_initialize_request(init_id),
+                init_id,
+                ACP_INIT_TIMEOUT_SECS,
+            )
             .await
-            .map_err(|e| format!("ACP initialize 握手失败: {e}"))?;
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                let diag = backend.stderr_summary().await;
+                let _ = backend.stop().await;
+                return Err(format!("ACP initialize 握手失败: {e}{diag}"));
+            }
+        };
         if let Some(err) = init_resp.get("error") {
+            let diag = backend.stderr_summary().await;
             let _ = backend.stop().await;
-            return Err(format!("ACP initialize 返回错误: {err}"));
+            return Err(format!("ACP initialize 返回错误: {err}{diag}"));
         }
 
         // 握手 2: session/load (若有历史 ID) 或 session/new
-        let acp_sid = if let Some(rid) = resume_session_id.filter(|s| !s.is_empty()) {
+        let (acp_sid, current_model) = if let Some(rid) = resume_session_id.filter(|s| !s.is_empty())
+        {
             let lid = backend.next_id();
             match backend
                 .send_rpc_wait(
                     protocol::build_session_load_request(lid, &rid, &cwd),
                     lid,
-                    15,
+                    ACP_SESSION_TIMEOUT_SECS,
                 )
                 .await
             {
-                Ok(resp) if resp.get("error").is_none() => rid,
+                Ok(resp) if resp.get("error").is_none() => {
+                    let model = resp.get("result").and_then(extract_current_model);
+                    (rid, model)
+                }
                 _ => backend.create_new_acp_session(&cwd).await?,
             }
         } else {
             backend.create_new_acp_session(&cwd).await?
         };
         backend.acp_session_id = acp_sid.clone();
+        backend.current_model = current_model.clone();
 
         let _ = backend.app.emit(
             "agent_event",
@@ -260,7 +342,7 @@ impl AcpBackend {
                 "event": UnifiedEvent::SessionMeta {
                     session_path: None,
                     remote_session_id: Some(acp_sid),
-                    model: None,
+                    model: current_model.map(|(id, _)| id),
                     permission_mode: None,
                 }
             }),
@@ -269,21 +351,53 @@ impl AcpBackend {
         Ok(backend)
     }
 
-    async fn create_new_acp_session(&mut self, cwd: &str) -> Result<String, String> {
-        let sid_req = self.next_id();
-        let resp = self
-            .send_rpc_wait(protocol::build_session_new_request(sid_req, cwd), sid_req, 15)
-            .await
-            .map_err(|e| format!("ACP session/new 失败: {e}"))?;
-        if let Some(err) = resp.get("error") {
-            let _ = self.stop().await;
-            return Err(format!("ACP session/new 返回错误: {err}"));
+    async fn stderr_summary(&self) -> String {
+        let guard = self.stderr_tail.lock().await;
+        if guard.is_empty() {
+            String::new()
+        } else {
+            let joined: Vec<&str> = guard.iter().map(String::as_str).collect();
+            format!(" (stderr: {})", joined.join(" | "))
         }
-        resp.get("result")
+    }
+
+    async fn create_new_acp_session(
+        &mut self,
+        cwd: &str,
+    ) -> Result<(String, Option<(String, String)>), String> {
+        let sid_req = self.next_id();
+        let resp = match self
+            .send_rpc_wait(
+                protocol::build_session_new_request(sid_req, cwd),
+                sid_req,
+                ACP_SESSION_TIMEOUT_SECS,
+            )
+            .await
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                let diag = self.stderr_summary().await;
+                let _ = self.stop().await;
+                return Err(format!("ACP session/new 失败: {e}{diag}"));
+            }
+        };
+        if let Some(err) = resp.get("error") {
+            let diag = self.stderr_summary().await;
+            let _ = self.stop().await;
+            return Err(format!("ACP session/new 返回错误: {err}{diag}"));
+        }
+        let result = resp.get("result");
+        let Some(sid) = result
             .and_then(|r| r.get("sessionId"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
-            .ok_or_else(|| "ACP session/new 未返回 sessionId".to_string())
+        else {
+            let diag = self.stderr_summary().await;
+            let _ = self.stop().await;
+            return Err(format!("ACP session/new 未返回 sessionId{diag}"));
+        };
+        let model = result.and_then(extract_current_model);
+        Ok((sid, model))
     }
 
     fn next_id(&self) -> u64 {
@@ -372,6 +486,9 @@ impl AcpBackend {
         let app = self.app.clone();
         let sid = self.session_id.clone();
         tokio::spawn(async move {
+            let mut usage = None;
+            let mut stop_reason = None;
+            let mut error_message = None;
             match rx.await {
                 Ok(resp) => {
                     if let Some(err) = resp.get("error") {
@@ -379,6 +496,7 @@ impl AcpBackend {
                             .get("message")
                             .and_then(|v| v.as_str())
                             .unwrap_or("ACP 执行失败");
+                        error_message = Some(msg.to_string());
                         let _ = app.emit(
                             "agent_event",
                             json!({
@@ -391,6 +509,12 @@ impl AcpBackend {
                                 }
                             }),
                         );
+                    } else if let Some(result) = resp.get("result") {
+                        usage = extract_prompt_usage(result);
+                        stop_reason = result
+                            .get("stopReason")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
                     }
                 }
                 Err(_) => {}
@@ -398,9 +522,9 @@ impl AcpBackend {
             let _ = app.emit(
                 "agent_event",
                 json!({ "sessionId": sid, "event": UnifiedEvent::AssistantEnd {
-                    usage: None,
-                    stop_reason: None,
-                    error_message: None,
+                    usage,
+                    stop_reason,
+                    error_message,
                 }}),
             );
             let _ = app.emit(
@@ -439,13 +563,68 @@ impl AcpBackend {
     }
 
     pub async fn get_state(&mut self) -> Result<Value, String> {
+        let model = self.current_model.as_ref().map(|(id, name)| {
+            json!({
+                "id": id,
+                "name": name,
+                "provider": "agy",
+            })
+        });
         Ok(json!({
             "remoteSessionId": self.acp_session_id,
+            "model": model,
         }))
     }
 
     pub async fn stop(&mut self) -> Result<(), String> {
         kill_process_tree(&mut self.child).await;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_current_model_and_prompt_usage() {
+        let session_result = json!({
+            "sessionId": "s-1",
+            "models": {
+                "currentModelId": "gemini-4-neon-high",
+                "availableModels": [
+                    { "modelId": "gemini-4-neon-high", "name": "Gemini 4 Neon (High)" },
+                    { "modelId": "gemini-3.8-flash-high", "name": "Gemini 3.8 Flash (High)" }
+                ]
+            }
+        });
+        assert_eq!(
+            extract_current_model(&session_result),
+            Some((
+                "gemini-4-neon-high".to_string(),
+                "Gemini 4 Neon (High)".to_string()
+            ))
+        );
+
+        let prompt_result = json!({
+            "stopReason": "end_turn",
+            "usage": {
+                "inputTokens": 12097,
+                "outputTokens": 75,
+                "cachedReadTokens": 100,
+                "cachedWriteTokens": 20
+            }
+        });
+        assert_eq!(
+            extract_prompt_usage(&prompt_result),
+            Some(MessageUsage {
+                input: 12097,
+                output: 75,
+                cache_read: 100,
+                cache_write: 20,
+                cost: None,
+            })
+        );
+        assert_eq!(extract_prompt_usage(&json!({ "stopReason": "end_turn" })), None);
     }
 }

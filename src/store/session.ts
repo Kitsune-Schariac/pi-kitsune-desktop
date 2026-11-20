@@ -289,6 +289,9 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         if (sessionPath && !rawEntries) tasks.push(get().loadEntries(id));
         await Promise.all(tasks);
         return id;
+      } catch (e) {
+        get().notify(`启动会话失败: ${String(e)}`, "error");
+        throw e;
       } finally {
         set({ isSwitching: false });
       }

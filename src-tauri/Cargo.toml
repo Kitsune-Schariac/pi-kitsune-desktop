@@ -28,3 +28,7 @@ arboard = { version = "3", default-features = false }
 xcap = "0.9"
 image = "0.25"
 encoding_rs = "0.8"
+
+[target.'cfg(windows)'.dependencies]
+# 复用依赖树中已有的 winreg, 读取 Windows 系统代理同步给不认 WinINet 的 CLI 子进程 (如 agy/claude)
+winreg = "0.55"
