@@ -91,11 +91,44 @@ pub struct GitStatus {
     pub files: Vec<GitFileChange>,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct GitBranch {
     pub name: String,
     pub current: bool,
     pub upstream: Option<String>,
+    pub head_short: String,
+    pub ahead: u32,
+    pub behind: u32,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct GitWorktree {
+    pub path: String,
+    pub head: String,
+    pub branch: Option<String>,
+    pub is_main: bool,
+    pub is_current: bool,
+    pub is_bare: bool,
+    pub is_detached: bool,
+    pub is_locked: bool,
+    pub is_prunable: bool,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct GitRefBadge {
+    pub name: String,
+    /// "head" | "local" | "remote" | "tag"
+    pub kind: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct GitGraphCommit {
+    pub hash: String,
+    pub parents: Vec<String>,
+    pub author: String,
+    pub date: String,
+    pub subject: String,
+    pub refs: Vec<GitRefBadge>,
 }
 
 #[derive(Serialize, Clone)]
@@ -253,28 +286,213 @@ pub fn git_diff(cwd: String, path: Option<String>, staged: bool) -> Result<Strin
     run_git(&cwd, &refs)
 }
 
-/// 本地分支列表 (含当前标记与 upstream)
+/// 解析 `%(upstream:track)` 如 `[ahead 2, behind 1]` / `[ahead 3]` / `[gone]` → (ahead, behind)
+fn parse_track(track: &str) -> (u32, u32) {
+    let inner = track.trim().trim_start_matches('[').trim_end_matches(']');
+    let mut ahead = 0;
+    let mut behind = 0;
+    for part in inner.split(',') {
+        let p = part.trim();
+        if let Some(n) = p.strip_prefix("ahead ") {
+            ahead = n.trim().parse().unwrap_or(0);
+        } else if let Some(n) = p.strip_prefix("behind ") {
+            behind = n.trim().parse().unwrap_or(0);
+        }
+    }
+    (ahead, behind)
+}
+
+/// 路径归一化 (用于判断 worktree 是否等于当前 cwd: 统一斜杠, 去尾斜杠, Windows 忽略大小写)
+fn norm_path_key(p: &str) -> String {
+    let s = p.trim().replace('\\', "/").trim_end_matches('/').to_string();
+    #[cfg(windows)]
+    {
+        s.to_ascii_lowercase()
+    }
+    #[cfg(not(windows))]
+    {
+        s
+    }
+}
+
+/// 解析 `git worktree list --porcelain` 输出 (块间以空行分隔, 首块为主工作树)
+fn parse_worktrees(raw: &str, cwd: &str) -> Vec<GitWorktree> {
+    let cwd_key = norm_path_key(cwd);
+    let mut out = Vec::new();
+    let mut cur: Option<GitWorktree> = None;
+
+    let flush = |cur: &mut Option<GitWorktree>, out: &mut Vec<GitWorktree>| {
+        if let Some(mut wt) = cur.take() {
+            wt.is_main = out.is_empty();
+            let wt_key = norm_path_key(&wt.path);
+            // cwd 可能位于 worktree 子目录内: 全等或前缀边界命中均视为当前工作树
+            wt.is_current = !cwd_key.is_empty()
+                && (cwd_key == wt_key || cwd_key.starts_with(&format!("{wt_key}/")));
+            out.push(wt);
+        }
+    };
+
+    for line in raw.lines() {
+        let line = line.trim_end_matches('\r');
+        if line.is_empty() {
+            flush(&mut cur, &mut out);
+            continue;
+        }
+        if let Some(path) = line.strip_prefix("worktree ") {
+            flush(&mut cur, &mut out);
+            cur = Some(GitWorktree {
+                path: path.to_string(),
+                head: String::new(),
+                branch: None,
+                is_main: false,
+                is_current: false,
+                is_bare: false,
+                is_detached: false,
+                is_locked: false,
+                is_prunable: false,
+            });
+        } else if let Some(wt) = cur.as_mut() {
+            if let Some(h) = line.strip_prefix("HEAD ") {
+                wt.head = h.trim().to_string();
+            } else if let Some(b) = line.strip_prefix("branch ") {
+                let name = b.trim().strip_prefix("refs/heads/").unwrap_or(b.trim());
+                wt.branch = Some(name.to_string());
+            } else if line == "bare" {
+                wt.is_bare = true;
+            } else if line == "detached" {
+                wt.is_detached = true;
+            } else if line == "locked" || line.starts_with("locked ") {
+                wt.is_locked = true;
+            } else if line == "prunable" || line.starts_with("prunable ") {
+                wt.is_prunable = true;
+            }
+        }
+    }
+    flush(&mut cur, &mut out);
+
+    // 嵌套 worktree 场景 (极少见): 若多条前缀命中, 仅保留路径最长的那条为 is_current
+    let best_idx = out
+        .iter()
+        .enumerate()
+        .filter(|(_, w)| w.is_current)
+        .max_by_key(|(_, w)| w.path.len())
+        .map(|(i, _)| i);
+    if let Some(best) = best_idx {
+        for (i, w) in out.iter_mut().enumerate() {
+            w.is_current = i == best;
+        }
+    }
+    out
+}
+
+/// 解析 `git log --decorate=full` 的 `%D` 修饰串:
+/// 显式按 refs/heads/ · refs/remotes/ · refs/tags/ 归类, 永不误判含 `/` 的本地分支 (如 feat/ui)。
+fn parse_decorate_full(raw: &str) -> Vec<GitRefBadge> {
+    let mut badges = Vec::new();
+    for item in raw.split(", ") {
+        let s = item.trim();
+        if s.is_empty() {
+            continue;
+        }
+        if let Some(target) = s.strip_prefix("HEAD -> ") {
+            let name = target.strip_prefix("refs/heads/").unwrap_or(target);
+            badges.push(GitRefBadge { name: name.to_string(), kind: "head".into() });
+        } else if s == "HEAD" {
+            badges.push(GitRefBadge { name: "HEAD".into(), kind: "head".into() });
+        } else if let Some(tag) = s.strip_prefix("tag: ") {
+            let name = tag.strip_prefix("refs/tags/").unwrap_or(tag);
+            badges.push(GitRefBadge { name: name.to_string(), kind: "tag".into() });
+        } else if let Some(local) = s.strip_prefix("refs/heads/") {
+            badges.push(GitRefBadge { name: local.to_string(), kind: "local".into() });
+        } else if let Some(remote) = s.strip_prefix("refs/remotes/") {
+            // 跳过 origin/HEAD 这类冗余符号指针
+            if remote.ends_with("/HEAD") {
+                continue;
+            }
+            badges.push(GitRefBadge { name: remote.to_string(), kind: "remote".into() });
+        }
+    }
+    badges
+}
+
+/// 本地分支列表 (含当前标记、upstream、短 hash 与 ahead/behind)
 #[tauri::command]
 pub fn git_branches(cwd: String) -> Result<Vec<GitBranch>, String> {
-    // for-each-ref 比 `git branch --format` 更稳定; %(HEAD) 给当前分支标记 (* 或空)
     let out = run_git(&cwd, &[
         "for-each-ref",
-        "--format=%(refname:short)%09%(HEAD)%09%(upstream:short)",
+        "--sort=-HEAD",
+        "--sort=-committerdate",
+        "--format=%(refname:short)%09%(HEAD)%09%(upstream:short)%09%(objectname:short)%09%(upstream:track)",
         "refs/heads/",
     ])?;
     let mut branches = Vec::new();
     for line in out.lines() {
-        let f: Vec<&str> = line.splitn(3, '\t').collect();
+        let f: Vec<&str> = line.splitn(5, '\t').collect();
         if f.len() < 2 {
             continue;
         }
+        let (ahead, behind) = f.get(4).map(|t| parse_track(t)).unwrap_or((0, 0));
         branches.push(GitBranch {
             name: f[0].to_string(),
             current: f[1] == "*",
             upstream: f.get(2).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            head_short: f.get(3).unwrap_or(&"").to_string(),
+            ahead,
+            behind,
         });
     }
     Ok(branches)
+}
+
+/// 工作树列表 (主工作树 + 所有 linked worktrees)
+#[tauri::command]
+pub fn git_worktrees(cwd: String) -> Result<Vec<GitWorktree>, String> {
+    let out = run_git(&cwd, &["worktree", "list", "--porcelain"])?;
+    Ok(parse_worktrees(&out, &cwd))
+}
+
+/// 提交历史拓扑日志 (含 parents 与 --decorate=full 分支/标签指针), limit 默认 120, all 默认 true
+#[tauri::command]
+pub fn git_graph_log(
+    cwd: String,
+    limit: Option<u32>,
+    all: Option<bool>,
+) -> Result<Vec<GitGraphCommit>, String> {
+    let n = limit.unwrap_or(120);
+    let include_all = all.unwrap_or(true);
+    let limit_arg = format!("-n{n}");
+    let fmt = "--format=%H%x1f%P%x1f%an%x1f%ad%x1f%D%x1f%s";
+    let mut args = vec!["log", "--topo-order", "--decorate=full", "--date=iso", &limit_arg, fmt];
+    if include_all {
+        args.insert(1, "--all");
+    }
+    let out = match run_git(&cwd, &args) {
+        Ok(s) => s,
+        // 新 init 的空仓库还没有任何提交, 安静返回空列表
+        Err(e) if e.contains("does not have any commits yet") => return Ok(Vec::new()),
+        Err(e) => return Err(e),
+    };
+    let mut commits = Vec::new();
+    for line in out.lines() {
+        let f: Vec<&str> = line.splitn(6, '\x1f').collect();
+        if f.len() != 6 {
+            continue;
+        }
+        let parents = f[1]
+            .split_whitespace()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect();
+        commits.push(GitGraphCommit {
+            hash: f[0].to_string(),
+            parents,
+            author: f[2].to_string(),
+            date: f[3].to_string(),
+            refs: parse_decorate_full(f[4]),
+            subject: f[5].to_string(),
+        });
+    }
+    Ok(commits)
 }
 
 /// 提交历史 (作者/时间/主题/hash), limit 默认 100
@@ -466,5 +684,62 @@ mod tests {
         let status = git_status(std::env::temp_dir().to_string_lossy().to_string())
             .expect("非仓库应返回 Ok(is_repo=false), 不应 Err");
         assert!(!status.is_repo);
+    }
+
+    #[test]
+    fn parse_track_variants() {
+        assert_eq!(parse_track("[ahead 2, behind 1]"), (2, 1));
+        assert_eq!(parse_track("[ahead 5]"), (5, 0));
+        assert_eq!(parse_track("[behind 3]"), (0, 3));
+        assert_eq!(parse_track("[gone]"), (0, 0));
+        assert_eq!(parse_track(""), (0, 0));
+    }
+
+    #[test]
+    fn parse_worktrees_main_linked_detached_locked() {
+        let raw = "\
+worktree C:/workspace/demo
+HEAD 1111111111111111111111111111111111111111
+branch refs/heads/main
+
+worktree C:/workspace/demo-wt
+HEAD 2222222222222222222222222222222222222222
+branch refs/heads/feat/inspector
+locked reason here
+
+worktree C:/workspace/demo-detached
+HEAD 3333333333333333333333333333333333333333
+detached
+prunable gitdir file points to non-existent location
+";
+        let list = parse_worktrees(raw, r"C:\workspace\demo-wt\src");
+        assert_eq!(list.len(), 3);
+        assert!(list[0].is_main);
+        assert!(!list[0].is_current);
+        assert_eq!(list[0].branch.as_deref(), Some("main"));
+
+        assert!(!list[1].is_main);
+        assert!(list[1].is_current);
+        assert_eq!(list[1].branch.as_deref(), Some("feat/inspector"));
+        assert!(list[1].is_locked);
+
+        assert!(list[2].is_detached);
+        assert!(list[2].is_prunable);
+        assert_eq!(list[2].branch, None);
+    }
+
+    #[test]
+    fn parse_decorate_full_distinguishes_slashed_local_and_remote() {
+        let raw = "HEAD -> refs/heads/feat/ui-graph, tag: refs/tags/v0.4.0, refs/heads/main, refs/remotes/origin/main, refs/remotes/origin/HEAD";
+        let badges = parse_decorate_full(raw);
+        assert_eq!(
+            badges,
+            vec![
+                GitRefBadge { name: "feat/ui-graph".into(), kind: "head".into() },
+                GitRefBadge { name: "v0.4.0".into(), kind: "tag".into() },
+                GitRefBadge { name: "main".into(), kind: "local".into() },
+                GitRefBadge { name: "origin/main".into(), kind: "remote".into() },
+            ]
+        );
     }
 }
