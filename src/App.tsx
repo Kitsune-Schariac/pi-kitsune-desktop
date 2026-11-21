@@ -20,7 +20,6 @@ import { useThemeStore } from "./store/theme";
 import { useAgentsStore } from "./store/agents";
 import { useGitStore } from "./store/git";
 import { useFleetStore } from "./store/fleet";
-import { useTrellisTasksStore } from "./store/trellisTasks";
 import { useUiStore } from "./store/ui";
 import { X } from "lucide-react";
 
@@ -46,7 +45,6 @@ export default function App() {
     return id ? s.sessions[id]?.cwd : undefined;
   });
   const loadGitStatus = useGitStore((s) => s.loadStatus);
-  const loadTrellisTasks = useTrellisTasksStore((s) => s.load);
 
   // 浮层路由: 抽屉 (Skill/Package) 与设置窗共用单一 state; 设置窗记目标分区 (Rail 快捷入口)
   const [panel, setPanel] = useState<PanelKind>(null);
@@ -73,26 +71,19 @@ export default function App() {
     clearStep();
   }, [activeSessionId, clearStep]);
 
-  // ToolCallCard 联动按钮 → fleet store panelRequest 递增 → 打开检查器舰队页签 (原右侧面板入口)
+  // ToolCallCard / 后台任务联动 → fleet store panelRequest 递增 → 打开检查器「代理」页签
   const fleetPanelRequest = useFleetStore((s) => s.panelRequest);
   useEffect(() => {
     if (fleetPanelRequest > 0) {
-      setInspectorTab("fleet");
+      setInspectorTab("agents");
       setInspectorOpen(true);
     }
   }, [fleetPanelRequest, setInspectorTab, setInspectorOpen]);
 
-  // Git 状态拉取: cwd 变化拉一次 (检查器 Git 页签徽标常驻显示需要 status)。
-  // diff 视图归面板内部管理, cwd 变化面板自行重置回 list, App 不再持有 diffTarget
+  // Git 状态拉取: cwd 变化拉一次 (检查器 Git 页签徽标与文件树状态常驻显示需要 status)
   useEffect(() => {
     if (cwd) loadGitStatus(cwd);
   }, [cwd]);
-
-  // Trellis 任务快照: cwd 变化拉一次, 服务检查器「任务」页签的显隐探测 (exists 判据)。
-  // 无 .trellis 的项目 exists=false → 页签隐藏 (安静降级); 打开页签时面板内还会再拉刷新
-  useEffect(() => {
-    if (cwd) loadTrellisTasks(cwd);
-  }, [cwd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Rail 的统计/桌宠/设置入口: 打开设置窗并定位分区 */
   const openSettings = (section: SettingsSection) => {

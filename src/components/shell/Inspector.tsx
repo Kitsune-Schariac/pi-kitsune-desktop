@@ -1,23 +1,22 @@
 import { useMemo, type ReactNode } from "react";
-import { GitBranch, ListTree, Radar, ScanSearch, X } from "lucide-react";
+import { Activity, Bot, FolderTree, GitBranch, X } from "lucide-react";
 import { useSessionStore } from "../../store/session";
 import { useGitStore } from "../../store/git";
 import { useFleetStore, parseSessionUuid } from "../../store/fleet";
 import { useFleetStreamEntries } from "../../hooks/useFleetStreamEntries";
-import { useTrellisTasksStore } from "../../store/trellisTasks";
 import { useUiStore, type InspectorTab } from "../../store/ui";
 import { useResizableWidth } from "../../hooks/useResizableWidth";
 import { GitSidebarPanel } from "../GitSidebarPanel";
 import { FleetSidebarPanel } from "../FleetSidebarPanel";
-import { TrellisSidebarPanel } from "../TrellisSidebarPanel";
 import { StepDetail } from "../inspector/StepDetail";
-import { Segmented } from "../ui";
 import { SessionOverview } from "../inspector/SessionOverview";
+import { FilesSidebarPanel } from "../inspector/FilesSidebarPanel";
+import { Segmented } from "../ui";
 
 /**
- * 检查器 (框架 C 第四列): 详情 / Git / 舰队 / 任务四个页签。
+ * 检查器 (框架 C 第四列): 概览 / 文件 / Git / 代理四个正交页签。
  * 常驻 flex 列 (左缘拖拽调宽), 收起即卸载让位。
- * 三个内嵌面板沿用现有实现, 只去掉各自的关闭按钮 (onClose 传空)。
+ * 内嵌面板均由顶部页签承载收起职责 (onClose 传空)。
  */
 export function Inspector() {
   const inspectorOpen = useUiStore((s) => s.inspectorOpen);
@@ -35,7 +34,7 @@ export function Inspector() {
     return id ? (s.sessions[id]?.capabilities.fleetView ?? true) : true;
   });
 
-  // 详情页签的选中步骤: 选中 id 在当前会话 entries 里找不到 (切会话 / 历史刷新丢条目) 时回落概览占位
+  // 概览页签的选中步骤: 选中 id 在当前会话 entries 里找不到 (切会话 / 历史刷新丢条目) 时回落概览遥测
   const selectedStepId = useUiStore((s) => s.selectedStepId);
   const entries = useSessionStore((s) =>
     s.activeSessionId ? s.sessions[s.activeSessionId]?.entries : undefined,
@@ -52,7 +51,7 @@ export function Inspector() {
   const gitIsRepo = gitStatus?.is_repo ?? false;
   const gitChangeCount = gitStatus?.files.length ?? 0;
 
-  // 舰队活动数: 算法自 App.tsx 原样搬入, 口径不变 (stream running + 本会话 artifact running)
+  // 代理活动数: stream running + 本会话 artifact running (无活动会话时计全局 artifact)
   const runs = useFleetStore((s) => s.runs);
   const sessionPath = useSessionStore((s) => {
     const id = s.activeSessionId;
@@ -60,14 +59,12 @@ export function Inspector() {
   });
   const currentUuid = useMemo(() => parseSessionUuid(sessionPath), [sessionPath]);
   const streamEntries = useFleetStreamEntries();
-  const fleetActiveCount = useMemo(() => {
+  const agentActiveCount = useMemo(() => {
     const streamRunning = streamEntries.filter((e) => e.state === "running").length;
     if (!activeSessionId) {
-      // 无活动会话 → 全局 artifact 活动数 (stream 无来源恒 0)
       return runs.filter((r) => r.active).length;
     }
     if (currentUuid === "") {
-      // 主会话路径未就绪: stream 恒属本会话可计; artifact 归属无法判定, 宁漏勿误不计
       return streamRunning;
     }
     const localArtifactActive = runs.filter(
@@ -76,25 +73,23 @@ export function Inspector() {
     return streamRunning + localArtifactActive;
   }, [activeSessionId, currentUuid, streamEntries, runs]);
 
-  const trellisExists = useTrellisTasksStore((s) => s.exists);
-
   const { width, dragging, onDragStart } = useResizableWidth({
     storageKey: "kitsune.rightPanelWidth",
-    defaultValue: 360,
-    min: 280,
-    max: 720,
+    defaultValue: 380,
+    min: 300,
+    max: 760,
     direction: -1,
   });
 
   if (!inspectorOpen) return null;
 
   const tabs: { key: InspectorTab; label: string; icon: ReactNode; disabled?: boolean; badge?: ReactNode }[] = [
-    { key: "detail", label: "详情", icon: <ScanSearch className="h-3 w-3" /> },
+    { key: "overview", label: "概览", icon: <Activity className="h-[13px] w-[13px]" /> },
+    { key: "files", label: "文件", icon: <FolderTree className="h-[13px] w-[13px]" /> },
     {
       key: "git",
       label: "Git",
-      icon: <GitBranch className="h-3 w-3" />,
-      // 非仓库或状态未就绪 → 灰显; 状态就绪的仓库显示变更数徽标
+      icon: <GitBranch className="h-[13px] w-[13px]" />,
       disabled: gitReady && !gitIsRepo,
       badge:
         gitReady && gitIsRepo && gitChangeCount > 0 ? (
@@ -105,26 +100,20 @@ export function Inspector() {
     },
     ...(fleetEnabled
       ? [{
-          key: "fleet" as const,
-          label: "舰队",
-          icon: <Radar className="h-3 w-3" />,
-          badge:
-            fleetActiveCount > 0 ? (
-              <span className="h-[6px] w-[6px] rounded-full bg-fg" />
-            ) : null,
+          key: "agents" as const,
+          label: "代理",
+          icon: <Bot className="h-[13px] w-[13px]" />,
+          badge: agentActiveCount > 0 ? <span className="live-dot" /> : null,
         }]
-      : []),
-    ...(trellisExists
-      ? [{ key: "trellis" as const, label: "任务", icon: <ListTree className="h-3 w-3" /> }]
       : []),
   ];
   const effectiveTab: InspectorTab =
-    inspectorTab === "fleet" && !fleetEnabled ? "detail" : inspectorTab;
+    inspectorTab === "agents" && !fleetEnabled ? "overview" : inspectorTab;
 
   return (
     <aside style={{ width }} className="inspector inspector-col">
-      {/* 列头 (--bar-h): 页签用分段控件, 与会话列表的「最近 / 项目」同一种控件 */}
-      <div className="bar gap-2 pl-4 pr-3">
+      {/* 列头 (--bar-h): 四页签分段控件 + 收起按钮 */}
+      <div className="bar gap-2 pl-3 pr-2">
         <Segmented
           size="sm"
           value={effectiveTab}
@@ -145,7 +134,7 @@ export function Inspector() {
         />
         <button
           onClick={() => setInspectorOpen(false)}
-          className="ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-md text-fg-4 transition duration-fast ease-out hover:bg-hover hover:text-fg"
+          className="ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-md text-fg-4 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
           title="收起检查器"
           aria-label="收起检查器"
         >
@@ -154,18 +143,18 @@ export function Inspector() {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        {effectiveTab === "detail" ? (
+        {effectiveTab === "overview" ? (
           selectedEntry ? (
             <StepDetail key={selectedEntry.id} entry={selectedEntry} cwd={cwd} />
           ) : (
             <SessionOverview />
           )
+        ) : effectiveTab === "files" ? (
+          <FilesSidebarPanel cwd={cwd} />
         ) : effectiveTab === "git" ? (
           <GitSidebarPanel cwd={cwd} />
-        ) : effectiveTab === "fleet" ? (
-          <FleetSidebarPanel />
         ) : (
-          <TrellisSidebarPanel cwd={cwd ?? ""} />
+          <FleetSidebarPanel />
         )}
       </div>
 

@@ -12,7 +12,6 @@ mod session_fs;
 mod settings_config;
 mod subagent_fleet;
 mod token_stats;
-mod trellis_tasks;
 
 use backends::acp::{AcpBackend, AcpLaunchSpec};
 use backends::claude::ClaudeBackend;
@@ -506,19 +505,20 @@ pub fn run() {
             session_fs::list_projects_and_sessions, session_fs::delete_session_file,
             session_fs::read_file_for_context, session_fs::list_skills_and_packages,
             session_fs::get_session_file_mtime,
+            session_fs::get_session_cost_breakdown,
             session_fs::list_dir, session_fs::read_session_entries_public,
             session_fs::list_files_recursive,
             search::search_files,
             local_path::resolve_local_path, local_path::read_text_file,
             local_path::open_local_path, local_path::reveal_local_path, local_path::open_external_url,
-            git::git_status, git::git_diff, git::git_branches, git::git_log, git::git_show,
+            git::git_status, git::git_diff, git::git_branches, git::git_worktrees,
+            git::git_log, git::git_graph_log, git::git_show,
             git::git_stage, git::git_unstage, git::git_commit, git::git_checkout,
             capture::capture_screenshot,
             attach::read_clipboard_attachments, attach::resolve_attachment_paths,
             token_stats::get_token_stats,
             behavior_stats::get_behavior_stats, behavior_stats::get_session_behavior,
             subagent_fleet::list_fleet_runs, subagent_fleet::read_fleet_run_detail,
-            trellis_tasks::list_trellis_tasks, trellis_tasks::read_trellis_task_doc,
             models_config::read_models_config, models_config::write_models_config,
             settings_config::read_session_defaults, settings_config::write_session_defaults,
             provider_probe::probe_provider_models,

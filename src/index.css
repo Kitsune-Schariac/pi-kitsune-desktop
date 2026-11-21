@@ -83,6 +83,13 @@
   --warn: #b26b00;
   --add-bg: rgba(29, 138, 78, 0.1);
   --del-bg: rgba(208, 53, 43, 0.1);
+  /* 数据可视化工程色阶 (Token 构成 / 上下文成分 / Git DAG 泳道复用) */
+  --viz-1: #1d8a4e;
+  --viz-2: #2563eb;
+  --viz-3: #c27803;
+  --viz-4: #52525b;
+  --viz-5: #7c5cbf;
+  --viz-6: #c2593f;
   /* 阴影: 低透明度 + 大模糊半径 + 负扩散, 边缘晕开而不是一条灰线 */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 6px -2px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.03), 0 6px 24px -6px rgba(0, 0, 0, 0.09);
@@ -119,6 +126,13 @@
   --warn: #e0a83a;
   --add-bg: rgba(70, 194, 129, 0.12);
   --del-bg: rgba(255, 106, 92, 0.12);
+  /* 数据可视化工程色阶 (深色底提亮保对比度) */
+  --viz-1: #46c281;
+  --viz-2: #60a5fa;
+  --viz-3: #e0a83a;
+  --viz-4: #a1a1aa;
+  --viz-5: #a78bfa;
+  --viz-6: #e8836b;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 6px -2px rgba(0, 0, 0, 0.5);
   --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -6px rgba(0, 0, 0, 0.7);
   --shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 24px 56px -12px rgba(0, 0, 0, 0.85);
@@ -1160,112 +1174,67 @@ body,
   cursor: default;
 }
 
-/* ---- 检查器 · 会话概览 ---- */
+/* ---- 检查器 · 会话概览 (精密遥测台) ---- */
 .ov {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 12px;
 }
-.ov-hero {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 12px;
-  padding: 16px 18px;
+.tel-card {
+  padding: 12px 14px;
   border: 1px solid var(--edge);
-  border-radius: 16px;
+  border-radius: 14px;
   background: var(--card);
   box-shadow: var(--shadow-sm);
 }
-.ov-k {
-  font-size: var(--fs-label);
-  color: var(--fg-4);
-}
-.ov-cost {
-  font-variant-numeric: tabular-nums;
-  margin-top: 4px;
-  font-size: var(--fs-display);
-  font-weight: 600;
-  line-height: 1.15;
-  letter-spacing: -0.022em;
-  color: var(--fg);
-}
-.ov-cost small {
-  margin-right: 2px;
-  font-size: var(--fs-lead);
-  color: var(--fg-3);
-  vertical-align: 0.6em;
-}
-.ov-sub {
-  margin-top: 6px;
-  font-size: var(--fs-label);
-  color: var(--fg-3);
-}
-/* 细网格: 1px gap 由线色冒充分隔线 */
-.ov-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1px;
-  margin-bottom: 24px;
-  border: 1px solid var(--edge);
-  border-radius: 16px;
-  overflow: hidden;
-  background: var(--line);
-  box-shadow: var(--shadow-sm);
-}
-.ov-cell {
+.tel-head {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 16px;
-  background: var(--card);
-}
-.ov-v {
-  font-variant-numeric: tabular-nums;
-  font-size: var(--fs-head);
-  font-weight: 600;
-  letter-spacing: -0.012em;
-  line-height: 1.3;
-  color: var(--fg);
-}
-.ov-sec {
-  margin-bottom: 22px;
-}
-.ov-title {
-  margin: 0 0 8px;
-  font-size: var(--fs-label);
-  font-weight: 600;
-  color: var(--fg-3);
-}
-.ov-kv {
-  display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: var(--fs-body);
-  color: var(--fg-3);
+  gap: 8px;
 }
-.ov-kv b {
-  font-weight: 500;
-  color: var(--fg);
-}
-.ov-kv b.mono {
-  font-family: var(--f-mono);
+.tel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--fs-label);
-  font-weight: 400;
-  text-align: right;
-  overflow-wrap: anywhere;
+  font-weight: 600;
+  color: var(--fg-2);
+}
+.tel-bar {
+  display: flex;
+  gap: 1px;
+  height: 6px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  overflow: hidden;
+}
+.tel-bar-seg {
+  display: block;
+  height: 100%;
+  transition: width 200ms var(--ease);
+}
+.tel-bar-thin {
+  height: 4px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  overflow: hidden;
+}
+.tel-bar-thin > span {
+  display: block;
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 200ms var(--ease);
 }
 .ov-bar-row {
   display: grid;
-  grid-template-columns: 76px 1fr 32px;
+  grid-template-columns: 76px 1fr 28px;
   align-items: center;
-  gap: 10px;
-  padding: 5px 0;
+  gap: 8px;
+  padding: 3px 0;
   font-family: var(--f-mono);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
   color: var(--fg-2);
 }
 .ov-bar-k {
@@ -1274,47 +1243,36 @@ body,
   white-space: nowrap;
 }
 .ov-bar {
-  height: 6px;
-  border-radius: 6px;
+  height: 4px;
+  border-radius: 9999px;
   background: color-mix(in srgb, var(--fg) 7%, transparent);
   overflow: hidden;
 }
 .ov-bar > span {
   display: block;
   height: 100%;
-  border-radius: 6px;
-  background: var(--fg-2);
+  border-radius: 9999px;
+  background: var(--fg-3);
 }
 .ov-bar-v {
   font-variant-numeric: tabular-nums;
   text-align: right;
   color: var(--fg-3);
 }
-.ov-none {
-  margin: 0;
-  font-size: var(--fs-label);
-  color: var(--fg-4);
-}
-.ov-err {
-  margin: 8px 0 0;
-  font-size: var(--fs-label);
-  color: var(--err);
-}
 .ov-hint {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
-  margin: 8px 0 0;
-  padding: 12px 14px;
-  border: 1px dashed var(--line-2);
-  border-radius: 16px;
-  font-size: var(--fs-label);
-  line-height: 1.6;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--well);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
   color: var(--fg-4);
 }
 .ov-hint svg {
   flex: none;
-  margin-top: 3px;
 }
 
 /* ============================================================
@@ -1673,4 +1631,17 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   width: 100%;
   padding-right: 24px;
   white-space: pre;
+}
+/* 右侧栏内联预览紧凑变体: 行号背景对齐侧栏 --pane, 留出更宽代码视野 */
+.fv-inline .fv-code {
+  font-size: var(--fs-meta);
+  line-height: 18px;
+}
+.fv-inline .fv-ln {
+  min-width: 38px;
+  padding: 0 8px 0 8px;
+  background: var(--pane);
+}
+.fv-inline .fv-text {
+  padding-right: 16px;
 }

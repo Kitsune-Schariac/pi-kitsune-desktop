@@ -8,7 +8,7 @@ const PANE_OPEN_KEY = "kitsune.paneOpen";
 const LEGACY_SIDEBAR_COLLAPSED_KEY = "kitsune.sidebarCollapsed";
 const LIST_MODE_KEY = "kitsune.listMode";
 
-export type InspectorTab = "detail" | "git" | "fleet" | "trellis";
+export type InspectorTab = "overview" | "files" | "git" | "agents";
 export type SessionListMode = "recent" | "projects";
 export type AgentFilter = "all" | AgentKind;
 
@@ -66,7 +66,7 @@ export const useUiStore = create<UiStore>((set) => ({
   listMode: readListMode(),
   agentFilter: "all",
   inspectorOpen: true,
-  inspectorTab: "detail",
+  inspectorTab: "overview",
   selectedStepId: null,
   locateStepSeq: 0,
   viewer: null,
@@ -97,7 +97,7 @@ export const useUiStore = create<UiStore>((set) => ({
   setInspectorTab: (tab) => set({ inspectorTab: tab }),
 
   openStep: (id) =>
-    set({ selectedStepId: id, inspectorTab: "detail", inspectorOpen: true }),
+    set({ selectedStepId: id, inspectorTab: "overview", inspectorOpen: true }),
 
   clearStep: () => set({ selectedStepId: null }),
 
