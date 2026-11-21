@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import {
-  ArrowLeft, Bot, Copy, Crosshair, FilePenLine, FilePlus2, FileText, Radar, Terminal, Wrench,
+  ArrowLeft, Bot, Copy, Crosshair, FilePenLine, FilePlus2, FileText, Terminal, Wrench,
 } from "lucide-react";
 import type { ChatEntry } from "../../store/session";
 import { useUiStore } from "../../store/ui";
@@ -249,10 +249,17 @@ export function StepDetail({
           <button
             type="button"
             className="sd-action"
-            onClick={() => useFleetStore.getState().requestOpenPanel()}
+            onClick={() => {
+              const store = useFleetStore.getState();
+              if (subagentDetails?.asyncDir) {
+                store.requestOpenRun(subagentDetails.asyncDir);
+              } else {
+                store.requestOpenPanel();
+              }
+            }}
           >
-            <Radar className="h-3 w-3" />
-            在舰队中查看
+            <Bot className="h-3 w-3" />
+            查看代理
           </button>
         )}
       </div>

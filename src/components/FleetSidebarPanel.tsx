@@ -1,32 +1,30 @@
-// Subagent 舰队侧栏面板: 会话区右侧内嵌面板, 三态视图机 fleet → run → subsession。
-// 交互骨架对齐 GitSidebarPanel (右侧内嵌圆角卡片、左缘拖拽调宽、Esc 层级)。
-// 数据源: store/fleet.ts 2s 轮询 status.json (面板开着才轮询), 详情/子会话懒加载。
-// 视觉走新语义 token (fg/pane/line/accent 等), 禁 backdrop-filter/emoji/硬编码色。
+// Subagent 代理侧栏面板: 三态视图机 list → run → subsession。
+// 双源融合: artifact (2s/8s 变频轮询后台产物) + stream (当前会话前台派发)。
+// 全面对齐项目视觉令牌与原语: ui/Segmented · ui/EmptyHint · .live-dot · .tel-card。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  Radar, Bot, Cpu, Clock, Coins, ListChecks, ChevronRight, ChevronLeft,
-  X, RefreshCw, Loader2, AlertCircle, FileText, Database, MessageSquareText, ChevronDown,
-  CheckCircle2, Wrench,
+  Bot, Cpu, Clock, Coins, ListChecks, ChevronRight, ChevronLeft,
+  X, RefreshCw, Loader2, AlertCircle, FileText, Database, MessageSquareText,
+  ChevronDown, CheckCircle2, Wrench,
 } from "lucide-react";
-import { useFleetStore, toArtifactEntry, toStreamEntry, parseSessionUuid, type FleetEntry } from "../store/fleet";
-import type { FleetRunSummary, FleetStepSummary } from "../store/fleet";
+import {
+  useFleetStore, toArtifactEntry, toStreamEntry, parseSessionUuid,
+  type FleetEntry, type FleetRunSummary, type FleetStepSummary,
+} from "../store/fleet";
 import { useSessionStore, mapHistoryEntries, type ChatEntry } from "../store/session";
 import { useFleetStreamEntries } from "../hooks/useFleetStreamEntries";
 import { buildTimeline } from "../lib/timeline";
 import { TurnView } from "./timeline/TurnView";
 import { StepDetail } from "./inspector/StepDetail";
+import { EmptyHint, Segmented } from "./ui";
 
-// 三态视图: fleet 为顶层, run 从 fleet 进入 (点 run 卡片), subsession 从 run 进入 (点 step)。
-// subsession→run, run→fleet 是 Esc 与 ‹返回的回退路径; fleet 不响应 Esc (常驻面板)。
 type View =
   | { kind: "fleet" }
   | { kind: "run"; dir: string }
   | { kind: "subsession"; dir: string; sessionFile: string; title: string };
 
-
-// 耗时 ms → "12s" / "2m15s" / "1h3m" (紧凑, tabular-nums 对齐)
 function fmtDuration(ms: number): string {
   if (!ms || ms < 0) return "0s";
   const s = Math.floor(ms / 1000);
@@ -38,46 +36,39 @@ function fmtDuration(ms: number): string {
   return `${h}h${m % 60}m`;
 }
 
-// token 大数压缩: 12.3k / 1.2M
 function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
   return `${n}`;
 }
 
-// cost: $0 / $0.0098 / $16.87
 function fmtCost(n: number): string {
   if (n === 0) return "$0";
   if (n < 0.01) return `$${n.toFixed(4)}`;
   return `$${n.toFixed(2)}`;
 }
 
-// epoch ms → 时:分:秒 (相对当天, 列表紧凑, 不带日期)
 function fmtTime(ms: number): string {
   if (!ms) return "—";
   return new Date(ms).toLocaleTimeString("zh-CN", { hour12: false });
 }
 
-// 状态灯: 活动 = accent 呼吸 (animate-pulse 2s); failed = err; 完成 = fg-4; 未知 = line-2。
-// 全部走新语义 token (随风格翻转)
+// 状态灯: 运行中统一复用全局唯一动效 .live-dot; 失败 = err; 完成 = ok; 未知 = line-2
 function StatusDot({ state, active }: { state: string; active: boolean }) {
   if (active) {
-    return (
-      <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent animate-pulse" />
-    );
+    return <span className="live-dot" />;
   }
   const t = (state || "").toLowerCase();
   if (["failed", "error", "aborted"].includes(t)) {
     return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-err" />;
   }
   if (["complete", "completed", "success", "succeeded", "done"].includes(t)) {
-    return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-fg-4" />;
+    return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-ok" />;
   }
   return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-line-2" />;
 }
 
 interface Props {
-  /** 缺省时不渲染关闭按钮 (检查器内嵌时由页签承担收起职责) */
   onClose?: () => void;
 }
 
@@ -96,20 +87,27 @@ export function FleetSidebarPanel({ onClose }: Props) {
   const closeRunDetail = useFleetStore((s) => s.closeRunDetail);
   const scope = useFleetStore((s) => s.scope);
   const setScope = useFleetStore((s) => s.setScope);
-  // 当前会话 sessionPath (get_state 返回的主会话 jsonl 路径) → 解析 uuid 做会话锚定 (design §3)
+  const pendingRunDir = useFleetStore((s) => s.pendingRunDir);
+  const consumePendingRunDir = useFleetStore((s) => s.consumePendingRunDir);
+
   const sessionPath = useSessionStore((s) => {
     const id = s.activeSessionId;
     return id ? s.sessions[id]?.sessionPath : null;
   });
-  // stream 条目: 当前会话 entries 纯派生 (hook + useMemo, 不进 store/不扫文件)
   const streamEntries = useFleetStreamEntries();
 
   const [view, setView] = useState<View>({ kind: "fleet" });
-  // 实时耗时每秒重算: 用一个每秒递增的 tick 触发活动 run 耗时跳动 (tabular-nums 不抖版式)
   const [now, setNow] = useState(Date.now());
 
-  // 轮询生命周期: 面板挂载即开始 (引用计数), 卸载停。run/subsession 态轮询继续,
-  // 活动区状态随轮询实时更新。实时耗时 tick 每秒推进 (与轮询独立, 耗时秒级跳动够)
+  // 消费来自「概览 · 后台任务」或「步骤详情」的直达定位请求
+  useEffect(() => {
+    if (!pendingRunDir) return;
+    const dir = consumePendingRunDir();
+    if (dir) {
+      setView({ kind: "run", dir });
+    }
+  }, [pendingRunDir, consumePendingRunDir]);
+
   useEffect(() => {
     startPolling();
     const tick = setInterval(() => setNow(Date.now()), 1000);
@@ -119,16 +117,14 @@ export function FleetSidebarPanel({ onClose }: Props) {
     };
   }, [startPolling, stopPolling]);
 
-  // 进入 run 视图拉详情 (events), 离开清掉 (防残留干扰下次进入)
   useEffect(() => {
     if (view.kind === "run") {
-      openRunDetail(view.dir);
+      void openRunDetail(view.dir);
     } else {
       closeRunDetail();
     }
   }, [view, openRunDetail, closeRunDetail]);
 
-  // Esc 层级: subsession → run, run → fleet, fleet 不响应 (常驻面板)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -142,17 +138,12 @@ export function FleetSidebarPanel({ onClose }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [view]);
 
-  // run 视图对应的 summary (从轮询 runs 里按 dir 找, 步骤随轮询实时更新)
   const runSummary = useMemo<FleetRunSummary | null>(
     () => (view.kind === "run" ? runs.find((r) => r.dir === view.dir) ?? null : null),
     [runs, view],
   );
-  // 会话锚定 uuid (当前会话主会话 jsonl 路径解析), 空串 = 无会话/未落盘 → 退化全部视图
   const currentUuid = useMemo(() => parseSessionUuid(sessionPath), [sessionPath]);
-  // 双源合并 (design §3: 合并点在面板 useMemo, stream=hook 派生, artifact=store 状态)。
-  // scope=current: stream 全保留 + 本会话 artifact; 非本会话 running artifact → otherActive 折叠行。
-  // scope=all 或无会话 (currentUuid 空): artifact 全可见 + stream (跨会话 stream 不扫, 仅本会话)。
-  // 排序: running 优先 (startedAt 降序), 其余 startedAt 降序
+
   const merged = useMemo(() => {
     const artifactEntries = runs.map((r) =>
       toArtifactEntry(r, currentUuid !== "" && r.session_id === currentUuid),
@@ -164,7 +155,6 @@ export function FleetSidebarPanel({ onClose }: Props) {
       visible = [...streamMapped, ...artifactEntries].filter(
         (e) => e.source === "stream" || e.isCurrentSession,
       );
-      // 非本会话的 running artifact 收进折叠桶 (不进主列表, 不接下钻)
       for (const e of artifactEntries) {
         if (!e.isCurrentSession && e.state === "running") otherActive.push(e);
       }
@@ -180,146 +170,164 @@ export function FleetSidebarPanel({ onClose }: Props) {
     return { entries: visible, otherActive };
   }, [runs, streamEntries, scope, currentUuid, now]);
 
+  // 顶部遥测汇总 (当前视角下活跃数 / 总 Token / 总花费)
+  const totals = useMemo(() => {
+    let activeCount = 0;
+    let tokens = 0;
+    let cost = 0;
+    for (const e of merged.entries) {
+      if (e.state === "running") activeCount += 1;
+      if (e.run) {
+        tokens += e.run.total_tokens;
+        cost += e.run.total_cost_usd;
+      }
+    }
+    return { activeCount, count: merged.entries.length, tokens, cost };
+  }, [merged.entries]);
+
+  const effectiveScope: "current" | "all" =
+    scope === "current" && currentUuid !== "" ? "current" : "all";
+
   return (
     <>
-          {/* header: 三态各异。fleet = 标题+刷新+收起; run = ‹返回+runId+state; subsession = ‹返回+只读横幅 */}
-          {view.kind === "fleet" ? (
-            <>
-            <div className="flex items-center justify-between border-b border-line px-4 py-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <Radar className="h-4 w-4 shrink-0 text-fg-2" />
-                <span className="text-lead font-medium">舰队</span>
-                {runs.length > 0 && (
-                  <span className="text-meta text-fg-3">· {runs.length}</span>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  onClick={() => void refresh()}
-                  disabled={loading}
-                  className="rounded-md p-1 text-fg-3 transition duration-fast ease-out hover:bg-hover hover:text-fg-2 disabled:opacity-40"
-                  title="刷新"
-                >
-                  <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                </button>
-                {onClose && (
-                  <button
-                    onClick={onClose}
-                    className="rounded-md p-1 text-fg-3 transition duration-fast ease-out hover:bg-hover hover:text-fg-2"
-                    title="收起"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-            {/* segmented control: 本会话 / 全部 (design §3 会话锚定), 仅 fleet 态显示 */}
-            {/* 高亮用生效态: scope=current 但 sessionPath 未就绪时实际渲染全部,
-                UI 必须反映生效态而非选择态 (review SF2); 点击仍写 scope, 就绪后自动回到用户选择 */}
-            <div className="flex items-center gap-1 border-b border-line px-3 py-2">
-              <div className="flex rounded-md border border-line p-1">
-                <button
-                  onClick={() => setScope("current")}
-                  className={`rounded-md px-3 py-1 text-meta transition duration-fast ease-out ${
-                    scope === "current" && currentUuid !== ""
-                      ? "bg-well text-fg"
-                      : "text-fg-3 hover:text-fg-2"
-                  }`
-                }
-                >
-                  本会话
-                </button>
-                <button
-                  onClick={() => setScope("all")}
-                  className={`rounded-md px-3 py-1 text-meta transition duration-fast ease-out ${
-                    scope === "all"
-                      ? "bg-well text-fg"
-                      : "text-fg-3 hover:text-fg-2"
-                  }`
-                }
-                >
-                  全部
-                </button>
-              </div>
-            </div>
-            </>
-          ) : view.kind === "run" ? (
-            <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+      {view.kind === "fleet" ? (
+        <div className="shrink-0 border-b border-line">
+          <div className="flex items-center justify-between gap-2 px-3 py-2">
+            <Segmented
+              size="sm"
+              value={effectiveScope}
+              onChange={(v) => setScope(v)}
+              ariaLabel="子代理范围"
+              options={[
+                { value: "current", label: "本会话" },
+                { value: "all", label: "全部" },
+              ]}
+            />
+            <div className="flex shrink-0 items-center gap-1">
               <button
-                onClick={() => setView({ kind: "fleet" })}
-                className="flex items-center rounded-md p-1 text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg"
-                title="返回 (Esc)"
+                type="button"
+                onClick={() => void refresh()}
+                disabled={loading}
+                className="grid h-7 w-7 place-items-center rounded-md text-fg-3 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg disabled:opacity-40"
+                title="刷新代理状态"
               >
-                <ChevronLeft className="h-4 w-4" />
+                <RefreshCw className={`h-[14px] w-[14px] ${loading ? "animate-spin" : ""}`} />
               </button>
-              {runSummary ? (
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <StatusDot state={runSummary.state} active={runSummary.active} />
-                  <span className="truncate font-mono text-meta text-fg-2" title={runSummary.run_id}>
-                    {runSummary.run_id.slice(0, 8)}
-                  </span>
-                  <span className="shrink-0 text-meta text-fg-3">{runSummary.mode}</span>
-                  <span className="shrink-0 text-meta text-fg-3">· {runSummary.state}</span>
-                </div>
-              ) : (
-                <span className="text-meta text-fg-3">run 已不在列表 (可能已结束并被清理)</span>
+              {onClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="grid h-7 w-7 place-items-center rounded-md text-fg-3 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
+                  title="收起"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               )}
             </div>
-          ) : (
-            // subsession: 常驻只读横幅 (PRD R3 红线: 子会话属于子 agent 生命周期, 不接成可对话会话)
-            <div className="border-b border-line">
-              <div className="flex items-center gap-2 px-3 py-2">
-                <button
-                  onClick={() => setView({ kind: "run", dir: view.dir })}
-                  className="flex items-center rounded-md p-1 text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg"
-                  title="返回 (Esc)"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <span className="flex min-w-0 flex-1 items-center gap-2 text-lead font-medium">
-                  <FileText className="h-4 w-4 shrink-0 text-fg-3" />
-                  <span className="truncate" title={view.title}>{view.title}</span>
+          </div>
+
+          {/* 顶部汇总遥测条 */}
+          {totals.count > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line bg-well/60 px-3 py-2 text-meta tabular-nums text-fg-3">
+              <span className="flex items-center gap-1">
+                {totals.activeCount > 0 && <span className="live-dot" />}
+                <span>
+                  <b className="font-mono font-medium text-fg">{totals.activeCount}</b> 活跃
                 </span>
-              </div>
-              <div className="flex items-center gap-2 bg-well px-3 py-2 text-meta text-fg-2">
-                <AlertCircle className="h-3 w-3 shrink-0" />
-                子 agent 会话 · 只读视图
-              </div>
+              </span>
+              <span>
+                共 <b className="font-mono font-medium text-fg-2">{totals.count}</b> 次
+              </span>
+              {totals.tokens > 0 && (
+                <span className="font-mono text-fg-2">{fmtTokens(totals.tokens)} tok</span>
+              )}
+              {totals.cost > 0 && (
+                <span className="ml-auto font-mono font-medium text-fg">
+                  {fmtCost(totals.cost)}
+                </span>
+              )}
             </div>
           )}
-
-          {/* 内容区 */}
-          <div className="flex-1 overflow-y-auto">
-            {view.kind === "fleet" ? (
-              <FleetList
-                entries={merged.entries}
-                otherActive={merged.otherActive}
-                scope={scope}
-                lastError={lastError}
-                now={now}
-                onOpenRun={(dir) => setView({ kind: "run", dir })}
-              />
-            ) : view.kind === "run" ? (
-              <RunDetail
-                summary={runSummary}
-                detail={detail}
-                detailLoading={detailLoading}
-                detailError={detailError}
-                detailMatches={detailDir === view.dir}
-                now={now}
-                onOpenSubsession={(sessionFile, title) =>
-                  setView({ kind: "subsession", dir: view.dir, sessionFile, title })
-                }
-              />
-            ) : (
-              <SubSessionView sessionFile={view.sessionFile} />
-            )}
+        </div>
+      ) : view.kind === "run" ? (
+        <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+          <button
+            type="button"
+            onClick={() => setView({ kind: "fleet" })}
+            className="flex items-center rounded-md p-1 text-fg-2 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
+            title="返回代理列表 (Esc)"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          {runSummary ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <StatusDot state={runSummary.state} active={runSummary.active} />
+              <span className="truncate font-mono text-label font-medium text-fg" title={runSummary.run_id}>
+                {runSummary.run_id.slice(0, 8)}
+              </span>
+              <span className="shrink-0 rounded-sm bg-well px-1 text-meta text-fg-3">
+                {runSummary.mode}
+              </span>
+              <span className="shrink-0 text-meta text-fg-4">· {runSummary.state}</span>
+            </div>
+          ) : (
+            <span className="text-meta text-fg-3">任务已结束或产物已被清理</span>
+          )}
+        </div>
+      ) : (
+        <div className="shrink-0 border-b border-line">
+          <div className="flex items-center gap-2 px-3 py-2">
+            <button
+              type="button"
+              onClick={() => setView({ kind: "run", dir: view.dir })}
+              className="flex items-center rounded-md p-1 text-fg-2 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
+              title="返回任务详情 (Esc)"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="flex min-w-0 flex-1 items-center gap-2 text-label font-medium text-fg">
+              <FileText className="h-[14px] w-[14px] shrink-0 text-fg-3" />
+              <span className="truncate" title={view.title}>{view.title}</span>
+            </span>
           </div>
+          <div className="flex items-center gap-2 bg-well px-3 py-2 text-meta text-fg-2">
+            <AlertCircle className="h-3 w-3 shrink-0" />
+            子代理会话 · 只读视图
+          </div>
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {view.kind === "fleet" ? (
+          <FleetList
+            entries={merged.entries}
+            otherActive={merged.otherActive}
+            scope={effectiveScope}
+            lastError={lastError}
+            now={now}
+            onOpenRun={(dir) => setView({ kind: "run", dir })}
+          />
+        ) : view.kind === "run" ? (
+          <RunDetail
+            summary={runSummary}
+            detail={detail}
+            detailLoading={detailLoading}
+            detailError={detailError}
+            detailMatches={detailDir === view.dir}
+            now={now}
+            onOpenSubsession={(sessionFile, title) =>
+              setView({ kind: "subsession", dir: view.dir, sessionFile, title })
+            }
+          />
+        ) : (
+          <SubSessionView sessionFile={view.sessionFile} />
+        )}
+      </div>
     </>
   );
 }
 
-// --- fleet 态: 双源合并列表 (artifact + stream) + 活动区/历史区 + 会话锚定折叠 ---
+export { FleetSidebarPanel as SubagentSidebarPanel };
 
 function FleetList({
   entries, otherActive, scope, lastError, now, onOpenRun,
@@ -331,57 +339,64 @@ function FleetList({
   now: number;
   onOpenRun: (dir: string) => void;
 }) {
-  // 空态: 0 条目且无错误。scope 分文案 (design R7): 本会话空 → 还没记录; 全部空 → 停泊中
   if (entries.length === 0 && otherActive.length === 0 && !lastError) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-16 text-center">
-        <Radar className="h-12 w-12 rounded-full border border-dashed border-line-2 p-3 text-fg-3" />
-        <p className="text-body text-fg-3">
-          {scope === "current" ? "本会话还没有 subagent 记录" : "舰队停泊中"}
-        </p>
-        <p className="text-meta text-fg-3">
-          {scope === "current" ? "派发子代理后会在这里显示" : "没有发现 subagent 运行产物"}
-        </p>
+      <div className="p-4">
+        <EmptyHint
+          icon={<Bot className="h-5 w-5" />}
+          title={scope === "current" ? "本会话暂无子代理记录" : "暂无子代理任务"}
+        >
+          {scope === "current" ? "主会话派发 Subagent 后会在此呈现进度与拓扑" : "未发现子代理运行产物"}
+        </EmptyHint>
       </div>
     );
   }
   const active = entries.filter((e) => e.state === "running");
-  const history = entries.filter((e) => e.state !== "running").slice(0, 10);
+  const history = entries.filter((e) => e.state !== "running").slice(0, 15);
   const historyTotal = entries.length - active.length;
+
   return (
-    <div>
+    <div className="space-y-3 p-3">
       {lastError && (
-        <div className="flex items-center gap-2 border-b border-line px-4 py-2 text-meta text-fg-3">
+        <div className="flex items-center gap-2 rounded-md bg-well px-3 py-2 text-meta text-fg-3">
           <AlertCircle className="h-3 w-3 shrink-0" />
           产物目录不可达 · 已降级为空
         </div>
       )}
+
       {active.length > 0 && (
-        <div className="py-1">
-          <div className="px-4 py-1 text-meta font-medium uppercase tracking-wide text-fg-3">
-            活动中 ({active.length})
+        <section className="space-y-2">
+          <div className="px-1 text-meta font-semibold uppercase tracking-wide text-fg-4">
+            运行中 ({active.length})
           </div>
           {active.map((e) => (
             <FleetEntryCard key={e.key} entry={e} now={now} onOpenRun={onOpenRun} />
           ))}
-        </div>
+        </section>
       )}
+
       {history.length > 0 && (
-        <div className="py-1">
-          <div className="px-4 py-1 text-meta font-medium uppercase tracking-wide text-fg-3">
-            历史 ({history.length}{historyTotal > 10 ? ` / ${historyTotal}` : ""})
+        <section>
+          <div className="mb-1 px-1 text-meta font-semibold uppercase tracking-wide text-fg-4">
+            历史 ({history.length}{historyTotal > 15 ? ` / ${historyTotal}` : ""})
           </div>
-          {history.map((e) => (
-            <FleetEntryRow key={e.key} entry={e} onOpenRun={onOpenRun} />
-          ))}
-        </div>
+          <div className="overflow-hidden rounded-md border border-edge bg-card">
+            {history.map((e, idx) => (
+              <div key={e.key} className={idx > 0 ? "border-t border-line" : ""}>
+                <FleetEntryRow entry={e} onOpenRun={onOpenRun} />
+              </div>
+            ))}
+          </div>
+        </section>
       )}
-      {otherActive.length > 0 && <OtherActiveFold entries={otherActive} now={now} />}
+
+      {otherActive.length > 0 && (
+        <OtherActiveFold entries={otherActive} now={now} onOpenRun={onOpenRun} />
+      )}
     </div>
   );
 }
 
-// 活动态卡片: 分流 artifact (复用 v1 RunCard) / stream (新 StreamCard)
 function FleetEntryCard({
   entry, now, onOpenRun,
 }: {
@@ -395,7 +410,6 @@ function FleetEntryCard({
   return <StreamCard entry={entry} />;
 }
 
-// 历史态紧凑行: 分流 artifact (复用 v1 RunRow) / stream (新 StreamRow)
 function FleetEntryRow({
   entry, onOpenRun,
 }: {
@@ -408,52 +422,54 @@ function FleetEntryRow({
   return <StreamRow entry={entry} />;
 }
 
-// stream 共享展开抽屉: prompt 全文 + result 全文 (原地展开, max-height 过渡, 不弹层)
 function StreamDrawer({ entry, expanded }: { entry: FleetEntry; expanded: boolean }) {
   const call = entry.call;
-  if (!call) return null;
+  if (!call || !expanded) return null;
   return (
-    <div className={`overflow-hidden transition-[max-height] duration-200 ${expanded ? "max-h-[600px]" : "max-h-0"}`}>
-      <div className="mt-1 space-y-2 border-t border-line pt-2">
+    <div className="mt-2 space-y-2 border-t border-line pt-2">
+      <div>
+        <div className="mb-1 text-meta font-medium uppercase tracking-wide text-fg-4">Prompt</div>
+        <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-well p-2 font-mono text-meta leading-relaxed text-fg-2">
+          {call.fullPrompt || "—"}
+        </pre>
+      </div>
+      {call.fullResult && (
         <div>
-          <div className="mb-1 text-meta font-medium uppercase tracking-wide text-fg-3">Prompt</div>
+          <div className="mb-1 text-meta font-medium uppercase tracking-wide text-fg-4">结果</div>
           <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-well p-2 font-mono text-meta leading-relaxed text-fg-2">
-            {call.fullPrompt || "—"}
+            {call.fullResult}
           </pre>
         </div>
-        {call.fullResult && (
-          <div>
-            <div className="mb-1 text-meta font-medium uppercase tracking-wide text-fg-3">结果</div>
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-well p-2 font-mono text-meta leading-relaxed text-fg-2">
-              {call.fullResult}
-            </pre>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
 
-// stream 活动态卡片: 来源徽章 (MessageSquareText) + 呼吸灯 + 耗时 + prompt 摘要 + 展开抽屉
 function StreamCard({ entry }: { entry: FleetEntry }) {
   const [expanded, setExpanded] = useState(false);
   const call = entry.call!;
   return (
-    <div className="mx-2 mb-1 flex w-[calc(100%-1rem)] flex-col gap-1 rounded-md border border-line bg-well px-3 py-2 transition duration-fast ease-out hover:border-line-2">
-      <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-2 text-left">
+    <div className="tel-card">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-2 text-left"
+      >
         <StatusDot state={entry.state} active={entry.state === "running"} />
-        <span title="对话派发" className="shrink-0"><MessageSquareText className="h-4 w-4 text-fg-3" /></span>
-        <span className="min-w-0 flex-1 truncate text-meta font-medium text-fg">{call.agent}</span>
-        <span className="shrink-0 font-mono text-meta tabular-nums text-fg-2">
+        <span title="对话派发" className="shrink-0">
+          <MessageSquareText className="h-[14px] w-[14px] text-fg-3" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-label font-medium text-fg">{call.agent}</span>
+        <span className="shrink-0 font-mono text-meta tabular-nums text-fg-3">
           {entry.durationMs != null ? fmtDuration(entry.durationMs) : "—"}
         </span>
         {expanded ? (
-          <ChevronDown className="h-4 w-4 shrink-0 text-fg-3" />
+          <ChevronDown className="h-3 w-3 shrink-0 text-fg-4" />
         ) : (
-          <ChevronRight className="h-4 w-4 shrink-0 text-fg-3" />
+          <ChevronRight className="h-3 w-3 shrink-0 text-fg-4" />
         )}
       </button>
-      <div className="truncate text-meta text-fg-2" title={call.prompt}>
+      <div className="mt-1 truncate text-meta text-fg-3" title={call.prompt}>
         {call.prompt || (entry.state === "running" ? "运行中…" : "—")}
       </div>
       <StreamDrawer entry={entry} expanded={expanded} />
@@ -461,70 +477,90 @@ function StreamCard({ entry }: { entry: FleetEntry }) {
   );
 }
 
-// stream 历史态紧凑行: 徽章 + 状态灯 + agent + 耗时 + 展开抽屉 (chevron 旋转)
 function StreamRow({ entry }: { entry: FleetEntry }) {
   const [expanded, setExpanded] = useState(false);
   const call = entry.call!;
   return (
     <div className="flex flex-col">
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 px-4 py-2 text-left text-meta transition duration-fast ease-out hover:bg-hover"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-meta transition-colors duration-fast ease-out hover:bg-hover"
       >
         <StatusDot state={entry.state} active={false} />
-        <span title="对话派发" className="shrink-0"><MessageSquareText className="h-3 w-3 text-fg-3" /></span>
-        <span className="min-w-0 flex-1 truncate text-fg-2">{call.agent}</span>
-        <span className="shrink-0 font-mono tabular-nums text-fg-3">
+        <span title="对话派发" className="shrink-0">
+          <MessageSquareText className="h-3 w-3 text-fg-4" />
+        </span>
+        <span className="min-w-0 flex-1 truncate font-medium text-fg-2">{call.agent}</span>
+        <span className="shrink-0 font-mono tabular-nums text-fg-4">
           {entry.durationMs != null ? fmtDuration(entry.durationMs) : "—"}
         </span>
         {expanded ? (
-          <ChevronDown className="h-3 w-3 shrink-0 text-fg-3" />
+          <ChevronDown className="h-3 w-3 shrink-0 text-fg-4" />
         ) : (
-          <ChevronRight className="h-3 w-3 shrink-0 text-fg-3" />
+          <ChevronRight className="h-3 w-3 shrink-0 text-fg-4" />
         )}
       </button>
-      <StreamDrawer entry={entry} expanded={expanded} />
-    </div>
-  );
-}
-
-// 其他会话活动折叠行: 本会话视图下非本会话 running artifact 折叠为摘要 (design R5)
-// N=0 不渲染; 展开为紧凑列表 (只读, 不接下钻 → 切「全部」查看详情)
-function OtherActiveFold({ entries, now }: { entries: FleetEntry[]; now: number }) {
-  const [expanded, setExpanded] = useState(false);
-  if (entries.length === 0) return null; // 调用方已保证, 二次防御
-  return (
-    <div className="py-1">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 px-4 py-2 text-left text-meta text-fg-2 transition duration-fast ease-out hover:bg-hover"
-      >
-        <ChevronRight className={`h-3 w-3 shrink-0 transition-transform duration-base ease-swift ${expanded ? "rotate-90" : ""}`} />
-        <span>其他会话 {entries.length} 个活动中</span>
-      </button>
       {expanded && (
-        <div className="pb-1">
-          {entries.map((e) => (
-            <div key={e.key} className="flex items-center gap-2 px-6 py-1 text-meta">
-              <StatusDot state={e.state} active />
-              <span title="后台产物" className="shrink-0"><Database className="h-3 w-3 text-fg-3" /></span>
-              <span className="min-w-0 flex-1 truncate text-fg-2">{e.agent}</span>
-              <span className="shrink-0 font-mono tabular-nums text-fg-3">
-                {e.run ? fmtDuration(e.run.active ? Math.max(0, now - e.run.started_at) : e.run.duration_ms) : "—"}
-              </span>
-              <span className="shrink-0 truncate text-fg-3" title={e.run?.cwd}>
-                {e.run?.cwd.split(/[\\/]/).pop()}
-              </span>
-            </div>
-          ))}
-          <div className="px-6 py-1 text-meta text-fg-3">切到「全部」视图查看详情</div>
+        <div className="px-3 pb-2">
+          <StreamDrawer entry={entry} expanded />
         </div>
       )}
     </div>
   );
 }
 
-// 活动区卡片: 状态灯 + agent/model + 实时耗时 + 当前步骤 + token/cost 徽章 + recentOutput 末行预览
+function OtherActiveFold({
+  entries, now, onOpenRun,
+}: {
+  entries: FleetEntry[];
+  now: number;
+  onOpenRun: (dir: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (entries.length === 0) return null;
+  return (
+    <div className="overflow-hidden rounded-md border border-edge bg-card">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-meta text-fg-2 transition-colors duration-fast ease-out hover:bg-hover"
+      >
+        <ChevronRight
+          className={`h-3 w-3 shrink-0 transition-transform duration-base ease-swift ${
+            expanded ? "rotate-90" : ""
+          }`}
+        />
+        <span className="live-dot" />
+        <span>其他会话 {entries.length} 个代理运行中</span>
+      </button>
+      {expanded && (
+        <div className="border-t border-line py-1">
+          {entries.map((e) => (
+            <button
+              key={e.key}
+              type="button"
+              onClick={() => e.run && onOpenRun(e.run.dir)}
+              className="flex w-full items-center gap-2 px-3 py-1 text-left text-meta transition-colors duration-fast ease-out hover:bg-hover"
+            >
+              <Database className="h-3 w-3 shrink-0 text-fg-4" />
+              <span className="min-w-0 flex-1 truncate text-fg-2">{e.agent}</span>
+              <span className="shrink-0 font-mono tabular-nums text-fg-4">
+                {e.run
+                  ? fmtDuration(e.run.active ? Math.max(0, now - e.run.started_at) : e.run.duration_ms)
+                  : "—"}
+              </span>
+              <span className="shrink-0 truncate text-fg-4" title={e.run?.cwd}>
+                {e.run?.cwd.split(/[\\/]/).pop()}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RunCard({
   run, now, active, onOpen,
 }: {
@@ -533,86 +569,85 @@ function RunCard({
   active: boolean;
   onOpen: (dir: string) => void;
 }) {
-  // 实时耗时: 未结束则 now - started, 已结束用 duration_ms
   const liveDur = active ? Math.max(0, now - run.started_at) : run.duration_ms;
   const currentStep = run.steps[run.current_step] ?? run.steps[run.steps.length - 1] ?? null;
   const lastOutput = currentStep?.recent_output?.[currentStep.recent_output.length - 1];
   const activeTools = currentStep?.active_tools ?? [];
+
   return (
     <button
+      type="button"
       onClick={() => onOpen(run.dir)}
-      className="group mx-2 mb-1 flex w-[calc(100%-1rem)] flex-col gap-2 rounded-md border border-line bg-well px-3 py-2 text-left transition duration-base ease-swift hover:-translate-y-px hover:border-line-2"
+      className="tel-card flex w-full flex-col gap-2 text-left transition-colors duration-fast ease-out hover:border-line-2"
     >
       <div className="flex items-center gap-2">
         <StatusDot state={run.state} active={run.active} />
-        <span className="flex min-w-0 flex-1 items-center gap-1 text-meta font-medium text-fg">
-          <span title="后台产物" className="shrink-0"><Database className="h-4 w-4 text-fg-3" /></span>
+        <span className="flex min-w-0 flex-1 items-center gap-1 text-label font-medium text-fg">
+          <span title="后台任务产物" className="shrink-0">
+            <Database className="h-[13px] w-[13px] text-fg-3" />
+          </span>
           <span className="truncate">{currentStep?.agent || run.run_id.slice(0, 8)}</span>
         </span>
-        <span className="shrink-0 font-mono text-meta tabular-nums text-fg-2">{fmtDuration(liveDur)}</span>
+        <span className="shrink-0 font-mono text-meta tabular-nums text-fg-3">
+          {fmtDuration(liveDur)}
+        </span>
       </div>
-      <div className="flex items-center gap-2 text-meta text-fg-3">
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-fg-3">
         {currentStep?.model && (
           <span className="flex items-center gap-1 truncate">
             <Cpu className="h-3 w-3 shrink-0" />
-            <span className="truncate">{currentStep.model.split("/").pop()}</span>
+            <span className="truncate font-mono">{currentStep.model.split("/").pop()}</span>
           </span>
         )}
-        {run.current_step > 0 && (
-          <span className="flex items-center gap-1">
+        {run.steps.length > 1 && (
+          <span className="flex items-center gap-1 tabular-nums">
             <ListChecks className="h-3 w-3 shrink-0" />
-            step {run.current_step + 1}
+            {run.current_step + 1}/{run.steps.length}
           </span>
         )}
         {run.total_tokens > 0 && (
-          <span className="flex items-center gap-1">
-            <Clock className="h-3 w-3 shrink-0" />
-            <span className="tabular-nums">{fmtTokens(run.total_tokens)}</span>
-          </span>
+          <span className="font-mono tabular-nums">{fmtTokens(run.total_tokens)} tok</span>
         )}
         {run.total_cost_usd > 0 && (
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1 font-mono tabular-nums">
             <Coins className="h-3 w-3 shrink-0" />
-            <span className="tabular-nums">{fmtCost(run.total_cost_usd)}</span>
+            {fmtCost(run.total_cost_usd)}
           </span>
         )}
       </div>
-      {/* 当前工具行 (活动态专属): 正在执行的工具调用。多工具并列 ≤3, 超出折叠 +N;
-          done 用弱化色 + 对勾图标区分「刚完成」; 空 (思考/输出中) 整行不渲染 */}
+
       {active && activeTools.length > 0 && (
         <div className="flex flex-wrap items-center gap-1">
           {activeTools.slice(0, 3).map((t, i) => (
             <span
               key={i}
               className={`flex max-w-full items-center gap-1 rounded-sm px-2 py-1 text-meta ${
-                t.done
-                  ? "bg-hover text-fg-3"
-                  : "bg-accent-soft text-accent-2"
+                t.done ? "bg-well text-fg-4" : "bg-accent-soft text-fg"
               }`}
               title={`${t.name} ${t.summary}`}
             >
               {t.done ? (
-                <CheckCircle2 className="h-3 w-3 shrink-0" />
+                <CheckCircle2 className="h-3 w-3 shrink-0 text-ok" />
               ) : (
-                <Wrench className="h-3 w-3 shrink-0" />
+                <Wrench className="h-3 w-3 shrink-0 text-fg-3" />
               )}
-              <span className="truncate">{t.name}</span>
+              <span className="truncate font-mono">{t.name}</span>
               {t.summary && (
-                <span className={`truncate font-mono ${t.done ? "text-fg-3" : "text-accent-2"}`}>
-                  {t.summary}
-                </span>
+                <span className="truncate font-mono text-fg-3">{t.summary}</span>
               )}
             </span>
           ))}
           {activeTools.length > 3 && (
-            <span className="rounded-sm px-2 py-1 text-meta text-fg-3">
+            <span className="rounded-sm bg-well px-2 py-1 font-mono text-meta text-fg-4">
               +{activeTools.length - 3}
             </span>
           )}
         </div>
       )}
+
       {lastOutput && (
-        <div className="truncate font-mono text-meta text-fg-3" title={lastOutput}>
+        <div className="truncate rounded-sm bg-well px-2 py-1 font-mono text-meta text-fg-3" title={lastOutput}>
           {lastOutput}
         </div>
       )}
@@ -625,30 +660,34 @@ function RunCard({
   );
 }
 
-// 历史区紧凑行: 状态灯 + runId + state + 耗时 + 末步 agent
 function RunRow({ run, onOpen }: { run: FleetRunSummary; onOpen: (dir: string) => void }) {
   const lastStep = run.steps[run.steps.length - 1] ?? null;
   return (
     <button
+      type="button"
       onClick={() => onOpen(run.dir)}
-      className="flex w-full items-center gap-2 px-4 py-2 text-left text-meta transition duration-fast ease-out hover:bg-hover"
+      className="flex w-full items-center gap-2 px-3 py-2 text-left text-meta transition-colors duration-fast ease-out hover:bg-hover"
     >
       <StatusDot state={run.state} active={false} />
-      <span className="shrink-0 font-mono text-fg-2" title={run.run_id}>
-        {run.run_id.slice(0, 8)}
+      <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-fg-2">
+        <span title="后台任务产物" className="shrink-0">
+          <Database className="h-3 w-3 text-fg-4" />
+        </span>
+        <span className="truncate font-medium">
+          {lastStep?.agent || run.run_id.slice(0, 8)}
+        </span>
       </span>
-      {lastStep?.agent && (
-        <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-fg-2">
-          <span title="后台产物" className="shrink-0"><Database className="h-3 w-3 text-fg-3" /></span>
-          <span className="truncate">{lastStep.agent}</span>
+      {run.total_cost_usd > 0 && (
+        <span className="shrink-0 font-mono tabular-nums text-fg-4">
+          {fmtCost(run.total_cost_usd)}
         </span>
       )}
-      <span className="shrink-0 font-mono tabular-nums text-fg-3">{fmtDuration(run.duration_ms)}</span>
+      <span className="shrink-0 font-mono tabular-nums text-fg-3">
+        {fmtDuration(run.duration_ms)}
+      </span>
     </button>
   );
 }
-
-// --- run 态: steps 全列表 + events 时间线 + 汇总 ---
 
 function RunDetail({
   summary, detail, detailLoading, detailError, detailMatches, now, onOpenSubsession,
@@ -662,72 +701,73 @@ function RunDetail({
   onOpenSubsession: (sessionFile: string, title: string) => void;
 }) {
   if (!summary) {
-    return <Hint icon={<Loader2 className="h-4 w-4 animate-spin" />} text="加载中…" />;
+    return <Hint icon={<Loader2 className="h-4 w-4 animate-spin text-accent" />} text="加载任务详情…" />;
   }
   if (detailError) {
     return <p className="px-4 py-6 text-body text-err">{detailError}</p>;
   }
-  // events 尾部时间线 (从 detail 懒加载; detail 未就绪时不显示)
   const events = detailMatches ? detail?.events ?? [] : [];
+
   return (
     <div>
-      {/* 汇总数据行 */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-4 py-2 text-meta text-fg-2">
-        <span className="flex items-center gap-1">
-          <Clock className="h-3 w-3" />
-          <span className="tabular-nums">{fmtDuration(summary.active ? Math.max(0, now - summary.started_at) : summary.duration_ms)}</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-well/60 px-3 py-2 text-meta text-fg-2">
+        <span className="flex items-center gap-1 tabular-nums">
+          <Clock className="h-3 w-3 text-fg-3" />
+          {fmtDuration(summary.active ? Math.max(0, now - summary.started_at) : summary.duration_ms)}
         </span>
         {summary.total_tokens > 0 && (
-          <span className="flex items-center gap-1">
-            <ListChecks className="h-3 w-3" />
-            <span className="tabular-nums">{fmtTokens(summary.total_tokens)}</span>
-          </span>
+          <span className="font-mono tabular-nums">{fmtTokens(summary.total_tokens)} tok</span>
         )}
         {summary.total_cost_usd > 0 && (
-          <span className="flex items-center gap-1">
-            <Coins className="h-3 w-3" />
-            <span className="tabular-nums">{fmtCost(summary.total_cost_usd)}</span>
+          <span className="flex items-center gap-1 font-mono tabular-nums">
+            <Coins className="h-3 w-3 text-fg-3" />
+            {fmtCost(summary.total_cost_usd)}
           </span>
         )}
-        <span className="tabular-nums">{summary.turn_count} 轮</span>
-        <span className="tabular-nums">{summary.tool_count} 工具</span>
-        <span className="truncate text-fg-3" title={summary.cwd}>{summary.cwd}</span>
+        <span className="tabular-nums text-fg-3">{summary.turn_count} 轮</span>
+        <span className="tabular-nums text-fg-3">{summary.tool_count} 工具</span>
+        <span className="truncate font-mono text-fg-4" title={summary.cwd}>
+          {summary.cwd.split(/[\\/]/).pop()}
+        </span>
       </div>
+
       {summary.error && (
-        <div className="flex items-start gap-2 border-b border-line bg-well px-4 py-2 text-meta text-err">
-          <AlertCircle className="mt-1 h-4 w-4 shrink-0" />
+        <div className="flex items-start gap-2 border-b border-line bg-well px-3 py-2 text-meta text-err">
+          <AlertCircle className="mt-[2px] h-[14px] w-[14px] shrink-0" />
           <span className="whitespace-pre-line">{summary.error}</span>
         </div>
       )}
-      {/* steps 列表 */}
+
       {summary.steps.length === 0 ? (
-        <Hint text="无步骤数据" />
+        <Hint text="暂无步骤数据" />
       ) : (
-        summary.steps.map((step, i) => (
-          <StepCard
-            key={i}
-            index={i}
-            step={step}
-            runSessionFile={summary.session_file}
-            active={summary.active && i === summary.current_step}
-            onOpenSubsession={onOpenSubsession}
-          />
-        ))
+        <div className="space-y-2 p-3">
+          {summary.steps.map((step, i) => (
+            <StepCard
+              key={i}
+              index={i}
+              step={step}
+              runSessionFile={summary.session_file}
+              active={summary.active && i === summary.current_step}
+              onOpenSubsession={onOpenSubsession}
+            />
+          ))}
+        </div>
       )}
-      {/* events 时间线 (尾部, 等宽小字) */}
+
       {events.length > 0 && (
-        <div className="border-t border-line px-4 py-2">
-          <div className="mb-1 text-meta font-medium uppercase tracking-wide text-fg-3">
+        <div className="border-t border-line px-3 py-2">
+          <div className="mb-1 text-meta font-semibold uppercase tracking-wide text-fg-4">
             事件流 ({events.length})
           </div>
-          <div className="space-y-1 font-mono text-meta text-fg-2">
+          <div className="space-y-1 font-mono text-meta text-fg-3">
             {events.map((ev, i) => {
               const type = String(ev.type ?? "");
               const ts = ev.ts as number | undefined;
               return (
                 <div key={i} className="flex gap-2">
-                  <span className="shrink-0 tabular-nums text-fg-3">{ts ? fmtTime(ts) : "—"}</span>
-                  <span className="truncate" title={type}>{type}</span>
+                  <span className="shrink-0 tabular-nums text-fg-4">{ts ? fmtTime(ts) : "—"}</span>
+                  <span className="truncate text-fg-2" title={type}>{type}</span>
                 </div>
               );
             })}
@@ -735,13 +775,12 @@ function RunDetail({
         </div>
       )}
       {detailLoading && !detailMatches && (
-        <Hint icon={<Loader2 className="h-4 w-4 animate-spin" />} text="加载事件流…" />
+        <Hint icon={<Loader2 className="h-4 w-4 animate-spin text-accent" />} text="加载事件流…" />
       )}
     </div>
   );
 }
 
-// 单 step 卡片: agent + status + model + tokens + duration + recentOutput 滚动区 + 下钻按钮
 function StepCard({
   index, step, runSessionFile, active, onOpenSubsession,
 }: {
@@ -752,47 +791,47 @@ function StepCard({
   onOpenSubsession: (sessionFile: string, title: string) => void;
 }) {
   const outRef = useRef<HTMLDivElement>(null);
-  // recentOutput 变化时自动滚底 (流式追加场景)
   useEffect(() => {
     if (outRef.current) outRef.current.scrollTop = outRef.current.scrollHeight;
   }, [step.recent_output]);
-  // 下钻 sessionFile: 优先 step 自己的, 缺失用 run 顶层兜底
+
   const sessionFile = step.session_file || runSessionFile;
   const canDrill = !!sessionFile;
+
   return (
-    <div className="border-b border-line px-4 py-2">
+    <div className="tel-card">
       <div className="flex items-center gap-2">
-        <span className="shrink-0 text-meta tabular-nums text-fg-3">{index + 1}</span>
+        <span className="shrink-0 font-mono text-meta tabular-nums text-fg-4">#{index + 1}</span>
         <StatusDot state={step.status} active={active} />
-        <span className="flex min-w-0 flex-1 items-center gap-1 text-meta font-medium text-fg">
-          <Bot className="h-4 w-4 shrink-0 text-fg-3" />
+        <span className="flex min-w-0 flex-1 items-center gap-1 text-label font-medium text-fg">
+          <Bot className="h-[13px] w-[13px] shrink-0 text-fg-3" />
           <span className="truncate">{step.agent || "(未命名)"}</span>
         </span>
-        <span className="shrink-0 text-meta text-fg-3">{step.status}</span>
+        <span className="shrink-0 text-meta text-fg-4">{step.status}</span>
       </div>
+
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-fg-3">
         {step.model && (
           <span className="flex items-center gap-1">
             <Cpu className="h-3 w-3" />
-            <span className="truncate">{step.model.split("/").pop()}</span>
+            <span className="truncate font-mono">{step.model.split("/").pop()}</span>
           </span>
         )}
-        <span className="flex items-center gap-1 tabular-nums">
+        <span className="flex items-center gap-1 font-mono tabular-nums">
           <Clock className="h-3 w-3" />
           {fmtDuration(step.duration_ms)}
         </span>
         {step.tokens > 0 && (
-          <span className="flex items-center gap-1 tabular-nums">
-            <ListChecks className="h-3 w-3" />
-            {fmtTokens(step.tokens)}
-          </span>
+          <span className="font-mono tabular-nums">{fmtTokens(step.tokens)} tok</span>
         )}
       </div>
+
       {step.error && (
         <div className="mt-1 text-meta text-err" title={step.error}>
           {step.error}
         </div>
       )}
+
       {step.recent_output.length > 0 && (
         <div
           ref={outRef}
@@ -803,21 +842,23 @@ function StepCard({
           ))}
         </div>
       )}
+
       {canDrill && (
         <button
+          type="button"
           onClick={() => onOpenSubsession(sessionFile!, `${step.agent || "subagent"} 子会话`)}
-          className="mt-2 flex items-center gap-1 text-meta text-accent-2 transition duration-fast ease-out hover:text-accent-2"
+          className="mt-2 inline-flex items-center gap-1 rounded-sm px-2 py-1 text-meta text-fg-2 transition-colors duration-fast ease-out hover:bg-hover hover:text-fg"
           title="查看完整子会话 (只读)"
         >
           <FileText className="h-3 w-3" />
-          子会话
+          查看只读子会话
           <ChevronRight className="h-3 w-3" />
         </button>
       )}
-      {/* R2 嵌套不塌陷: step 再 fanout 时递归渲染 children, 左缘竖线引导层级缩进。
-          children step 无 currentStep 指针, active 一律 false (活动态由 state 灯显示) */}
+
+      {/* 递归渲染嵌套子代理编排树 */}
       {step.children.length > 0 && (
-        <div className="mt-2 ml-3 space-y-1 border-l-2 border-line pl-3">
+        <div className="mt-3 ml-2 space-y-2 border-l-2 border-line-2 pl-3">
           {step.children.map((c, ci) => (
             <StepCard
               key={ci}
@@ -834,19 +875,16 @@ function StepCard({
   );
 }
 
-// --- subsession 态: 只读渲染子 agent 完整子会话 (复用时间线组件, 无输入框) ---
-
 function SubSessionView({ sessionFile }: { sessionFile: string }) {
   const [entries, setEntries] = useState<ChatEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // 面板内就地展开的步骤 id (子会话只读, 选中态不进全局 ui store)
   const [openStepId, setOpenStepId] = useState<string | null>(null);
-  // sessionFile 变化 (切不同 step 的子会话) 重拉; cancelled 守卫防串台
+
   useEffect(() => {
     let cancelled = false;
     setEntries(null);
     setError(null);
-    setOpenStepId(null); // 切子会话时收起上一份详情, 避免 entry id 残留
+    setOpenStepId(null);
     invoke<unknown[]>("read_session_entries_public", { sessionPath: sessionFile })
       .then((raw) => {
         if (!cancelled) setEntries(mapHistoryEntries(raw));
@@ -857,7 +895,6 @@ function SubSessionView({ sessionFile }: { sessionFile: string }) {
     return () => { cancelled = true; };
   }, [sessionFile]);
 
-  // 同一步再次点击 = 收起; useCallback 保持引用稳定, 不打破 TurnView 的 memo 比较
   const handleStepClick = useCallback((entry: ChatEntry) => {
     setOpenStepId((cur) => (cur === entry.id ? null : entry.id));
   }, []);
@@ -872,7 +909,7 @@ function SubSessionView({ sessionFile }: { sessionFile: string }) {
     );
   }
   if (!entries) {
-    return <Hint icon={<Loader2 className="h-4 w-4 animate-spin" />} text="读取子会话…" />;
+    return <Hint icon={<Loader2 className="h-4 w-4 animate-spin text-accent" />} text="读取子会话…" />;
   }
   if (entries.length === 0) {
     return <Hint text="子会话无消息" />;
@@ -889,11 +926,6 @@ function SubSessionView({ sessionFile }: { sessionFile: string }) {
   );
 }
 
-/**
- * 子会话时间线: 复用 buildTimeline + TurnView (紧凑变体 .chat-col.compact: 无头像、字号降一档)。
- * 步骤点击走面板内就地展开 (详情挂在时间线尾部), 不触碰全局选中 —— 子会话条目不在
- * 当前会话 entries 里, 全局 openStep 会让检查器的选中回落成概览, 找不到这条 step。
- */
 function SubSessionTimeline({
   entries, openStepId, onStepClick, onCollapse,
 }: {
@@ -903,7 +935,6 @@ function SubSessionTimeline({
   onCollapse: () => void;
 }) {
   const turns = useMemo(() => buildTimeline(entries), [entries]);
-  // 详情目标从 entries 反查 (kind 校验防御); 找不到时详情区不渲染
   const openEntry = useMemo(
     () => (openStepId ? entries.find((e) => e.id === openStepId && e.kind === "tool") ?? null : null),
     [entries, openStepId],
@@ -930,10 +961,9 @@ function SubSessionTimeline({
   );
 }
 
-// 列表空态与加载提示
 function Hint({ icon, text }: { icon?: ReactNode; text: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 px-4 py-10 text-body text-fg-3">
+    <div className="flex items-center justify-center gap-2 px-4 py-10 text-label text-fg-3">
       {icon}
       {text}
     </div>
