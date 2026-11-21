@@ -121,11 +121,19 @@ export function FileTreePicker({ root, onPick, onDone }: {
     }
   };
 
-  // 根目录默认展开: 挂载时自动加载一次子节点
+  // 根目录默认展开: 挂载或切换 root 时自动加载一次子节点
   useEffect(() => {
+    if (!root) {
+      setError(null);
+      return;
+    }
+    setOpenSet((prev) => (prev.has(root) ? prev : new Set([...prev, root])));
     if (!childrenMap[root]) {
       invoke<DirEntry[]>("list_dir", { root, path: root })
-        .then((list) => setChildrenMap((prev) => ({ ...prev, [root]: list })))
+        .then((list) => {
+          setChildrenMap((prev) => ({ ...prev, [root]: list }));
+          setError(null);
+        })
         .catch((e) => setError(String(e)));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,15 +164,21 @@ export function FileTreePicker({ root, onPick, onDone }: {
   return (
     <div className="flex h-60 flex-col">
       <div className="flex-1 overflow-auto rounded-md border border-edge bg-card p-1">
-        <TreeRow
-          entry={{ name: root.split(/[\\/]/).pop() || root, path: root, is_dir: true, size: null, mtime: null }}
-          depth={0}
-          openSet={openSet}
-          childrenMap={childrenMap}
-          selected={selected}
-          onToggle={toggle}
-          onSelect={toggleSelect}
-        />
+        {!root ? (
+          <div className="flex h-full items-center justify-center text-meta text-fg-4">
+            请先在左下角选择项目，或使用下方系统选择器引用任意文件
+          </div>
+        ) : (
+          <TreeRow
+            entry={{ name: root.split(/[\\/]/).pop() || root, path: root, is_dir: true, size: null, mtime: null }}
+            depth={0}
+            openSet={openSet}
+            childrenMap={childrenMap}
+            selected={selected}
+            onToggle={toggle}
+            onSelect={toggleSelect}
+          />
+        )}
       </div>
       {error && (
         <p className="mt-1 flex items-center gap-1 px-1 text-meta text-err">

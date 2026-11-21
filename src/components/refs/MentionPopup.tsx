@@ -113,6 +113,13 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
   const [skills, setSkills] = useState<SkillInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
+  // 仅键盘导航递增, 用于触发滚动跟随 (鼠标悬停不自动滚动)
+  const [navSeq, setNavSeq] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // 记录上次鼠标坐标: 键盘滚动列表时静止指针不会误触发悬停抢走高亮
+  const lastMouseRef = useRef<{ x: number; y: number } | null>(null);
   // Everything 搜索层: searchResults 有值则作为文件源; searchDegraded 为 true 后不再重试
   // (es 缺失/超时会重复触发 500ms 超时, 降级一次后直接用全量扫描, 避免每次击键都卡)
   const [searchResults, setSearchResults] = useState<FileEntry[] | null>(null);
@@ -181,8 +188,13 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
     [files, skills, root, query, searchResults]
   );
 
-  // 过滤词/数据变化后选中索引回到顶部, 避免高亮项落到不可见处
-  useEffect(() => { setActive(0); }, [query, files, skills, root]);
+  // 过滤词/数据变化后选中索引与滚动位置回到顶部, 避免高亮项落到不可见处
+  useEffect(() => {
+    setActive(0);
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, [query, files, skills, root, searchResults]);
+
+  const safeActive = candidates.length > 0 ? Math.min(active, candidates.length - 1) : 0;
 
   const pick = (c: MentionCandidate) => {
     onPick(c.kind === "file"
@@ -194,17 +206,42 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
   useImperativeHandle(ref, () => ({
     move: (delta: number) => {
       const n = candidates.length;
-      if (n > 0) setActive((a) => (a + delta + n) % n);
+      if (n > 0) {
+        setActive((a) => (Math.min(a, n - 1) + delta + n) % n);
+        setNavSeq((s) => s + 1);
+      }
     },
     confirm: () => {
-      const c = candidates[active];
+      const c = candidates[safeActive];
       if (c) pick(c);
     },
-  }), [candidates, active, pick]);
+  }), [candidates, safeActive, pick]);
 
   // 分组渲染: 文件在前技能在后 (filterMentionCandidates 已按此序输出), 组间插标题
   const firstSkill = candidates.findIndex((c) => c.kind === "skill");
   const fileCount = firstSkill === -1 ? candidates.length : firstSkill;
+
+  // 键盘 ↑↓ 切换后将高亮项滚入列表可视区 (只滚动自身容器, 不牵连外层布局)
+  useEffect(() => {
+    if (navSeq === 0) return;
+    const container = listRef.current;
+    if (!container || candidates.length === 0) return;
+    if (safeActive === 0) {
+      container.scrollTop = 0;
+      return;
+    }
+    const item = itemRefs.current[safeActive];
+    if (!item) return;
+    const cRect = container.getBoundingClientRect();
+    const iRect = item.getBoundingClientRect();
+    const topTarget = safeActive === firstSkill ? (rowRefs.current[safeActive] ?? item) : item;
+    const topEdge = topTarget.getBoundingClientRect().top;
+    if (topEdge < cRect.top) {
+      container.scrollTop -= cRect.top - topEdge;
+    } else if (iRect.bottom > cRect.bottom) {
+      container.scrollTop += iRect.bottom - cRect.bottom;
+    }
+  }, [safeActive, navSeq, candidates.length, firstSkill]);
 
   return (
     <div className="popover absolute bottom-full left-0 z-50 mb-2 w-[460px] p-1 view-in-soft">
@@ -231,7 +268,7 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
           <Loader2 className="h-4 w-4 animate-spin" /> {searching ? "搜索中…" : "扫描项目文件…"}
         </div>
       ) : (
-        <div className="max-h-72 overflow-auto">
+        <div ref={listRef} className="max-h-72 overflow-auto">
           {candidates.length === 0 ? (
             <div className="flex h-28 items-center justify-center text-meta text-fg-4">
               {!root ? "无项目可扫描, 请先在上方选择项目" : "没有匹配的文件或技能"}
@@ -239,17 +276,26 @@ export function MentionPopup({ root, query, onPick, onClose, ref }: {
           ) : (
             candidates.map((c, i) => {
               const isFile = c.kind === "file";
-              const sel = i === active;
+              const sel = i === safeActive;
               return (
-                <div key={c.path}>
+                <div
+                  key={`${c.kind}:${c.path}`}
+                  ref={(el) => { rowRefs.current[i] = el; }}
+                >
                   {(i === 0 || i === firstSkill) && (
                     <div className="px-2 pb-1 pt-2 text-meta font-medium text-fg-4">
                       {isFile ? `文件 · ${fileCount}` : "技能"}
                     </div>
                   )}
                   <button
+                    ref={(el) => { itemRefs.current[i] = el; }}
                     onClick={() => { setActive(i); pick(c); }}
-                    onMouseEnter={() => setActive(i)}
+                    onMouseMove={(e) => {
+                      const prev = lastMouseRef.current;
+                      if (prev && prev.x === e.clientX && prev.y === e.clientY) return;
+                      lastMouseRef.current = { x: e.clientX, y: e.clientY };
+                      if (safeActive !== i) setActive(i);
+                    }}
                     className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-meta transition duration-fast ease-out ${
                       sel ? "bg-accent-soft" : "hover:bg-hover"
                     }`}

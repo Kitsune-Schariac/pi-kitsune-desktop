@@ -201,6 +201,12 @@ export function InputBar({
   const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const projectWrapRef = useRef<HTMLDivElement>(null);
+  const refsWrapRef = useRef<HTMLDivElement>(null);
+  const commandBtnRef = useRef<HTMLButtonElement>(null);
+  const popupWrapRef = useRef<HTMLDivElement>(null);
+  // 记录由「命令」按钮自动插入的 "/" 区间: 再次点击关闭且未继续输入时原样撤销
+  const slashInsertRef = useRef<{ start: number; end: number; inserted: string } | null>(null);
 
   // --- @引用 / /命令 触发状态机 ---
   // popup: 当前打开的弹层 (mention=@ 引用, command=/ 命令) 与查询词
@@ -217,15 +223,59 @@ export function InputBar({
   const closePopup = () => {
     setPopup(null);
     triggerPosRef.current = -1;
+    slashInsertRef.current = null;
   };
-  // Esc 关闭: 记录触发词防同一词立刻重弹; 用户继续输入改变触发词才允许重弹
-  const dismissPopup = () => {
+  // Esc/外部点击关闭: 记录触发词防同一词立刻重弹; 外部点击不抢回焦点
+  const dismissPopup = (refocus = true) => {
     if (!popup) return;
     const tr = triggerPosRef.current;
     dismissedRef.current = tr >= 0 ? text.slice(tr, tr + 1 + popup.query.length) : null;
     closePopup();
-    textareaRef.current?.focus({ preventScroll: true });
+    if (refocus) textareaRef.current?.focus({ preventScroll: true });
   };
+
+  // 点击外部或按 Esc 关闭输入卡浮层 (项目选择 / 引用 / 命令与 @ 浮层)
+  useEffect(() => {
+    if (!projectOpen && !ctxOpen && !popup) return;
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (projectOpen && !projectWrapRef.current?.contains(target)) {
+        setProjectOpen(false);
+      }
+      if (ctxOpen && !refsWrapRef.current?.contains(target)) {
+        setCtxOpen(false);
+      }
+      if (
+        popup &&
+        !popupWrapRef.current?.contains(target) &&
+        !textareaRef.current?.contains(target) &&
+        !commandBtnRef.current?.contains(target)
+      ) {
+        dismissPopup(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (projectOpen) {
+        e.preventDefault();
+        setProjectOpen(false);
+      }
+      if (ctxOpen) {
+        e.preventDefault();
+        setCtxOpen(false);
+      }
+      if (popup && document.activeElement !== textareaRef.current) {
+        e.preventDefault();
+        dismissPopup(true);
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [projectOpen, ctxOpen, popup, text]);
 
   // textarea 自动增高: 内容超过 rows 高度时拉高, 上限 12 行 (超出后内部滚动)
   useEffect(() => {
@@ -477,6 +527,9 @@ export function InputBar({
         const inputType = (e.nativeEvent as InputEvent).inputType;
         if (dismissedRef.current !== triggerWord || inputType?.startsWith("insert")) {
           triggerPosRef.current = sel - 1;
+          slashInsertRef.current = null;
+          setProjectOpen(false);
+          setCtxOpen(false);
           setPopup({ kind: isCmd ? "command" : "mention", query: t.slice(sel, end) });
         }
       }
@@ -527,8 +580,7 @@ export function InputBar({
     const first = q.split(/\s+/)[0] ?? "";
     // 参数只属于查询词首词对应的命令 (选中其它命令时丢弃, 用户没为它输参)
     const args = first === cmd.name ? q.slice(first.length).trim() : "";
-    setPopup(null);
-    triggerPosRef.current = -1;
+    closePopup();
     dismissedRef.current = null;
 
     if (cmd.source === "local") {
@@ -579,23 +631,54 @@ export function InputBar({
     }
   };
 
-  // 「命令」chip: 在光标处插入 "/" 并聚焦, 手动进入命令面板态。
+  // 「命令」chip: 再次点击关闭命令面板; 未打开时在光标处插入 "/" 并聚焦进入命令面板态。
   // setText 不触发 textarea onChange, 这里等价位启动触发状态机:
   // 光标前不是行首/空白时补一个空格 (与 handleChange 的触发条件一致), 插入后光标停在 "/" 之后
-  const insertSlashCommand = () => {
+  const toggleSlashCommand = () => {
+    if (popup?.kind === "command") {
+      const inserted = slashInsertRef.current;
+      if (
+        inserted &&
+        popup.query === "" &&
+        text.slice(inserted.start, inserted.end) === inserted.inserted
+      ) {
+        // 打开后未输入内容直接再点「命令」: 撤销按钮自动插入的 "/" 并关闭
+        setText(text.slice(0, inserted.start) + text.slice(inserted.end));
+        dismissedRef.current = null;
+        closePopup();
+        requestAnimationFrame(() => {
+          const node = textareaRef.current;
+          if (!node) return;
+          node.focus({ preventScroll: true });
+          node.setSelectionRange(inserted.start, inserted.start);
+        });
+      } else {
+        dismissPopup(true);
+      }
+      return;
+    }
+
+    setProjectOpen(false);
+    setCtxOpen(false);
     const el = textareaRef.current;
     const pos = el?.selectionStart ?? text.length;
     const before = text.slice(0, pos);
     const prefix = before.length === 0 || /\s$/.test(before) ? "" : " ";
-    setText(before + prefix + "/" + text.slice(pos));
+    const inserted = prefix + "/";
+    setText(before + inserted + text.slice(pos));
     triggerPosRef.current = before.length + prefix.length;
+    slashInsertRef.current = {
+      start: before.length,
+      end: before.length + inserted.length,
+      inserted,
+    };
     dismissedRef.current = null;
     setPopup({ kind: "command", query: "" });
     requestAnimationFrame(() => {
       const node = textareaRef.current;
       if (!node) return;
       node.focus({ preventScroll: true });
-      const caret = before.length + prefix.length + 1;
+      const caret = before.length + inserted.length;
       node.setSelectionRange(caret, caret);
     });
   };
@@ -603,10 +686,10 @@ export function InputBar({
   const handleKey = (e: React.KeyboardEvent) => {
     // 弹层打开: 键盘全部路由给弹层 (Enter 确认 / ↑↓ 导航 / Esc 关闭), 不进入发送逻辑
     if (popup) {
-      if (e.key === "ArrowDown") {
+      if (e.key === "ArrowDown" && !e.nativeEvent.isComposing) {
         e.preventDefault();
         (popup.kind === "mention" ? mentionRef : paletteRef).current?.move(1);
-      } else if (e.key === "ArrowUp") {
+      } else if (e.key === "ArrowUp" && !e.nativeEvent.isComposing) {
         e.preventDefault();
         (popup.kind === "mention" ? mentionRef : paletteRef).current?.move(-1);
       } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -688,13 +771,13 @@ export function InputBar({
         )}
         <div className="px-5 pt-3">
           {/* @引用 / /命令 浮层: 悬浮在输入卡上方 (与 RefsPopup 同模式), 不占卡片布局 */}
-          <div className="relative">
+          <div ref={popupWrapRef} className="relative">
             {popup?.kind === "mention" && (
               <MentionPopup
                 root={active?.cwd || emptyProject}
                 query={popup.query}
                 onPick={handlePickMention}
-                onClose={dismissPopup}
+                onClose={() => dismissPopup(true)}
                 ref={mentionRef}
               />
             )}
@@ -705,7 +788,7 @@ export function InputBar({
                 streaming={isStreaming}
                 query={popup.query}
                 onExecute={handleExecuteCommand}
-                onClose={dismissPopup}
+                onClose={() => dismissPopup(true)}
                 ref={paletteRef}
               />
             )}
@@ -807,14 +890,24 @@ export function InputBar({
             状态区 shrink-0 不折行, 窄宽下由 @container 收窄次要标签 (见 index.css) */}
         {hint && <p className="px-5 text-right text-label text-warn">{hint}</p>}
         <div className="flex items-center justify-between gap-2 px-3 pb-2">
-          {/* 左下: 项目 / 引用 / 命令入口 */}
-          <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+          {/* 左下: 项目 / 引用 / 命令入口 (不设 overflow-hidden, 否则向上弹出的选择列表与引用面板会被裁切) */}
+          <div className="flex min-w-0 items-center gap-1">
             {!activeSessionId && (
-              <div className="relative">
+              <div ref={projectWrapRef} className="relative min-w-0">
                 {/* 空状态项目 chip: 取代原 ProjectCard 露头卡片, 选中值用于发送时自动建会话 */}
                 <button
-                  onClick={() => setProjectOpen(!projectOpen)}
-                  className="flex h-8 max-w-[180px] items-center gap-2 rounded-md px-2 text-label text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg"
+                  onClick={() => {
+                    const next = !projectOpen;
+                    if (next) {
+                      setCtxOpen(false);
+                      closePopup();
+                    }
+                    setProjectOpen(next);
+                  }}
+                  aria-expanded={projectOpen}
+                  className={`flex h-8 max-w-[min(180px,100%)] items-center gap-2 rounded-md px-2 text-label transition duration-fast ease-out hover:bg-hover hover:text-fg ${
+                    projectOpen ? "bg-hover text-fg" : "text-fg-2"
+                  }`}
                   title="切换项目"
                 >
                   <FolderGit2 className="h-[14px] w-[14px] shrink-0 text-fg-4" />
@@ -846,10 +939,20 @@ export function InputBar({
                 )}
               </div>
             )}
-            <div className="relative">
+            <div ref={refsWrapRef} className="relative shrink-0">
               <button
-                onClick={() => setCtxOpen(!ctxOpen)}
-                className="composer-opt-chip flex h-8 items-center gap-2 rounded-md px-2 text-label text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg"
+                onClick={() => {
+                  const next = !ctxOpen;
+                  if (next) {
+                    setProjectOpen(false);
+                    closePopup();
+                  }
+                  setCtxOpen(next);
+                }}
+                aria-expanded={ctxOpen}
+                className={`composer-opt-chip flex h-8 items-center gap-2 rounded-md px-2 text-label transition duration-fast ease-out hover:bg-hover hover:text-fg ${
+                  ctxOpen ? "bg-hover text-fg" : "text-fg-2"
+                }`}
                 title="添加引用 (@ 也可触发, 图片和文件可直接粘贴或拖入)"
               >
                 <Paperclip className="h-[14px] w-[14px] shrink-0 text-fg-4" />
@@ -864,8 +967,12 @@ export function InputBar({
               )}
             </div>
             <button
-              onClick={insertSlashCommand}
-              className="composer-opt-chip flex h-8 items-center gap-2 rounded-md px-2 text-label text-fg-2 transition duration-fast ease-out hover:bg-hover hover:text-fg"
+              ref={commandBtnRef}
+              onClick={toggleSlashCommand}
+              aria-expanded={popup?.kind === "command"}
+              className={`composer-opt-chip flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-label transition duration-fast ease-out hover:bg-hover hover:text-fg ${
+                popup?.kind === "command" ? "bg-hover text-fg" : "text-fg-2"
+              }`}
               title="/ 命令"
             >
               <Slash className="h-[14px] w-[14px] shrink-0 text-fg-4" />

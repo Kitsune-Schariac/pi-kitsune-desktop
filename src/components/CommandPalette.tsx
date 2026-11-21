@@ -1,7 +1,7 @@
 // / 命令面板: 本地白名单 (客户端动作) + pi 透传命令 (扩展/技能/模板, 经 get_commands 动态拉取)
 // 键盘路由由 InputBar 统一处理, 本组件经 ref 暴露 move/confirm; 执行回调统一为 PaletteCommand
 
-import { useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Terminal, Loader2, AlertCircle, X, type LucideIcon } from "lucide-react";
 import { LOCAL_COMMANDS, type PaletteCommand, type PassthroughCommand } from "../lib/commands";
@@ -38,6 +38,11 @@ export function CommandPalette({ sessionId, remoteCommands = true, streaming, qu
   const [remote, setRemote] = useState<PassthroughCommand[] | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
+  // 仅键盘导航递增, 用于触发滚动跟随 (鼠标悬停不自动滚动)
+  const [navSeq, setNavSeq] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const lastMouseRef = useRef<{ x: number; y: number } | null>(null);
 
   // 透传命令: 仅当当前 Agent 支持 remoteCommands 时拉取; 失败降级为仅本地命令
   useEffect(() => {
@@ -82,8 +87,13 @@ export function CommandPalette({ sessionId, remoteCommands = true, streaming, qu
     return items.filter((it) => it.name.includes(fw) || it.description.includes(q));
   }, [items, query]);
 
-  // 过滤词/数据变化后选中回到顶部
-  useEffect(() => { setActive(0); }, [query, remote, streaming]);
+  // 过滤词/数据变化后选中与滚动回到顶部
+  useEffect(() => {
+    setActive(0);
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, [query, remote, streaming]);
+
+  const safeActive = filtered.length > 0 ? Math.min(active, filtered.length - 1) : 0;
 
   const confirmPick = (it: PaletteItem) => {
     if (it.disabled) return;
@@ -91,21 +101,45 @@ export function CommandPalette({ sessionId, remoteCommands = true, streaming, qu
   };
 
   useImperativeHandle(ref, () => ({
-    // 上下导航跳过置灰项 (如空闲时的 stop)
+    // 上下导航跳过置灰项 (如空闲时的 stop); 函数式更新防长按连发丢步
     move: (delta: number) => {
       const n = filtered.length;
       if (n === 0) return;
-      let idx = active;
-      for (let step = 0; step < n; step++) {
-        idx = (idx + delta + n) % n;
-        if (!filtered[idx].disabled) { setActive(idx); return; }
-      }
+      setActive((prev) => {
+        let idx = Math.min(prev, n - 1);
+        for (let step = 0; step < n; step++) {
+          idx = (idx + delta + n) % n;
+          if (!filtered[idx].disabled) return idx;
+        }
+        return prev;
+      });
+      setNavSeq((s) => s + 1);
     },
     confirm: () => {
-      const c = filtered[active];
+      const c = filtered[safeActive];
       if (c) confirmPick(c);
     },
-  }), [filtered, active, onExecute]);
+  }), [filtered, safeActive, onExecute]);
+
+  // 键盘 ↑↓ 切换后将高亮项滚入可视区
+  useEffect(() => {
+    if (navSeq === 0) return;
+    const container = listRef.current;
+    if (!container || filtered.length === 0) return;
+    if (safeActive === 0) {
+      container.scrollTop = 0;
+      return;
+    }
+    const item = itemRefs.current[safeActive];
+    if (!item) return;
+    const cRect = container.getBoundingClientRect();
+    const iRect = item.getBoundingClientRect();
+    if (iRect.top < cRect.top) {
+      container.scrollTop -= cRect.top - iRect.top;
+    } else if (iRect.bottom > cRect.bottom) {
+      container.scrollTop += iRect.bottom - cRect.bottom;
+    }
+  }, [safeActive, navSeq, filtered.length]);
 
   return (
     <div className="popover absolute bottom-full left-0 z-50 mb-2 w-[440px] p-1 view-in-soft">
@@ -132,7 +166,7 @@ export function CommandPalette({ sessionId, remoteCommands = true, streaming, qu
         </p>
       )}
 
-      <div className="max-h-72 overflow-auto">
+      <div ref={listRef} className="max-h-72 overflow-auto">
         {filtered.length === 0 ? (
           <div className="flex h-24 items-center justify-center gap-2 text-meta text-fg-4">
             {remote === null && sessionId ? (
@@ -145,13 +179,19 @@ export function CommandPalette({ sessionId, remoteCommands = true, streaming, qu
           </div>
         ) : (
           filtered.map((it, i) => {
-            const sel = i === active;
+            const sel = i === safeActive;
             const Icon = it.icon ?? Terminal;
             return (
               <button
                 key={it.key}
+                ref={(el) => { itemRefs.current[i] = el; }}
                 onClick={() => confirmPick(it)}
-                onMouseEnter={() => setActive(i)}
+                onMouseMove={(e) => {
+                  const prev = lastMouseRef.current;
+                  if (prev && prev.x === e.clientX && prev.y === e.clientY) return;
+                  lastMouseRef.current = { x: e.clientX, y: e.clientY };
+                  if (!it.disabled && safeActive !== i) setActive(i);
+                }}
                 disabled={it.disabled}
                 className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-meta transition duration-fast ease-out ${
                   it.disabled
