@@ -88,6 +88,7 @@ fn extract_prompt_usage(result: &Value) -> Option<MessageUsage> {
         cache_read,
         cache_write,
         cost: None,
+        cost_detail: None,
     })
 }
 
@@ -800,6 +801,7 @@ mod tests {
                 cache_read: 100,
                 cache_write: 20,
                 cost: None,
+                cost_detail: None,
             })
         );
         assert_eq!(

@@ -11,6 +11,7 @@ import {
   type AgentCapabilities,
   type AgentEventPayload,
   type AgentKind,
+  type CostBreakdown,
   type PermissionRequest,
 } from "../lib/agent";
 
@@ -133,10 +134,13 @@ export interface SessionState {
   tokenStats: {
     tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
     cost: number;
+    costDetail?: CostBreakdown | null;
     userMessages: number;
     assistantMessages: number;
     totalMessages: number;
   } | null;
+  /** 实时流增量累加的分项费用 (当 session_fs 尚未落盘或非 pi 会话时的实时镜像) */
+  liveCostDetail: CostBreakdown | null;
   turnStats: TurnStats | null;  // 本轮运行统计 (null = 本会话还没跑过任何一轮)
   detached: boolean;            // pi 进程已停但 entries 仍在内存 (秒切缓存), 切回走 reattach
   hasUnread: boolean;           // 后台完成任务有新消息, 用户未看 (侧边栏显示点提醒)
@@ -264,7 +268,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
               availableModels: [], availableThinkingLevels: ["off"],
               steeringQueue: [], followUpQueue: [], uiRequests: [],
               permissionRequests: [], permissionMode, remoteSessionId: null,
-              contextUsage: null, tokenStats: null, turnStats: null,
+              contextUsage: null, tokenStats: null, liveCostDetail: null, turnStats: null,
             },
           },
           activeSessionId: id,
@@ -534,6 +538,17 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         const data = await invoke<Record<string, unknown>>("get_session_stats", { sessionId });
         const cu = data.contextUsage as { tokens?: number | null; contextWindow?: number; percent?: number | null } | undefined;
         const tk = data.tokens as { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number } | undefined;
+        const cur = get().sessions[sessionId];
+        // 顺带拉取磁盘分项费用 (仅 pi sessions 目录下有效，非 pi 或未落盘安静返回 null)
+        let costDetail: CostBreakdown | null = cur?.tokenStats?.costDetail ?? null;
+        if (cur?.sessionPath) {
+          try {
+            const diskDetail = await invoke<CostBreakdown | null>("get_session_cost_breakdown", {
+              sessionPath: cur.sessionPath,
+            });
+            if (diskDetail) costDetail = diskDetail;
+          } catch { /* ignore */ }
+        }
         patch(sessionId, {
           contextUsage: cu ? {
             tokens: cu.tokens ?? null,
@@ -547,10 +562,12 @@ export const useSessionStore = create<SessionStore>((set, get) => {
               total: tk.total ?? 0,
             },
             cost: (data.cost as number) ?? 0,
+            costDetail,
             userMessages: (data.userMessages as number) ?? 0,
             assistantMessages: (data.assistantMessages as number) ?? 0,
             totalMessages: (data.totalMessages as number) ?? 0,
           } : null,
+          liveCostDetail: costDetail ?? cur?.liveCostDetail ?? null,
         });
       } catch { /* ignore */ }
     },
@@ -674,6 +691,18 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           const fields: Partial<SessionState> = { currentAssistantId: null };
           const u = event.usage;
           const settledSpeed = settle(sessionId, u?.output ?? 0, Date.now());
+          if (u?.costDetail) {
+            const base = cur.liveCostDetail ?? cur.tokenStats?.costDetail ?? {
+              input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0,
+            };
+            fields.liveCostDetail = {
+              input: base.input + u.costDetail.input,
+              output: base.output + u.costDetail.output,
+              cacheRead: base.cacheRead + u.costDetail.cacheRead,
+              cacheWrite: base.cacheWrite + u.costDetail.cacheWrite,
+              total: base.total + u.costDetail.total,
+            };
+          }
           if (cur.turnStats && u) {
             fields.turnStats = {
               ...cur.turnStats,

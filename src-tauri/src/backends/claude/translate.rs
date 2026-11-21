@@ -458,6 +458,7 @@ impl ClaudeStreamTranslator {
                         cache_read: 0,
                         cache_write: 0,
                         cost: Some(c),
+                        cost_detail: None,
                     }),
                     stop_reason: None,
                     error_message: None,
@@ -558,6 +559,7 @@ pub fn parse_claude_usage(u: &Value) -> MessageUsage {
             .and_then(|v| v.as_u64())
             .unwrap_or(0),
         cost: None,
+        cost_detail: None,
     }
 }
 
@@ -686,6 +688,7 @@ mod tests {
                     cache_read: 100,
                     cache_write: 0,
                     cost: None,
+                    cost_detail: None,
                 }),
                 stop_reason: Some("end_turn".into()),
                 error_message: None,

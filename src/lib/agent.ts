@@ -29,12 +29,21 @@ export interface AgentDescriptor {
   capabilities: AgentCapabilities;
 }
 
+export interface CostBreakdown {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
+}
+
 export interface MessageUsage {
   input: number;
   output: number;
   cacheRead: number;
   cacheWrite: number;
   cost: number | null;
+  costDetail?: CostBreakdown | null;
 }
 
 export interface PermissionOption {

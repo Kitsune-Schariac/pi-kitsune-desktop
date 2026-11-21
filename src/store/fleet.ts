@@ -69,12 +69,16 @@ interface FleetStore {
   scope: "current" | "all";
   setScope: (scope: "current" | "all") => void;
   panelRequest: number;
+  /** 从「概览 · 后台任务」点击直达指定 Run 详情时暂存目录, 代理面板消费后清 null */
+  pendingRunDir: string | null;
   startPolling: () => void;
   stopPolling: () => void;
   refresh: () => Promise<void>;
   openRunDetail: (dir: string) => Promise<void>;
   closeRunDetail: () => void;
   requestOpenPanel: () => void;
+  requestOpenRun: (dir: string) => void;
+  consumePendingRunDir: () => string | null;
 }
 
 // 轮询变频状态机 (design §4): 单 timer, 每次 refresh 后重新评估频率。
@@ -126,6 +130,7 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
   detailLoading: false,
   detailError: null,
   panelRequest: 0,
+  pendingRunDir: null,
   scope: "current",
   setScope: (scope) => set({ scope }),
 
@@ -179,8 +184,14 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
     set({ detail: null, detailDir: null, detailLoading: false, detailError: null });
   },
 
-  // ToolCallCard 「在舰队中查看」按钮调: 递增计数器, App effect 订阅后开面板 + 关 Git
+  // ToolCallCard 「查看代理」按钮调: 递增计数器, App effect 订阅后打开代理页签
   requestOpenPanel: () => set((s) => ({ panelRequest: s.panelRequest + 1 })),
+  requestOpenRun: (dir) => set((s) => ({ pendingRunDir: dir, panelRequest: s.panelRequest + 1 })),
+  consumePendingRunDir: () => {
+    const dir = get().pendingRunDir;
+    if (dir !== null) set({ pendingRunDir: null });
+    return dir;
+  },
 }));
 
 // --- 双源统一视图模型 (design §1) + 会话锚定辅助 (design §3) ---

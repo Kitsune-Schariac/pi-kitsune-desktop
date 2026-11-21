@@ -628,6 +628,73 @@ pub fn get_session_file_mtime(session_path: Option<String>) -> Result<Option<f64
     Ok(Some(ms))
 }
 
+/// 单趟扫描会话 jsonl，累计所有 assistant 消息的 usage.cost 分项。
+/// 无分项字段（如 OpenAI 兼容或无成本模型）返回 None，避免前端误将全 0 当作权威分项。
+pub(crate) fn read_session_cost_breakdown(path: &Path) -> Result<Option<crate::backends::CostBreakdown>, String> {
+    let file = std::fs::File::open(path).map_err(|e| format!("读取会话文件失败: {e}"))?;
+    use std::io::BufRead;
+    let reader = std::io::BufReader::new(file);
+    let mut sum = crate::backends::CostBreakdown::default();
+    let mut seen = false;
+    for line in reader.lines() {
+        let Ok(line) = line else { break };
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else {
+            continue;
+        };
+        if v.get("type").and_then(|t| t.as_str()) != Some("message") {
+            continue;
+        }
+        let Some(msg) = v.get("message") else { continue };
+        if msg.get("role").and_then(|r| r.as_str()) != Some("assistant") {
+            continue;
+        }
+        let Some(cost) = msg.get("usage").and_then(|u| u.get("cost")) else {
+            continue;
+        };
+        let ci = cost.get("input").and_then(|x| x.as_f64());
+        let co = cost.get("output").and_then(|x| x.as_f64());
+        let cr = cost.get("cacheRead").and_then(|x| x.as_f64());
+        let cw = cost.get("cacheWrite").and_then(|x| x.as_f64());
+        if ci.is_some() || co.is_some() || cr.is_some() || cw.is_some() {
+            seen = true;
+            let i = ci.unwrap_or(0.0);
+            let o = co.unwrap_or(0.0);
+            let r = cr.unwrap_or(0.0);
+            let w = cw.unwrap_or(0.0);
+            sum.input += i;
+            sum.output += o;
+            sum.cache_read += r;
+            sum.cache_write += w;
+            sum.total += cost
+                .get("total")
+                .and_then(|x| x.as_f64())
+                .unwrap_or(i + o + r + w);
+        }
+    }
+    Ok(if seen { Some(sum) } else { None })
+}
+
+/// 获取指定 pi 会话文件的分项费用聚合（非 sessions 根目录内或文件不存在时安静返回 None）
+#[tauri::command]
+pub fn get_session_cost_breakdown(
+    session_path: Option<String>,
+) -> Result<Option<crate::backends::CostBreakdown>, String> {
+    let Some(path) = session_path.filter(|s| !s.is_empty()) else {
+        return Ok(None);
+    };
+    let p = PathBuf::from(&path);
+    if !p.is_file() {
+        return Ok(None);
+    }
+    let Ok(abs) = ensure_within_sessions(&p) else {
+        return Ok(None);
+    };
+    read_session_cost_breakdown(&abs)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -751,5 +818,25 @@ mod tests {
         assert_eq!(sessions[1].timestamp, "2026-06-01T00-00-00-000Z");
         assert_eq!(sessions[2].timestamp, "2026-01-01T00-00-00-000Z");
         assert_eq!(sessions[3].timestamp, "garbage");
+    }
+
+    #[test]
+    fn aggregates_session_cost_breakdown() {
+        let dir = std::env::temp_dir().join(format!("sfe_cost_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("cost.jsonl");
+        let lines = [
+            r#"{"type":"session","id":"s1","cwd":"C:\\demo"}"#,
+            r#"{"type":"message","message":{"role":"assistant","usage":{"input":100,"output":20,"cacheRead":200,"cacheWrite":50,"cost":{"input":0.01,"output":0.02,"cacheRead":0.002,"cacheWrite":0.005,"total":0.037}}}}"#,
+            r#"{"type":"message","message":{"role":"assistant","usage":{"input":50,"output":10,"cacheRead":100,"cacheWrite":0,"cost":{"input":0.005,"output":0.01,"cacheRead":0.001,"cacheWrite":0,"total":0.016}}}}"#,
+        ];
+        std::fs::write(&p, lines.join("\n")).unwrap();
+        let res = read_session_cost_breakdown(&p).unwrap().expect("should have breakdown");
+        assert!((res.input - 0.015).abs() < 1e-9);
+        assert!((res.output - 0.030).abs() < 1e-9);
+        assert!((res.cache_read - 0.003).abs() < 1e-9);
+        assert!((res.cache_write - 0.005).abs() < 1e-9);
+        assert!((res.total - 0.053).abs() < 1e-9);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

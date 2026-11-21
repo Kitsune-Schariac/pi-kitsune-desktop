@@ -3,7 +3,7 @@
 //! 一条 `message_update` 帧可能同时携带实时 `usage` 与 `assistantMessageEvent`,
 //! 故返回 `Vec<UnifiedEvent>` (0~2 条), 保证无损保留原有语义。
 
-use crate::backends::{ContentBlockKind, MessageUsage, NotifyLevel, UnifiedEvent};
+use crate::backends::{ContentBlockKind, CostBreakdown, MessageUsage, NotifyLevel, UnifiedEvent};
 use serde_json::Value;
 
 fn parse_notify_level(raw: Option<&str>) -> NotifyLevel {
@@ -90,15 +90,37 @@ pub fn translate_pi_frame(frame: &Value) -> Vec<UnifiedEvent> {
             if msg.get("role").and_then(|v| v.as_str()) != Some("assistant") {
                 return Vec::new();
             }
-            let usage = msg.get("usage").map(|u| MessageUsage {
-                input: u.get("input").and_then(|v| v.as_u64()).unwrap_or(0),
-                output: u.get("output").and_then(|v| v.as_u64()).unwrap_or(0),
-                cache_read: u.get("cacheRead").and_then(|v| v.as_u64()).unwrap_or(0),
-                cache_write: u.get("cacheWrite").and_then(|v| v.as_u64()).unwrap_or(0),
-                cost: u
-                    .get("cost")
-                    .and_then(|c| c.get("total"))
-                    .and_then(|v| v.as_f64()),
+            let usage = msg.get("usage").map(|u| {
+                let cost_obj = u.get("cost");
+                let cost_total = cost_obj.and_then(|c| c.get("total")).and_then(|v| v.as_f64());
+                let cost_detail = cost_obj.and_then(|c| {
+                    let ci = c.get("input").and_then(|v| v.as_f64());
+                    let co = c.get("output").and_then(|v| v.as_f64());
+                    let cr = c.get("cacheRead").and_then(|v| v.as_f64());
+                    let cw = c.get("cacheWrite").and_then(|v| v.as_f64());
+                    if ci.is_none() && co.is_none() && cr.is_none() && cw.is_none() {
+                        return None;
+                    }
+                    let input = ci.unwrap_or(0.0);
+                    let output = co.unwrap_or(0.0);
+                    let cache_read = cr.unwrap_or(0.0);
+                    let cache_write = cw.unwrap_or(0.0);
+                    Some(CostBreakdown {
+                        input,
+                        output,
+                        cache_read,
+                        cache_write,
+                        total: cost_total.unwrap_or(input + output + cache_read + cache_write),
+                    })
+                });
+                MessageUsage {
+                    input: u.get("input").and_then(|v| v.as_u64()).unwrap_or(0),
+                    output: u.get("output").and_then(|v| v.as_u64()).unwrap_or(0),
+                    cache_read: u.get("cacheRead").and_then(|v| v.as_u64()).unwrap_or(0),
+                    cache_write: u.get("cacheWrite").and_then(|v| v.as_u64()).unwrap_or(0),
+                    cost: cost_total,
+                    cost_detail,
+                }
             });
             let stop_reason = msg
                 .get("stopReason")
@@ -372,6 +394,7 @@ mod tests {
                     cache_read: 50,
                     cache_write: 10,
                     cost: Some(0.0042),
+                    cost_detail: None,
                 }),
                 stop_reason: Some("error".into()),
                 error_message: Some("rate limit".into()),

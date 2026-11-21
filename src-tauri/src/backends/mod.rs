@@ -135,6 +135,17 @@ pub enum ContentBlockKind {
     ToolCall,
 }
 
+/// 费用分项明细 (input / output / cacheRead / cacheWrite / total)。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CostBreakdown {
+    pub input: f64,
+    pub output: f64,
+    pub cache_read: f64,
+    pub cache_write: f64,
+    pub total: f64,
+}
+
 /// 单条 assistant 消息结算后的用量。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -144,6 +155,8 @@ pub struct MessageUsage {
     pub cache_read: u64,
     pub cache_write: u64,
     pub cost: Option<f64>,
+    #[serde(default)]
+    pub cost_detail: Option<CostBreakdown>,
 }
 
 /// 通知级别。
