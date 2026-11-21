@@ -569,6 +569,189 @@ pub fn translate_acp_permission_request(
     }
 }
 
+/// ACP `session/update` 中的 `usage_update` 载荷 (`{ sessionUpdate: "usage_update", used, size }`)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AcpUsageUpdate {
+    pub used: u64,
+    pub size: u64,
+}
+
+/// 解析 `usage_update` 帧，提取已用上下文与窗口上限。
+pub fn parse_usage_update(update: &Value) -> Option<AcpUsageUpdate> {
+    if update.get("sessionUpdate").and_then(|v| v.as_str()) != Some("usage_update") {
+        return None;
+    }
+    let used = update.get("used").and_then(|v| v.as_u64())?;
+    let size = update.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
+    Some(AcpUsageUpdate { used, size })
+}
+
+/// 将 `session/load` 期间缓冲的 `session/update`（每个元素为 `params.update` 对象）
+/// 规整为与前端 `mapHistoryEntries` 100% 兼容的标准历史条目数组。
+pub fn replay_updates_to_entries(updates: &[Value]) -> Vec<Value> {
+    let mut entries: Vec<Value> = Vec::new();
+    let mut seq: usize = 0;
+
+    let mut cur_user = String::new();
+    let mut cur_asst_thinking = String::new();
+    let mut cur_asst_text = String::new();
+    let mut cur_asst_tools: Vec<Value> = Vec::new();
+    let mut seen_tool_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    let flush_user = |cur_user: &mut String, entries: &mut Vec<Value>, seq: &mut usize| {
+        let text = std::mem::take(cur_user);
+        if !text.trim().is_empty() {
+            *seq += 1;
+            entries.push(json!({
+                "type": "message",
+                "id": format!("acp-replay-u-{seq}"),
+                "message": {
+                    "role": "user",
+                    "content": [{ "type": "text", "text": text }]
+                }
+            }));
+        }
+    };
+
+    let flush_asst = |thinking: &mut String,
+                      text: &mut String,
+                      tools: &mut Vec<Value>,
+                      entries: &mut Vec<Value>,
+                      seq: &mut usize| {
+        let th = std::mem::take(thinking);
+        let tx = std::mem::take(text);
+        let tcs = std::mem::take(tools);
+        if th.is_empty() && tx.is_empty() && tcs.is_empty() {
+            return;
+        }
+        let mut blocks = Vec::new();
+        if !th.is_empty() {
+            blocks.push(json!({ "type": "thinking", "thinking": th }));
+        }
+        if !tx.is_empty() {
+            blocks.push(json!({ "type": "text", "text": tx }));
+        }
+        blocks.extend(tcs);
+        *seq += 1;
+        entries.push(json!({
+            "type": "message",
+            "id": format!("acp-replay-a-{seq}"),
+            "message": {
+                "role": "assistant",
+                "content": blocks
+            }
+        }));
+    };
+
+    for update in updates {
+        let kind = update
+            .get("sessionUpdate")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        match kind {
+            "user_message_chunk" => {
+                flush_asst(
+                    &mut cur_asst_thinking,
+                    &mut cur_asst_text,
+                    &mut cur_asst_tools,
+                    &mut entries,
+                    &mut seq,
+                );
+                if let Some(t) = update
+                    .get("content")
+                    .and_then(|c| c.get("text"))
+                    .and_then(|v| v.as_str())
+                {
+                    cur_user.push_str(t);
+                }
+            }
+            "agent_thought_chunk" => {
+                flush_user(&mut cur_user, &mut entries, &mut seq);
+                if let Some(t) = update
+                    .get("content")
+                    .and_then(|c| c.get("text"))
+                    .and_then(|v| v.as_str())
+                {
+                    cur_asst_thinking.push_str(t);
+                }
+            }
+            "agent_message_chunk" => {
+                flush_user(&mut cur_user, &mut entries, &mut seq);
+                if let Some(t) = update
+                    .get("content")
+                    .and_then(|c| c.get("text"))
+                    .and_then(|v| v.as_str())
+                {
+                    cur_asst_text.push_str(t);
+                }
+            }
+            "tool_call" => {
+                flush_user(&mut cur_user, &mut entries, &mut seq);
+                let tool_call_id = update
+                    .get("toolCallId")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                if !tool_call_id.is_empty() && seen_tool_ids.insert(tool_call_id.clone()) {
+                    let tool_name = update
+                        .get("title")
+                        .or_else(|| update.get("kind"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("tool");
+                    let args = update.get("rawInput").cloned().unwrap_or(Value::Null);
+                    cur_asst_tools.push(json!({
+                        "type": "toolCall",
+                        "id": tool_call_id,
+                        "name": tool_name,
+                        "arguments": args,
+                    }));
+                }
+            }
+            "tool_call_update" => {
+                let status = update.get("status").and_then(|v| v.as_str()).unwrap_or("");
+                if matches!(status, "completed" | "failed" | "error") {
+                    flush_asst(
+                        &mut cur_asst_thinking,
+                        &mut cur_asst_text,
+                        &mut cur_asst_tools,
+                        &mut entries,
+                        &mut seq,
+                    );
+                    let tool_call_id = update
+                        .get("toolCallId")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    if !tool_call_id.is_empty() {
+                        let out = normalize_acp_tool_output(update);
+                        seq += 1;
+                        entries.push(json!({
+                            "type": "message",
+                            "id": format!("acp-replay-tr-{seq}"),
+                            "message": {
+                                "role": "toolResult",
+                                "toolCallId": tool_call_id,
+                                "isError": status != "completed",
+                                "content": out.get("content").cloned().unwrap_or(json!([]))
+                            }
+                        }));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    flush_user(&mut cur_user, &mut entries, &mut seq);
+    flush_asst(
+        &mut cur_asst_thinking,
+        &mut cur_asst_text,
+        &mut cur_asst_tools,
+        &mut entries,
+        &mut seq,
+    );
+    entries
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -773,5 +956,36 @@ mod tests {
         assert_eq!(req["method"], "session/set_config_option");
         assert_eq!(req["params"]["configId"], "model");
         assert_eq!(req["params"]["value"], "gemini-4-neon");
+    }
+
+    #[test]
+    fn parses_usage_update_and_replays_history_chunks() {
+        let uu = parse_usage_update(&json!({
+            "sessionUpdate": "usage_update",
+            "used": 12174,
+            "size": 1048576
+        }))
+        .unwrap();
+        assert_eq!(uu, AcpUsageUpdate { used: 12174, size: 1048576 });
+
+        let updates = vec![
+            json!({ "sessionUpdate": "user_message_chunk", "content": { "type": "text", "text": "你好" } }),
+            json!({ "sessionUpdate": "user_message_chunk", "content": { "type": "text", "text": "世界" } }),
+            json!({ "sessionUpdate": "agent_thought_chunk", "content": { "type": "text", "text": "先查一下" } }),
+            json!({ "sessionUpdate": "tool_call", "toolCallId": "tc1", "title": "Read", "rawInput": { "path": "a.rs" } }),
+            json!({ "sessionUpdate": "tool_call_update", "toolCallId": "tc1", "status": "completed", "rawOutput": "file body" }),
+            json!({ "sessionUpdate": "agent_message_chunk", "content": { "type": "text", "text": "查完了" } }),
+        ];
+        let entries = replay_updates_to_entries(&updates);
+        assert_eq!(entries.len(), 4);
+        assert_eq!(entries[0]["message"]["role"], "user");
+        assert_eq!(entries[0]["message"]["content"][0]["text"], "你好世界");
+        assert_eq!(entries[1]["message"]["role"], "assistant");
+        assert_eq!(entries[1]["message"]["content"][0]["type"], "thinking");
+        assert_eq!(entries[1]["message"]["content"][1]["type"], "toolCall");
+        assert_eq!(entries[2]["message"]["role"], "toolResult");
+        assert_eq!(entries[2]["message"]["toolCallId"], "tc1");
+        assert_eq!(entries[3]["message"]["role"], "assistant");
+        assert_eq!(entries[3]["message"]["content"][0]["text"], "查完了");
     }
 }

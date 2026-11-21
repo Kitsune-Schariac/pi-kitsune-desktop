@@ -9,9 +9,10 @@ pub mod history;
 pub mod translate;
 
 use crate::backends::process::{build_cli_command, kill_process_tree, strip_newline};
-use crate::backends::{AgentKind, UnifiedEvent};
+use crate::backends::{AgentKind, MessageUsage, UnifiedEvent};
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::path::Path;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -164,6 +165,149 @@ fn effort_levels_for_model(catalog: &[ClaudeModelEntry], model_id: Option<&str>)
     CLAUDE_EFFORT_LEVELS.iter().map(|s| (*s).to_string()).collect()
 }
 
+/// 会话级实时统计容器 (历史快照初始化 + 流式增量更新 → `get_session_stats` 权威数据源)。
+#[derive(Debug, Clone, Default)]
+struct ClaudeLiveStats {
+    input_tokens: u64,
+    output_tokens: u64,
+    cache_read_tokens: u64,
+    cache_write_tokens: u64,
+    cost_usd: f64,
+    user_messages: u64,
+    assistant_messages: u64,
+    last_context_tokens: Option<u64>,
+    last_model: Option<String>,
+    context_window: Option<u64>,
+}
+
+impl ClaudeLiveStats {
+    fn from_snapshot(snap: history::ClaudeSessionStatsSnapshot) -> Self {
+        Self {
+            input_tokens: snap.input_tokens,
+            output_tokens: snap.output_tokens,
+            cache_read_tokens: snap.cache_read_tokens,
+            cache_write_tokens: snap.cache_write_tokens,
+            cost_usd: snap.cost_usd,
+            user_messages: snap.user_messages,
+            assistant_messages: snap.assistant_messages,
+            last_context_tokens: snap.last_context_tokens,
+            last_model: snap.last_model,
+            context_window: snap.context_window,
+        }
+    }
+
+    /// 吸收单条 `AssistantEnd` 的 token 用量 (忽略 `result` 发出的仅含 `cost` 的 0-token 尾帧)。
+    fn apply_assistant_usage(&mut self, u: &MessageUsage) {
+        if u.input == 0 && u.output == 0 && u.cache_read == 0 && u.cache_write == 0 {
+            return;
+        }
+        self.input_tokens += u.input;
+        self.output_tokens += u.output;
+        self.cache_read_tokens += u.cache_read;
+        self.cache_write_tokens += u.cache_write;
+        self.assistant_messages += 1;
+        let ctx = u.input + u.cache_read + u.cache_write;
+        if ctx > 0 {
+            self.last_context_tokens = Some(ctx);
+        }
+    }
+
+    /// 吸收 Claude `result` 帧中的权威 `contextWindow` 与单轮增量费用。
+    fn apply_result_frame(&mut self, frame: &Value, current_model: Option<&str>) {
+        // 1. 提取权威 contextWindow (优先匹配当前模型, 否则取 modelUsage 中最大非零值)
+        if let Some(mu) = frame.get("modelUsage").and_then(|v| v.as_object()) {
+            let preferred = current_model.or(self.last_model.as_deref());
+            let mut matched_cw = None;
+            let mut max_cw = 0u64;
+            for (model_key, entry) in mu {
+                if let Some(cw) = entry.get("contextWindow").and_then(|v| v.as_u64()) {
+                    if cw > 0 {
+                        if preferred == Some(model_key.as_str()) {
+                            matched_cw = Some(cw);
+                        }
+                        if cw > max_cw {
+                            max_cw = cw;
+                        }
+                    }
+                }
+            }
+            if let Some(cw) = matched_cw.or((max_cw > 0).then_some(max_cw)) {
+                self.context_window = Some(cw);
+            }
+        }
+
+        // 2. 累加本轮增量费用: 优先用 model_usage_since_last_result (精准增量), 回退 total_cost_usd
+        if let Some(since) = frame
+            .get("model_usage_since_last_result")
+            .and_then(|v| v.as_object())
+        {
+            let delta: f64 = since
+                .values()
+                .filter_map(|e| e.get("costUSD").and_then(|v| v.as_f64()))
+                .filter(|c| *c > 0.0)
+                .sum();
+            if delta > 0.0 {
+                self.cost_usd += delta;
+                return;
+            }
+        }
+        if let Some(c) = frame.get("total_cost_usd").and_then(|v| v.as_f64()) {
+            if c > 0.0 {
+                self.cost_usd += c;
+            }
+        }
+    }
+
+    /// 构造与前端 `loadSessionStats` 契约完全对齐的 JSON。
+    fn to_stats_json(&self, fallback_model: Option<&str>) -> Value {
+        let model = self.last_model.as_deref().or(fallback_model);
+        let total = self.input_tokens
+            + self.output_tokens
+            + self.cache_read_tokens
+            + self.cache_write_tokens;
+
+        let mut obj = serde_json::Map::new();
+        if let Some(used) = self.last_context_tokens {
+            let window = self
+                .context_window
+                .unwrap_or_else(|| history::infer_claude_context_window(model, Some(used)));
+            let percent = if window > 0 {
+                Some(((used as f64) / (window as f64) * 100.0).clamp(0.0, 100.0))
+            } else {
+                None
+            };
+            obj.insert(
+                "contextUsage".into(),
+                json!({
+                    "tokens": used,
+                    "contextWindow": window,
+                    "percent": percent,
+                }),
+            );
+        }
+        if total > 0 || self.user_messages > 0 || self.assistant_messages > 0 {
+            obj.insert(
+                "tokens".into(),
+                json!({
+                    "input": self.input_tokens,
+                    "output": self.output_tokens,
+                    "cacheRead": self.cache_read_tokens,
+                    "cacheWrite": self.cache_write_tokens,
+                    "total": total,
+                }),
+            );
+            obj.insert("cost".into(), json!(self.cost_usd));
+            obj.insert("userMessages".into(), json!(self.user_messages));
+            obj.insert("assistantMessages".into(), json!(self.assistant_messages));
+            obj.insert(
+                "totalMessages".into(),
+                json!(self.user_messages + self.assistant_messages),
+            );
+        }
+        Value::Object(obj)
+    }
+}
+
 pub struct ClaudeBackend {
     child: Child,
     stdin: ChildStdin,
@@ -176,7 +320,8 @@ pub struct ClaudeBackend {
     permission_mode: Arc<Mutex<String>>,
     models_catalog: Vec<ClaudeModelEntry>,
     effort: String,
-    session_path: Option<String>,
+    session_path: Arc<Mutex<Option<String>>>,
+    stats: Arc<Mutex<ClaudeLiveStats>>,
 }
 
 impl ClaudeBackend {
@@ -233,6 +378,11 @@ impl ClaudeBackend {
         let stdout = child.stdout.take().ok_or("无法获取 claude stdout")?;
         let stderr = child.stderr.take();
 
+        let initial_stats = session_path
+            .as_deref()
+            .map(|p| ClaudeLiveStats::from_snapshot(history::read_claude_session_stats(Path::new(p))))
+            .unwrap_or_default();
+
         let pending: PendingRequests = Arc::new(Mutex::new(HashMap::new()));
         let pending_for_reader = pending.clone();
         let pending_permissions: Arc<Mutex<HashMap<String, Value>>> =
@@ -244,6 +394,10 @@ impl ClaudeBackend {
         let model_for_reader = current_model.clone();
         let permission_mode_state = Arc::new(Mutex::new(mode));
         let pmode_for_reader = permission_mode_state.clone();
+        let session_path_state = Arc::new(Mutex::new(session_path));
+        let spath_for_reader = session_path_state.clone();
+        let stats = Arc::new(Mutex::new(initial_stats));
+        let stats_for_reader = stats.clone();
 
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout);
@@ -273,8 +427,10 @@ impl ClaudeBackend {
                             continue;
                         };
 
+                        let frame_type = frame.get("type").and_then(|v| v.as_str());
+
                         // host → CLI 发出的 control_request 响应直接唤醒 pending channel
-                        if frame.get("type").and_then(|v| v.as_str()) == Some("control_response") {
+                        if frame_type == Some("control_response") {
                             let req_id = frame
                                 .get("response")
                                 .and_then(|r| r.get("request_id"))
@@ -290,24 +446,70 @@ impl ClaudeBackend {
                             }
                         }
 
+                        if frame_type == Some("result") {
+                            let cur_m = model_for_reader.lock().await.clone();
+                            stats_for_reader
+                                .lock()
+                                .await
+                                .apply_result_frame(&frame, cur_m.as_deref());
+                        }
+
                         let events = translator.translate(&frame);
-                        for ev in events {
-                            // 同步缓存会话元数据与待审批请求输入
-                            match &ev {
+                        for mut ev in events {
+                            // 同步缓存会话元数据、实时统计与待审批请求输入
+                            match &mut ev {
                                 UnifiedEvent::SessionMeta {
+                                    session_path: sp_out,
                                     remote_session_id: rsid,
                                     model,
                                     permission_mode,
-                                    ..
                                 } => {
                                     if let Some(id) = rsid {
                                         *rsid_for_reader.lock().await = Some(id.clone());
+                                        // 若为新建会话且尚未记录落盘路径, 顺带尝试定位文件
+                                        let mut sp_guard = spath_for_reader.lock().await;
+                                        if sp_guard.is_none() {
+                                            if let Some(found) = history::locate_claude_session_file(id) {
+                                                let s = found.to_string_lossy().to_string();
+                                                *sp_guard = Some(s.clone());
+                                                *sp_out = Some(s);
+                                            }
+                                        }
                                     }
                                     if let Some(m) = model {
                                         *model_for_reader.lock().await = Some(m.clone());
+                                        stats_for_reader.lock().await.last_model = Some(m.clone());
                                     }
                                     if let Some(pm) = permission_mode {
                                         *pmode_for_reader.lock().await = pm.clone();
+                                    }
+                                }
+                                UnifiedEvent::AssistantEnd { usage: Some(u), .. } => {
+                                    stats_for_reader.lock().await.apply_assistant_usage(u);
+                                }
+                                UnifiedEvent::TurnSettled => {
+                                    // 本轮落盘完成后补一次会话路径定位, 确保前端 turn_settled 自动刷新侧栏
+                                    let mut sp_guard = spath_for_reader.lock().await;
+                                    if sp_guard.is_none() {
+                                        if let Some(rsid) = rsid_for_reader.lock().await.clone() {
+                                            if let Some(found) = history::locate_claude_session_file(&rsid) {
+                                                let s = found.to_string_lossy().to_string();
+                                                *sp_guard = Some(s.clone());
+                                                drop(sp_guard);
+                                                let _ = app.emit(
+                                                    "agent_event",
+                                                    json!({
+                                                        "sessionId": session_id,
+                                                        "event": UnifiedEvent::SessionMeta {
+                                                            session_path: Some(s),
+                                                            remote_session_id: None,
+                                                            model: None,
+                                                            permission_mode: None,
+                                                        }
+                                                    }),
+                                                );
+                                            }
+                                        }
                                     }
                                 }
                                 UnifiedEvent::PermissionRequest { request } => {
@@ -361,7 +563,8 @@ impl ClaudeBackend {
             permission_mode: permission_mode_state,
             models_catalog: default_claude_models(),
             effort: "medium".to_string(),
-            session_path,
+            session_path: session_path_state,
+            stats,
         };
         backend.bootstrap_session_info().await;
         Ok(backend)
@@ -510,6 +713,7 @@ impl ClaudeBackend {
             }
         });
         self.write_frame(&frame).await?;
+        self.stats.lock().await.user_messages += 1;
         Ok(json!({ "disposition": "started" }))
     }
 
@@ -533,6 +737,14 @@ impl ClaudeBackend {
             .await?;
         extract_control_response_body(&resp)?;
         *self.current_model.lock().await = Some(model_id.clone());
+        {
+            let mut st = self.stats.lock().await;
+            let resolved = find_model_entry(&self.models_catalog, &model_id)
+                .and_then(|m| m.resolved_model.clone())
+                .unwrap_or_else(|| model_id.clone());
+            st.last_model = Some(resolved);
+            st.context_window = None;
+        }
 
         // 若目标模型支持的 effort 档位不包含当前值, 自动对齐到兼容档位 (如 xhigh -> high)
         let supported = self.current_effort_levels().await;
@@ -629,6 +841,17 @@ impl ClaudeBackend {
         let model = self.current_model.lock().await.clone();
         let mode = self.permission_mode.lock().await.clone();
         let rsid = self.remote_session_id.lock().await.clone();
+        let session_file = {
+            let mut sp = self.session_path.lock().await;
+            if sp.is_none() {
+                if let Some(id) = rsid.as_deref() {
+                    if let Some(found) = history::locate_claude_session_file(id) {
+                        *sp = Some(found.to_string_lossy().to_string());
+                    }
+                }
+            }
+            sp.clone()
+        };
         Ok(json!({
             "model": model.as_ref().map(|m| json!({
                 "id": m,
@@ -637,7 +860,7 @@ impl ClaudeBackend {
             })),
             "thinkingLevel": self.effort,
             "permissionMode": mode,
-            "sessionFile": self.session_path,
+            "sessionFile": session_file,
             "remoteSessionId": rsid,
         }))
     }
@@ -709,8 +932,25 @@ impl ClaudeBackend {
         self.set_thinking_level(next).await
     }
 
+    pub async fn get_entries(&mut self) -> Result<Value, String> {
+        let path = self.session_path.lock().await.clone();
+        let Some(p) = path else {
+            return Ok(json!({ "entries": [] }));
+        };
+        let abs = history::ensure_within_claude_projects(Path::new(&p))?;
+        let entries = history::read_claude_session_entries(&abs)?;
+        Ok(json!({ "entries": entries }))
+    }
+
     pub async fn get_session_stats(&mut self) -> Result<Value, String> {
-        Ok(json!({}))
+        let cur_model = self.current_model.lock().await.clone();
+        let resolved_model = cur_model.as_deref().map(|id| {
+            find_model_entry(&self.models_catalog, id)
+                .and_then(|m| m.resolved_model.as_deref())
+                .unwrap_or(id)
+        });
+        let st = self.stats.lock().await;
+        Ok(st.to_stats_json(resolved_model))
     }
 
     pub async fn stop(&mut self) -> Result<(), String> {
@@ -722,6 +962,54 @@ impl ClaudeBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_stats_tracks_context_usage_and_ignores_cost_only_tail_frame() {
+        let mut st = ClaudeLiveStats::default();
+        st.user_messages = 1;
+        st.apply_assistant_usage(&MessageUsage {
+            input: 2,
+            output: 112,
+            cache_read: 0,
+            cache_write: 38188,
+            cost: None,
+            cost_detail: None,
+        });
+        // 模拟 translate.rs 为 result 补发的 0-token 纯 cost 尾帧: 绝不能把 last_context_tokens 清零
+        st.apply_assistant_usage(&MessageUsage {
+            input: 0,
+            output: 0,
+            cache_read: 0,
+            cache_write: 0,
+            cost: Some(0.307752),
+            cost_detail: None,
+        });
+        st.apply_result_frame(
+            &json!({
+                "type": "result",
+                "total_cost_usd": 0.307752,
+                "modelUsage": {
+                    "claude-opus-5-5": { "contextWindow": 1000000, "costUSD": 0.307752 }
+                },
+                "model_usage_since_last_result": {
+                    "claude-opus-5-5": { "contextWindow": 1000000, "costUSD": 0.307752 }
+                }
+            }),
+            Some("claude-opus-5-5"),
+        );
+
+        let v = st.to_stats_json(Some("claude-opus-5-5"));
+        assert_eq!(v["contextUsage"]["tokens"], 38190);
+        assert_eq!(v["contextUsage"]["contextWindow"], 1000000);
+        assert!((v["contextUsage"]["percent"].as_f64().unwrap() - 3.819).abs() < 1e-3);
+        assert_eq!(v["tokens"]["input"], 2);
+        assert_eq!(v["tokens"]["output"], 112);
+        assert_eq!(v["tokens"]["cacheWrite"], 38188);
+        assert_eq!(v["tokens"]["total"], 38302);
+        assert_eq!(v["userMessages"], 1);
+        assert_eq!(v["assistantMessages"], 1);
+        assert!((v["cost"].as_f64().unwrap() - 0.307752).abs() < 1e-6);
+    }
 
     #[test]
     fn parses_initialize_models_and_resolves_effort_levels() {

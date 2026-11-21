@@ -101,7 +101,7 @@ function openOnlySessions(
 ): { sid: string; s: SessionState }[] {
   return sessionOrder
     .map((sid) => ({ sid, s: sessions[sid] }))
-    .filter((x): x is { sid: string; s: SessionState } => !!x.s && x.s.cwd === p.path)
+    .filter((x): x is { sid: string; s: SessionState } => !!x.s && pathEq(x.s.cwd, p.path))
     .filter((x) => !x.s.sessionPath || !p.sessions.some((ds) => pathEq(ds.session_path, x.s.sessionPath)));
 }
 

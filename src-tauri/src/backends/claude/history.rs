@@ -7,6 +7,7 @@ use crate::backends::claude::translate::normalize_tool_result_content;
 use crate::backends::AgentKind;
 use crate::session_fs::SessionInfo;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
@@ -387,6 +388,214 @@ pub fn read_claude_session_entries(path: &Path) -> Result<Vec<Value>, String> {
     Ok(entries)
 }
 
+/// 从单个 Claude 会话 `.jsonl` 聚合出的历史统计快照 (供 `ClaudeBackend` 初始化 `get_session_stats`)。
+#[derive(Debug, Clone, Default)]
+pub struct ClaudeSessionStatsSnapshot {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_write_tokens: u64,
+    pub cost_usd: f64,
+    pub user_messages: u64,
+    pub assistant_messages: u64,
+    /// 最近一次有效 LLM 调用的实际上下文占用 (`input + cache_read + cache_write`)
+    pub last_context_tokens: Option<u64>,
+    pub last_model: Option<String>,
+    /// 若 `cost-state` 中记录了权威 `contextWindow`, 记录之
+    pub context_window: Option<u64>,
+}
+
+/// 当尚未收到 `result.modelUsage.<model>.contextWindow` 权威值时，按模型名推断上下文窗口上限。
+/// 实机 (`claude 2.1.329`) `claude-opus-5-5` 权威返回 `1_000_000`；老款 4.5 / Haiku 4.5 等默认 `200_000`。
+pub fn infer_claude_context_window(model: Option<&str>, used_tokens: Option<u64>) -> u64 {
+    let mut window = match model.map(|s| s.to_ascii_lowercase()) {
+        Some(ref m)
+            if m.contains("[1m]")
+                || m.contains("-1m")
+                || m.contains("opus-5")
+                || m.contains("sonnet-5")
+                || m.contains("fable-5")
+                || m.contains("haiku-5")
+                || m.contains("opus-4-6")
+                || m.contains("opus-4-7")
+                || m.contains("opus-4-8")
+                || m.contains("sonnet-4-6") =>
+        {
+            1_000_000
+        }
+        _ => 200_000,
+    };
+    if let Some(used) = used_tokens {
+        if used > window {
+            window = if used <= 1_000_000 { 1_000_000 } else { used };
+        }
+    }
+    window
+}
+
+/// 扫描单个 Claude `.jsonl` 文件还原历史统计与当前上下文占用：
+/// - 同一 `message.id` 按块落盘多行且携带重复 usage，必须按 `message.id` 去重（保留末次快照）
+/// - 上下文占用按 Anthropic 口径取末次有效调用的 `input + cache_read + cache_write`
+/// - 若存在 `cost-state` 行，采用其最新 `totalCostUSD` 与 `modelUsage.*.contextWindow`
+pub fn read_claude_session_stats(path: &Path) -> ClaudeSessionStatsSnapshot {
+    let Ok(file) = std::fs::File::open(path) else {
+        return ClaudeSessionStatsSnapshot::default();
+    };
+    let reader = BufReader::new(file);
+
+    struct DedupRow {
+        model: Option<String>,
+        input: u64,
+        output: u64,
+        cache_read: u64,
+        cache_write: u64,
+    }
+
+    let mut dedup_idx: HashMap<String, usize> = HashMap::new();
+    let mut dedup_rows: Vec<DedupRow> = Vec::new();
+    let mut user_messages: u64 = 0;
+    let mut cost_usd: f64 = 0.0;
+    let mut context_window: Option<u64> = None;
+
+    for (line_no, line) in reader.lines().enumerate() {
+        let Ok(line) = line else { break };
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        if v.get("isSidechain").and_then(|x| x.as_bool()) == Some(true) {
+            continue;
+        }
+        let ev_type = v.get("type").and_then(|x| x.as_str()).unwrap_or("");
+        match ev_type {
+            "user" => {
+                if let Some(content) = v.get("message").and_then(|m| m.get("content")) {
+                    let is_only_tool_result = content.as_array().map_or(false, |arr| {
+                        !arr.is_empty()
+                            && arr
+                                .iter()
+                                .all(|b| b.get("type").and_then(|t| t.as_str()) == Some("tool_result"))
+                    });
+                    if !is_only_tool_result {
+                        let text = extract_user_text(content);
+                        if !clean_user_preview(&text).is_empty() {
+                            user_messages += 1;
+                        }
+                    }
+                }
+            }
+            "assistant" => {
+                let Some(msg) = v.get("message") else { continue };
+                let Some(u) = msg.get("usage") else { continue };
+                let input = u.get("input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+                let output = u.get("output_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+                let cache_read = u
+                    .get("cache_read_input_tokens")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or(0);
+                let cache_write = u
+                    .get("cache_creation_input_tokens")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or(0);
+                if input == 0 && output == 0 && cache_read == 0 && cache_write == 0 {
+                    continue;
+                }
+                let model = msg
+                    .get("model")
+                    .and_then(|x| x.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string());
+                let key = msg
+                    .get("id")
+                    .and_then(|x| x.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("__line_{line_no}"));
+                let row = DedupRow {
+                    model,
+                    input,
+                    output,
+                    cache_read,
+                    cache_write,
+                };
+                if let Some(&idx) = dedup_idx.get(&key) {
+                    dedup_rows[idx] = row;
+                } else {
+                    let idx = dedup_rows.len();
+                    dedup_idx.insert(key, idx);
+                    dedup_rows.push(row);
+                }
+            }
+            "cost-state" => {
+                if let Some(c) = v.get("totalCostUSD").and_then(|x| x.as_f64()) {
+                    if c > 0.0 {
+                        cost_usd = c;
+                    }
+                }
+                if let Some(mu) = v.get("modelUsage").and_then(|x| x.as_object()) {
+                    for entry in mu.values() {
+                        if let Some(cw) = entry.get("contextWindow").and_then(|x| x.as_u64()) {
+                            if cw > 0 {
+                                context_window = Some(cw);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut snap = ClaudeSessionStatsSnapshot {
+        user_messages,
+        assistant_messages: dedup_rows.len() as u64,
+        cost_usd,
+        context_window,
+        ..Default::default()
+    };
+    for row in dedup_rows {
+        snap.input_tokens += row.input;
+        snap.output_tokens += row.output;
+        snap.cache_read_tokens += row.cache_read;
+        snap.cache_write_tokens += row.cache_write;
+        let ctx = row.input + row.cache_read + row.cache_write;
+        if ctx > 0 {
+            snap.last_context_tokens = Some(ctx);
+        }
+        if row.model.is_some() {
+            snap.last_model = row.model;
+        }
+    }
+    snap
+}
+
+/// 按 `session_id` 反查 `~/.claude/projects/*/<session_id>.jsonl` 落盘路径 (新建会话落盘后对账用)。
+pub fn locate_claude_session_file(session_id: &str) -> Option<PathBuf> {
+    if session_id.trim().is_empty()
+        || session_id.contains('/')
+        || session_id.contains('\\')
+        || session_id.contains("..")
+    {
+        return None;
+    }
+    let root = claude_projects_dir().ok()?;
+    let dirs = std::fs::read_dir(&root).ok()?;
+    let target_name = format!("{session_id}.jsonl");
+    for entry in dirs.flatten() {
+        let p = entry.path();
+        if !p.is_dir() {
+            continue;
+        }
+        let candidate = p.join(&target_name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -438,6 +647,60 @@ mod tests {
         assert_eq!(entries[2]["message"]["role"], "toolResult");
         assert_eq!(entries[2]["message"]["toolCallId"], "tu1");
         assert_eq!(entries[3]["message"]["content"][0]["text"], "读完了");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn aggregates_claude_session_stats_with_dedup_and_context_window() {
+        let dir = std::env::temp_dir().join(format!(
+            "kitsune-claude-stats-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("sess-stats.jsonl");
+        let mut fp = std::fs::File::create(&file).unwrap();
+        writeln!(
+            fp,
+            r#"{{"type":"user","uuid":"u1","cwd":"C:\\proj","sessionId":"s1","message":{{"role":"user","content":"分析代码"}}}}"#
+        ).unwrap();
+        // 同 message.id 分两行写 (thinking + text), 必须去重不重复累加
+        writeln!(
+            fp,
+            r#"{{"type":"assistant","uuid":"a1","message":{{"id":"m1","model":"claude-opus-5-5","role":"assistant","content":[{{"type":"thinking","thinking":"x"}}],"usage":{{"input_tokens":2,"cache_creation_input_tokens":10000,"cache_read_input_tokens":0,"output_tokens":50}}}}}}"#
+        ).unwrap();
+        writeln!(
+            fp,
+            r#"{{"type":"assistant","uuid":"a2","message":{{"id":"m1","model":"claude-opus-5-5","role":"assistant","content":[{{"type":"text","text":"ok"}}],"usage":{{"input_tokens":2,"cache_creation_input_tokens":10000,"cache_read_input_tokens":0,"output_tokens":120}}}}}}"#
+        ).unwrap();
+        writeln!(
+            fp,
+            r#"{{"type":"assistant","uuid":"a3","message":{{"id":"m2","model":"claude-opus-5-5","role":"assistant","content":[{{"type":"text","text":"done"}}],"usage":{{"input_tokens":5,"cache_creation_input_tokens":500,"cache_read_input_tokens":10000,"output_tokens":80}}}}}}"#
+        ).unwrap();
+        writeln!(
+            fp,
+            r#"{{"type":"cost-state","sessionId":"s1","totalCostUSD":0.42,"modelUsage":{{"claude-opus-5-5":{{"contextWindow":1000000,"costUSD":0.42}}}}}}"#
+        ).unwrap();
+        drop(fp);
+
+        let snap = read_claude_session_stats(&file);
+        assert_eq!(snap.user_messages, 1);
+        assert_eq!(snap.assistant_messages, 2);
+        assert_eq!(snap.input_tokens, 7);
+        assert_eq!(snap.output_tokens, 200);
+        assert_eq!(snap.cache_write_tokens, 10500);
+        assert_eq!(snap.cache_read_tokens, 10000);
+        assert_eq!(snap.last_context_tokens, Some(10505));
+        assert_eq!(snap.last_model.as_deref(), Some("claude-opus-5-5"));
+        assert_eq!(snap.context_window, Some(1_000_000));
+        assert!((snap.cost_usd - 0.42).abs() < 1e-6);
+
+        assert_eq!(infer_claude_context_window(Some("claude-opus-5-5"), Some(100)), 1_000_000);
+        assert_eq!(infer_claude_context_window(Some("claude-haiku-4-5-20251001"), Some(50_000)), 200_000);
+        assert_eq!(infer_claude_context_window(Some("claude-haiku-4-5-20251001"), Some(250_000)), 1_000_000);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

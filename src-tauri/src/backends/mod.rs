@@ -402,7 +402,8 @@ impl AgentRuntime {
     pub async fn get_entries(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.get_entries().await,
-            Self::Claude(_) | Self::Acp(_) => Ok(serde_json::json!({ "entries": [] })),
+            Self::Claude(rt) => rt.get_entries().await,
+            Self::Acp(rt) => rt.get_entries().await,
         }
     }
 
@@ -410,7 +411,7 @@ impl AgentRuntime {
         match self {
             Self::Pi(rt) => rt.get_session_stats().await,
             Self::Claude(rt) => rt.get_session_stats().await,
-            Self::Acp(_) => Ok(serde_json::json!({})),
+            Self::Acp(rt) => rt.get_session_stats().await,
         }
     }
 

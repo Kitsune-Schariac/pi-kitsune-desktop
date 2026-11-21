@@ -255,7 +255,7 @@ async fn start_session(
             }))
         }
         AgentKind::Agy => {
-            let acp = AcpBackend::spawn(
+            let mut acp = AcpBackend::spawn(
                 app.clone(),
                 session_id.clone(),
                 cwd.clone(),
@@ -263,6 +263,8 @@ async fn start_session(
                 session_path,
             )
             .await?;
+            let entries = acp.take_initial_entries();
+            let resolved_session_path = acp.session_path();
             let current_mode = acp.current_permission_mode().await;
             let live_modes = acp.available_permission_modes().await;
             let runtime = AgentRuntime::Acp(acp);
@@ -281,7 +283,8 @@ async fn start_session(
                 "agentKind": kind,
                 "capabilities": capabilities,
                 "permissionMode": current_mode,
-                "entries": [],
+                "sessionPath": resolved_session_path,
+                "entries": entries,
             }))
         }
     }

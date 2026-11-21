@@ -241,6 +241,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           agentKind?: AgentKind;
           capabilities?: AgentCapabilities;
           permissionMode?: string | null;
+          sessionPath?: string | null;
           entries?: unknown[];
         }>("start_session", {
           cwd,
@@ -251,6 +252,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           sessionPath,
         });
         const id = data.sessionId;
+        const resolvedSessionPath = data.sessionPath ?? sessionPath;
         const agentKind = normalizeAgentKind(data.agentKind ?? requestedKind);
         const capabilities = data.capabilities ?? PI_CAPABILITIES;
         const permissionMode = data.permissionMode ?? (capabilities.permissionModes[0] ?? null);
@@ -261,7 +263,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           sessions: {
             ...state.sessions,
             [id]: {
-              sessionId: id, agentKind, capabilities, cwd, sessionPath, sessionName: null,
+              sessionId: id, agentKind, capabilities, cwd, sessionPath: resolvedSessionPath, sessionName: null,
               isStreaming: false, entries, currentAssistantId: null,
               detached: false, lastEntryMtime: null, hasUnread: false,
               error: null, currentModel: null, thinkingLevel: "medium",
@@ -823,12 +825,22 @@ export const useSessionStore = create<SessionStore>((set, get) => {
             patch(sessionId, { hasUnread: true });
           }
           {
-            const sp = get().sessions[sessionId]?.sessionPath;
+            const sess = get().sessions[sessionId];
+            const sp = sess?.sessionPath;
             const inDisk = useProjectsStore.getState().projects.some((p) =>
               p.sessions.some((ds) => pathEq(ds.session_path, sp))
             );
             if (sp && !inDisk) {
-              useProjectsStore.getState().loadProjects();
+              void useProjectsStore.getState().loadProjects().then(() => {
+                // AGY SQLite 摘要表落盘偶有毫秒级异步滞后，未命中时仅补刷一次
+                if (sess?.agentKind !== "agy") return;
+                const nowInDisk = useProjectsStore.getState().projects.some((p) =>
+                  p.sessions.some((ds) => pathEq(ds.session_path, sp))
+                );
+                if (!nowInDisk) {
+                  setTimeout(() => { void useProjectsStore.getState().loadProjects(); }, 900);
+                }
+              });
             }
           }
           {

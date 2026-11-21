@@ -8,6 +8,7 @@
 //!   由后台 task 等待 `oneshot` 并在结束时 emit `TurnSettled`, 保证 `abort` (`session/cancel`)
 //!   与工具权限审批 (`respond_permission`) 永不被锁死。
 
+pub mod history;
 pub mod protocol;
 
 use crate::backends::process::{build_cli_command, kill_process_tree, strip_newline};
@@ -34,6 +35,103 @@ struct PendingAcpPermission {
     options: Vec<PermissionOption>,
 }
 
+/// ACP 会话实时遥测统计 (由 `usage_update`、`session/prompt` 结算与历史 transcript 共同维护)。
+#[derive(Debug, Clone, Default)]
+struct AcpSessionStats {
+    context_used: Option<u64>,
+    context_window: u64,
+    input_tokens: u64,
+    output_tokens: u64,
+    cache_read_tokens: u64,
+    cache_write_tokens: u64,
+    user_messages: u64,
+    assistant_messages: u64,
+}
+
+impl AcpSessionStats {
+    fn apply_usage_update(&mut self, uu: protocol::AcpUsageUpdate) {
+        if uu.size > 0 {
+            self.context_window = uu.size;
+        }
+        // 新会话首轮启动前 ACP 可能推送 used=0 占位帧, 仅在 used>0 时更新已用上下文
+        if uu.used > 0 {
+            self.context_used = Some(uu.used);
+        }
+    }
+
+    fn apply_prompt_usage(&mut self, u: &MessageUsage) {
+        self.input_tokens += u.input;
+        self.output_tokens += u.output;
+        self.cache_read_tokens += u.cache_read;
+        self.cache_write_tokens += u.cache_write;
+        self.assistant_messages += 1;
+        if self.context_used.is_none() {
+            let fallback = u.input + u.cache_read + u.cache_write;
+            if fallback > 0 {
+                self.context_used = Some(fallback);
+            }
+        }
+    }
+
+    /// 用历史 `transcript.jsonl` 补齐之前轮次的累计 token 与消息数，不覆盖 `usage_update` 的权威上下文值。
+    fn merge_transcript_stats(&mut self, tr: &history::AgyTranscriptStats) {
+        if self.input_tokens == 0 && self.output_tokens == 0 && self.cache_read_tokens == 0 {
+            self.input_tokens = tr.input_tokens;
+            self.output_tokens = tr.output_tokens;
+            self.cache_read_tokens = tr.cache_read_tokens;
+            self.user_messages = tr.user_messages;
+            self.assistant_messages = tr.assistant_messages;
+        }
+        if self.context_used.is_none() {
+            self.context_used = tr.last_context_tokens;
+        }
+    }
+
+    fn to_stats_json(&self) -> Value {
+        let total = self.input_tokens
+            + self.output_tokens
+            + self.cache_read_tokens
+            + self.cache_write_tokens;
+        let mut obj = serde_json::Map::new();
+        if let Some(used) = self.context_used {
+            let window = self.context_window;
+            let percent = if window > 0 {
+                Some(((used as f64) / (window as f64) * 100.0).clamp(0.0, 100.0))
+            } else {
+                None
+            };
+            obj.insert(
+                "contextUsage".into(),
+                json!({
+                    "tokens": used,
+                    "contextWindow": window,
+                    "percent": percent,
+                }),
+            );
+        }
+        if total > 0 || self.user_messages > 0 || self.assistant_messages > 0 {
+            obj.insert(
+                "tokens".into(),
+                json!({
+                    "input": self.input_tokens,
+                    "output": self.output_tokens,
+                    "cacheRead": self.cache_read_tokens,
+                    "cacheWrite": self.cache_write_tokens,
+                    "total": total,
+                }),
+            );
+            obj.insert("cost".into(), json!(0.0));
+            obj.insert("userMessages".into(), json!(self.user_messages));
+            obj.insert("assistantMessages".into(), json!(self.assistant_messages));
+            obj.insert(
+                "totalMessages".into(),
+                json!(self.user_messages + self.assistant_messages),
+            );
+        }
+        Value::Object(obj)
+    }
+}
+
 /// 启动任意 ACP 兼容 CLI 的配置规格。
 pub struct AcpLaunchSpec {
     pub kind: AgentKind,
@@ -58,7 +156,10 @@ pub struct AcpBackend {
     app: AppHandle,
     session_id: String,
     acp_session_id: String,
+    session_path: Option<String>,
     config: Arc<Mutex<protocol::AcpSessionConfig>>,
+    stats: Arc<Mutex<AcpSessionStats>>,
+    initial_entries: Vec<Value>,
     child: Child,
     stdin: Arc<Mutex<ChildStdin>>,
     pending: PendingRpc,
@@ -136,6 +237,11 @@ impl AcpBackend {
         let config: Arc<Mutex<protocol::AcpSessionConfig>> =
             Arc::new(Mutex::new(protocol::AcpSessionConfig::default()));
         let config_for_reader = config.clone();
+        let stats: Arc<Mutex<AcpSessionStats>> = Arc::new(Mutex::new(AcpSessionStats::default()));
+        let stats_for_reader = stats.clone();
+        // `session/load` 期间缓冲历史回放帧，避免在前端尚未建好 session store 时提前 emit 被丢弃
+        let replay_buffer: Arc<Mutex<Option<Vec<Value>>>> = Arc::new(Mutex::new(None));
+        let replay_for_reader = replay_buffer.clone();
 
         let app_for_reader = app.clone();
         let sid_for_reader = session_id.clone();
@@ -207,9 +313,10 @@ impl AcpBackend {
                                     }),
                                 );
                             }
-                            // 3. Notification: session/update → 同步配置快照并翻译为 UnifiedEvent
+                            // 3. Notification: session/update → 同步配置/用量快照并按是否处于回放期分流
                             (Some("session/update"), None) => {
                                 let params = frame.get("params").cloned().unwrap_or(Value::Null);
+                                let mut is_replaying = false;
                                 if let Some(update) = params.get("update") {
                                     match update.get("sessionUpdate").and_then(|v| v.as_str()) {
                                         Some("config_option_update") => {
@@ -221,6 +328,11 @@ impl AcpBackend {
                                                 protocol::apply_config_options(&mut guard, arr);
                                             }
                                         }
+                                        Some("usage_update") => {
+                                            if let Some(uu) = protocol::parse_usage_update(update) {
+                                                stats_for_reader.lock().await.apply_usage_update(uu);
+                                            }
+                                        }
                                         Some("current_mode_update") => {
                                             if let Some(mode_id) = update
                                                 .get("currentModeId")
@@ -230,28 +342,38 @@ impl AcpBackend {
                                             {
                                                 config_for_reader.lock().await.current_mode_id =
                                                     Some(mode_id.to_string());
-                                                let _ = app_for_reader.emit(
-                                                    "agent_event",
-                                                    json!({
-                                                        "sessionId": sid_for_reader,
-                                                        "event": UnifiedEvent::SessionMeta {
-                                                            session_path: None,
-                                                            remote_session_id: None,
-                                                            model: None,
-                                                            permission_mode: Some(mode_id.to_string()),
-                                                        }
-                                                    }),
-                                                );
+                                                if replay_for_reader.lock().await.is_none() {
+                                                    let _ = app_for_reader.emit(
+                                                        "agent_event",
+                                                        json!({
+                                                            "sessionId": sid_for_reader,
+                                                            "event": UnifiedEvent::SessionMeta {
+                                                                session_path: None,
+                                                                remote_session_id: None,
+                                                                model: None,
+                                                                permission_mode: Some(mode_id.to_string()),
+                                                            }
+                                                        }),
+                                                    );
+                                                }
                                             }
                                         }
                                         _ => {}
                                     }
+
+                                    let mut rb = replay_for_reader.lock().await;
+                                    if let Some(buf) = rb.as_mut() {
+                                        buf.push(update.clone());
+                                        is_replaying = true;
+                                    }
                                 }
-                                for ev in protocol::translate_acp_update(&params) {
-                                    let _ = app_for_reader.emit(
-                                        "agent_event",
-                                        json!({ "sessionId": sid_for_reader, "event": ev }),
-                                    );
+                                if !is_replaying {
+                                    for ev in protocol::translate_acp_update(&params) {
+                                        let _ = app_for_reader.emit(
+                                            "agent_event",
+                                            json!({ "sessionId": sid_for_reader, "event": ev }),
+                                        );
+                                    }
                                 }
                             }
                             _ => {}
@@ -298,7 +420,10 @@ impl AcpBackend {
             app,
             session_id,
             acp_session_id: String::new(),
+            session_path: None,
             config,
+            stats,
+            initial_entries: Vec::new(),
             child,
             stdin,
             pending,
@@ -330,30 +455,48 @@ impl AcpBackend {
             return Err(format!("ACP initialize 返回错误: {err}{diag}"));
         }
 
-        // 握手 2: session/load (若有历史 ID) 或 session/new
-        let (acp_sid, parsed_cfg) = if let Some(rid) = resume_session_id.filter(|s| !s.is_empty()) {
+        // 握手 2: session/load (若有历史路径或 ID) 或 session/new
+        let resume_id = resume_session_id
+            .as_deref()
+            .and_then(history::extract_agy_session_id);
+        let (acp_sid, parsed_cfg, initial_entries) = if let Some(rid) = resume_id {
+            *replay_buffer.lock().await = Some(Vec::new());
             let lid = backend.next_id();
-            match backend
+            let load_res = backend
                 .send_rpc_wait(
                     protocol::build_session_load_request(lid, &rid, &cwd),
                     lid,
                     ACP_SESSION_TIMEOUT_SECS,
                 )
-                .await
-            {
+                .await;
+            let replayed = replay_buffer.lock().await.take().unwrap_or_default();
+            match load_res {
                 Ok(resp) if resp.get("error").is_none() => {
                     let cfg = resp
                         .get("result")
                         .map(protocol::parse_session_config)
                         .unwrap_or_default();
-                    (rid, cfg)
+                    let mut entries = protocol::replay_updates_to_entries(&replayed);
+                    if entries.is_empty() {
+                        entries = history::read_agy_transcript_entries(&rid);
+                    }
+                    // 用 transcript 历史补齐累计 token 与消息数（不覆盖 usage_update 的权威上下文值）
+                    let tr_stats = history::read_agy_transcript_stats(&rid);
+                    backend.stats.lock().await.merge_transcript_stats(&tr_stats);
+                    (rid, cfg, entries)
                 }
-                _ => backend.create_new_acp_session(&cwd).await?,
+                _ => {
+                    let (sid, cfg) = backend.create_new_acp_session(&cwd).await?;
+                    (sid, cfg, Vec::new())
+                }
             }
         } else {
-            backend.create_new_acp_session(&cwd).await?
+            let (sid, cfg) = backend.create_new_acp_session(&cwd).await?;
+            (sid, cfg, Vec::new())
         };
         backend.acp_session_id = acp_sid.clone();
+        backend.session_path = history::agy_conversation_db_path(&acp_sid);
+        backend.initial_entries = initial_entries;
         let meta_model = parsed_cfg.current_model_id.clone();
         let meta_mode = parsed_cfg.current_mode_id.clone();
         *backend.config.lock().await = parsed_cfg;
@@ -363,7 +506,7 @@ impl AcpBackend {
             json!({
                 "sessionId": backend.session_id,
                 "event": UnifiedEvent::SessionMeta {
-                    session_path: None,
+                    session_path: backend.session_path.clone(),
                     remote_session_id: Some(acp_sid),
                     model: meta_model,
                     permission_mode: meta_mode,
@@ -507,9 +650,11 @@ impl AcpBackend {
             );
             return Err(e);
         }
+        self.stats.lock().await.user_messages += 1;
 
         let app = self.app.clone();
         let sid = self.session_id.clone();
+        let stats_for_task = self.stats.clone();
         tokio::spawn(async move {
             let mut usage = None;
             let mut stop_reason = None;
@@ -536,6 +681,9 @@ impl AcpBackend {
                         );
                     } else if let Some(result) = resp.get("result") {
                         usage = extract_prompt_usage(result);
+                        if let Some(ref u) = usage {
+                            stats_for_task.lock().await.apply_prompt_usage(u);
+                        }
                         stop_reason = result
                             .get("stopReason")
                             .and_then(|v| v.as_str())
@@ -755,6 +903,14 @@ impl AcpBackend {
         Ok(json!({ "permissionMode": current }))
     }
 
+    pub fn take_initial_entries(&mut self) -> Vec<Value> {
+        std::mem::take(&mut self.initial_entries)
+    }
+
+    pub fn session_path(&self) -> Option<String> {
+        self.session_path.clone()
+    }
+
     pub async fn get_state(&mut self) -> Result<Value, String> {
         let cfg = self.config.lock().await;
         let model = cfg.current_model_id.as_ref().map(|id| {
@@ -766,10 +922,21 @@ impl AcpBackend {
         });
         Ok(json!({
             "remoteSessionId": self.acp_session_id,
+            "sessionFile": self.session_path,
             "model": model,
             "thinkingLevel": cfg.effective_thought_level(),
             "permissionMode": cfg.current_mode_id,
         }))
+    }
+
+    pub async fn get_entries(&mut self) -> Result<Value, String> {
+        let entries = history::read_agy_transcript_entries(&self.acp_session_id);
+        Ok(json!({ "entries": entries }))
+    }
+
+    pub async fn get_session_stats(&mut self) -> Result<Value, String> {
+        let st = self.stats.lock().await;
+        Ok(st.to_stats_json())
     }
 
     pub async fn stop(&mut self) -> Result<(), String> {
@@ -781,6 +948,35 @@ impl AcpBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn acp_session_stats_combines_usage_update_and_prompt_usage() {
+        let mut st = AcpSessionStats::default();
+        // 首条 used=0 占位帧只设窗口上限，不写 used=0
+        st.apply_usage_update(protocol::AcpUsageUpdate { used: 0, size: 1_048_576 });
+        assert!(st.to_stats_json().get("contextUsage").is_none());
+
+        st.user_messages = 1;
+        st.apply_usage_update(protocol::AcpUsageUpdate { used: 12174, size: 1_048_576 });
+        st.apply_prompt_usage(&MessageUsage {
+            input: 12095,
+            output: 79,
+            cache_read: 0,
+            cache_write: 0,
+            cost: None,
+            cost_detail: None,
+        });
+
+        let v = st.to_stats_json();
+        assert_eq!(v["contextUsage"]["tokens"], 12174);
+        assert_eq!(v["contextUsage"]["contextWindow"], 1_048_576);
+        assert!((v["contextUsage"]["percent"].as_f64().unwrap() - 1.161).abs() < 0.01);
+        assert_eq!(v["tokens"]["input"], 12095);
+        assert_eq!(v["tokens"]["output"], 79);
+        assert_eq!(v["tokens"]["total"], 12174);
+        assert_eq!(v["userMessages"], 1);
+        assert_eq!(v["assistantMessages"], 1);
+    }
 
     #[test]
     fn extracts_prompt_usage() {
