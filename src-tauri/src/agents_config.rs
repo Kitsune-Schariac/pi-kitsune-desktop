@@ -12,6 +12,10 @@ fn default_claude_permission_mode() -> String {
     "auto".to_string()
 }
 
+fn default_codex_permission_mode() -> String {
+    "auto".to_string()
+}
+
 /// 预留: 自定义 ACP 兼容 Agent 预设 (如 Gemini CLI / OpenCode 等)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,8 +37,12 @@ pub struct AgentsConfig {
     pub claude_path: Option<String>,
     #[serde(default)]
     pub agy_path: Option<String>,
+    #[serde(default)]
+    pub codex_path: Option<String>,
     #[serde(default = "default_claude_permission_mode")]
     pub claude_default_permission_mode: String,
+    #[serde(default = "default_codex_permission_mode")]
+    pub codex_default_permission_mode: String,
     #[serde(default)]
     pub custom_acp_agents: Vec<CustomAcpAgent>,
 }
@@ -45,14 +53,16 @@ impl Default for AgentsConfig {
             pi_path: None,
             claude_path: None,
             agy_path: None,
+            codex_path: None,
             claude_default_permission_mode: default_claude_permission_mode(),
+            codex_default_permission_mode: default_codex_permission_mode(),
             custom_acp_agents: Vec::new(),
         }
     }
 }
 
 impl AgentsConfig {
-    /// 清洗空串为 `None`, 校验 Claude 默认权限模式回落 `"auto"`。
+    /// 清洗空串为 `None`, 校验默认权限模式回落 `"auto"`。
     pub fn normalized(mut self) -> Self {
         let clean = |opt: Option<String>| {
             opt.map(|s| s.trim().to_string())
@@ -61,10 +71,16 @@ impl AgentsConfig {
         self.pi_path = clean(self.pi_path);
         self.claude_path = clean(self.claude_path);
         self.agy_path = clean(self.agy_path);
+        self.codex_path = clean(self.codex_path);
         if !crate::backends::claude::CLAUDE_PERMISSION_MODES
             .contains(&self.claude_default_permission_mode.as_str())
         {
             self.claude_default_permission_mode = default_claude_permission_mode();
+        }
+        if !crate::backends::codex::protocol::CODEX_PERMISSION_MODES
+            .contains(&self.codex_default_permission_mode.as_str())
+        {
+            self.codex_default_permission_mode = default_codex_permission_mode();
         }
         self
     }
@@ -74,6 +90,7 @@ impl AgentsConfig {
             crate::backends::AgentKind::Pi => self.pi_path.as_deref().unwrap_or("pi"),
             crate::backends::AgentKind::Claude => self.claude_path.as_deref().unwrap_or("claude"),
             crate::backends::AgentKind::Agy => self.agy_path.as_deref().unwrap_or("agy"),
+            crate::backends::AgentKind::Codex => self.codex_path.as_deref().unwrap_or("codex"),
         }
     }
 }
@@ -145,7 +162,9 @@ mod tests {
         // 缺文件返回默认
         let def = load_from_path(&path);
         assert_eq!(def.claude_default_permission_mode, "auto");
+        assert_eq!(def.codex_default_permission_mode, "auto");
         assert_eq!(def.program_for(crate::backends::AgentKind::Agy), "agy");
+        assert_eq!(def.program_for(crate::backends::AgentKind::Codex), "codex");
 
         // 空串归一化为 None, 非法权限模式回退 auto
         let saved = save_to_path(
@@ -154,7 +173,9 @@ mod tests {
                 pi_path: Some("   ".into()),
                 claude_path: Some(r"C:\tools\claude.exe".into()),
                 agy_path: Some(r"C:\tools\agy.exe".into()),
+                codex_path: Some(r"C:\tools\codex.exe".into()),
                 claude_default_permission_mode: "invalid".into(),
+                codex_default_permission_mode: "invalid".into(),
                 custom_acp_agents: vec![CustomAcpAgent {
                     id: "gemini".into(),
                     label: "Gemini CLI".into(),
@@ -167,12 +188,17 @@ mod tests {
         .unwrap();
         assert_eq!(saved.pi_path, None);
         assert_eq!(saved.claude_default_permission_mode, "auto");
+        assert_eq!(saved.codex_default_permission_mode, "auto");
 
         let reloaded = load_from_path(&path);
         assert_eq!(reloaded, saved);
         assert_eq!(
             reloaded.program_for(crate::backends::AgentKind::Agy),
             r"C:\tools\agy.exe"
+        );
+        assert_eq!(
+            reloaded.program_for(crate::backends::AgentKind::Codex),
+            r"C:\tools\codex.exe"
         );
 
         let _ = std::fs::remove_dir_all(&dir);

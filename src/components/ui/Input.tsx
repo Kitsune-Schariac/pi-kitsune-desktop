@@ -50,7 +50,10 @@ export function Textarea({
   surface: _surface,
   className = "",
   ...rest
-}: TextareaHTMLAttributes<HTMLTextAreaElement> & { surface?: FieldSurface }) {
+}: TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  ref?: Ref<HTMLTextAreaElement>;
+  surface?: FieldSurface;
+}) {
   return (
     <textarea
       className={`${FIELD_BASE} min-h-[88px] resize-y px-3 py-2 leading-relaxed ${className}`}

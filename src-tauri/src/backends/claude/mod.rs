@@ -9,7 +9,8 @@ pub mod history;
 pub mod translate;
 
 use crate::backends::process::{build_cli_command, kill_process_tree, strip_newline};
-use crate::backends::{AgentKind, MessageUsage, UnifiedEvent};
+use crate::backends::prompt::build_claude_ask_user_control_payload;
+use crate::backends::{AgentKind, MessageUsage, UnifiedEvent, UserPromptResponse};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::Path;
@@ -315,6 +316,8 @@ pub struct ClaudeBackend {
     id_counter: Arc<AtomicU64>,
     /// 待回复的工具审批请求原始 input 缓存 (回写 allow 时可附带 updatedInput)
     pending_permissions: Arc<Mutex<HashMap<String, Value>>>,
+    /// 待回复的结构化提问请求 (`AskUserQuestion`) 原始 input 缓存 (回写 allow 时合并 answers)
+    pending_prompts: Arc<Mutex<HashMap<String, Value>>>,
     remote_session_id: Arc<Mutex<Option<String>>>,
     current_model: Arc<Mutex<Option<String>>>,
     permission_mode: Arc<Mutex<String>>,
@@ -388,6 +391,9 @@ impl ClaudeBackend {
         let pending_permissions: Arc<Mutex<HashMap<String, Value>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let perms_for_reader = pending_permissions.clone();
+        let pending_prompts: Arc<Mutex<HashMap<String, Value>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let prompts_for_reader = pending_prompts.clone();
         let remote_session_id = Arc::new(Mutex::new(resume_session_id));
         let rsid_for_reader = remote_session_id.clone();
         let current_model = Arc::new(Mutex::new(model));
@@ -518,6 +524,17 @@ impl ClaudeBackend {
                                         .await
                                         .insert(request.id.clone(), request.input.clone());
                                 }
+                                UnifiedEvent::UserPrompt { request } => {
+                                    let raw_input = frame
+                                        .get("request")
+                                        .and_then(|r| r.get("input"))
+                                        .cloned()
+                                        .unwrap_or_else(|| json!({}));
+                                    prompts_for_reader
+                                        .lock()
+                                        .await
+                                        .insert(request.id.clone(), raw_input);
+                                }
                                 _ => {}
                             }
                             let _ = app.emit(
@@ -558,6 +575,7 @@ impl ClaudeBackend {
             pending,
             id_counter: Arc::new(AtomicU64::new(0)),
             pending_permissions,
+            pending_prompts,
             remote_session_id,
             current_model,
             permission_mode: permission_mode_state,
@@ -826,6 +844,30 @@ impl ClaudeBackend {
             })
         };
 
+        let frame = json!({
+            "type": "control_response",
+            "response": {
+                "subtype": "success",
+                "request_id": request_id,
+                "response": payload,
+            }
+        });
+        self.write_frame(&frame).await
+    }
+
+    pub async fn respond_user_prompt(
+        &mut self,
+        request_id: String,
+        response: UserPromptResponse,
+    ) -> Result<(), String> {
+        let orig_input = self
+            .pending_prompts
+            .lock()
+            .await
+            .remove(&request_id)
+            .unwrap_or_else(|| json!({}));
+
+        let payload = build_claude_ask_user_control_payload(orig_input, response);
         let frame = json!({
             "type": "control_response",
             "response": {

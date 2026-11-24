@@ -30,6 +30,8 @@ image = "0.25"
 encoding_rs = "0.8"
 # 只读扫描 ~/.gemini/antigravity-cli/conversation_summaries.db (支持 WAL 模式，零外部 CLI 依赖)
 rusqlite = { version = "0.32", features = ["bundled"] }
+# 纯 Rust Zstandard 解压 (零 C 依赖): 兼容读取 Codex 已压缩的 `.jsonl.zst` 历史 rollout 用于跨供应商无损迁移
+ruzstd = "0.9"
 
 [target.'cfg(windows)'.dependencies]
 # 复用依赖树中已有的 winreg, 读取 Windows 系统代理同步给不认 WinINet 的 CLI 子进程 (如 agy/claude)

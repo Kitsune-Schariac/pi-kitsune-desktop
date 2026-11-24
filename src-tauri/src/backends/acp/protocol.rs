@@ -7,6 +7,10 @@
 //!   `tool_call`, `tool_call_update`, `config_option_update`, `current_mode_update`)
 //! - Agent → Client Request: `session/request_permission` ↔ `RequestPermissionResponse`
 
+use crate::backends::plan::{parse_acp_plan_update, PlanSnapshot};
+use crate::backends::prompt::{
+    parse_claude_ask_user_question, UserPromptRequest, UserPromptResponse,
+};
 use crate::backends::{
     ContentBlockKind, PermissionOption, PermissionRequestPayload, UnifiedEvent,
 };
@@ -513,7 +517,72 @@ pub fn translate_acp_update(params: &Value) -> Vec<UnifiedEvent> {
                 }],
             }
         }
+        "plan" => parse_acp_plan_update(update)
+            .map(|plan| vec![UnifiedEvent::PlanUpdate { plan }])
+            .unwrap_or_default(),
         _ => Vec::new(),
+    }
+}
+
+/// 从 `session/load` 缓冲的 `session/update` 数组中提取最后一份仍含未完成项的 `plan` 快照。
+pub fn extract_active_plan_from_updates(updates: &[Value]) -> Option<PlanSnapshot> {
+    let mut last: Option<PlanSnapshot> = None;
+    for update in updates {
+        if let Some(plan) = parse_acp_plan_update(update) {
+            last = Some(plan);
+        }
+    }
+    last.filter(|p| p.has_incomplete())
+}
+
+/// 预留: 翻译未来 ACP 扩展的反向提问请求 (`session/request_user_input` / `session/elicit`) → 统一 `UserPromptRequest`。
+pub fn translate_acp_user_prompt_request(
+    request_key: String,
+    params: &Value,
+) -> Option<UserPromptRequest> {
+    let description = params
+        .get("message")
+        .or_else(|| params.get("description"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let mut req = parse_claude_ask_user_question(request_key, params, description)?;
+    if let Some(title) = params
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        req.title = Some(title.to_string());
+    }
+    req.source_tool = Some("acp_user_prompt".to_string());
+    Some(req)
+}
+
+/// 预留: 构造 ACP 反向提问请求的 JSON-RPC 2.0 响应帧。
+pub fn build_acp_user_prompt_response(rpc_id: Value, response: UserPromptResponse) -> Value {
+    match response {
+        UserPromptResponse::Submit {
+            answers,
+            confirmed,
+            text,
+        } => json!({
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "result": {
+                "outcome": "submitted",
+                "answers": answers,
+                "confirmed": confirmed,
+                "text": text,
+            }
+        }),
+        UserPromptResponse::Cancel { reason } => json!({
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "result": {
+                "outcome": "cancelled",
+                "reason": reason,
+            }
+        }),
     }
 }
 
@@ -987,5 +1056,44 @@ mod tests {
         assert_eq!(entries[2]["message"]["toolCallId"], "tc1");
         assert_eq!(entries[3]["message"]["role"], "assistant");
         assert_eq!(entries[3]["message"]["content"][0]["text"], "查完了");
+    }
+
+    #[test]
+    fn translates_acp_plan_update_and_extracts_active_replay_plan() {
+        let evs = translate_acp_update(&json!({
+            "sessionId": "s1",
+            "update": {
+                "sessionUpdate": "plan",
+                "entries": [
+                    { "content": "Inspect code", "priority": "high", "status": "completed" },
+                    { "content": "Patch driver", "priority": "medium", "status": "in_progress" }
+                ]
+            }
+        }));
+        assert_eq!(evs.len(), 1);
+        match &evs[0] {
+            UnifiedEvent::PlanUpdate { plan } => {
+                assert_eq!(plan.source, "acp_plan");
+                assert_eq!(plan.items.len(), 2);
+            }
+            other => panic!("expected PlanUpdate, got {other:?}"),
+        }
+
+        // 回放多份 plan: 末次全完成时返回 None, 末次未完成时返回 Some
+        let updates_active = vec![
+            json!({
+                "sessionUpdate": "plan",
+                "entries": [{ "content": "A", "priority": "high", "status": "in_progress" }]
+            }),
+        ];
+        assert!(extract_active_plan_from_updates(&updates_active).is_some());
+
+        let updates_done = vec![
+            json!({
+                "sessionUpdate": "plan",
+                "entries": [{ "content": "A", "priority": "high", "status": "completed" }]
+            }),
+        ];
+        assert!(extract_active_plan_from_updates(&updates_done).is_none());
     }
 }

@@ -15,8 +15,9 @@ mod token_stats;
 
 use backends::acp::{AcpBackend, AcpLaunchSpec};
 use backends::claude::ClaudeBackend;
+use backends::codex::CodexBackend;
 use backends::pi::{PiBackend, PiWarmPool};
-use backends::{AgentKind, AgentRuntime};
+use backends::{AgentKind, AgentRuntime, UserPromptResponse};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
@@ -63,6 +64,32 @@ impl RuntimePool {
             self.last_active.remove(&id);
             let _ = app.emit("session_evicted", serde_json::json!({ "sessionId": id }));
         }
+    }
+
+    /// 摘除池中所有与目标 Codex 会话冲突的旧 runtime，交由调用方在锁外 `stop()`：
+    /// - 持有相同 `thread_id` 的旧 `CodexBackend`（如开发期 HMR/页面刷新后重新打开同一历史会话，
+    ///   防止新旧 `codex app-server` 撞 `~/.codex/thread-writer-locks/<tid>.lock` 写锁自锁）
+    /// - 或同 `session_id` 的旧条目（防止 `insert` 覆盖时直接 drop 导致子进程与写锁泄漏）
+    fn take_conflicting_codex(
+        &mut self,
+        target_session_id: &str,
+        target_thread_id: Option<&str>,
+    ) -> Vec<(String, AgentRuntime)> {
+        let keys = find_conflicting_codex_keys(
+            self.runtimes
+                .iter()
+                .map(|(sid, rt)| (sid.as_str(), rt.codex_thread_id())),
+            target_session_id,
+            target_thread_id,
+        );
+        let mut removed = Vec::with_capacity(keys.len());
+        for key in keys {
+            self.last_active.remove(&key);
+            if let Some(rt) = self.runtimes.remove(&key) {
+                removed.push((key, rt));
+            }
+        }
+        removed
     }
 
     /// 清理所有 runtime (窗口关闭时)
@@ -207,11 +234,13 @@ async fn start_session(
                 });
             }
 
+            let initial_plan = backends::plan::derive_active_plan_from_entries(&entries);
             Ok(serde_json::json!({
                 "sessionId": session_id,
                 "agentKind": kind,
                 "capabilities": capabilities,
                 "entries": entries,
+                "plan": initial_plan,
             }))
         }
         AgentKind::Claude => {
@@ -246,12 +275,14 @@ async fn start_session(
                 guard.touch(&session_id);
                 guard.evict_lru(&app).await;
             }
+            let initial_plan = backends::plan::derive_active_plan_from_entries(&entries);
             Ok(serde_json::json!({
                 "sessionId": session_id,
                 "agentKind": kind,
                 "capabilities": capabilities,
                 "permissionMode": mode,
                 "entries": entries,
+                "plan": initial_plan,
             }))
         }
         AgentKind::Agy => {
@@ -264,6 +295,7 @@ async fn start_session(
             )
             .await?;
             let entries = acp.take_initial_entries();
+            let initial_plan = acp.take_initial_plan();
             let resolved_session_path = acp.session_path();
             let current_mode = acp.current_permission_mode().await;
             let live_modes = acp.available_permission_modes().await;
@@ -285,6 +317,61 @@ async fn start_session(
                 "permissionMode": current_mode,
                 "sessionPath": resolved_session_path,
                 "entries": entries,
+                "plan": initial_plan,
+            }))
+        }
+        AgentKind::Codex => {
+            let resume_tid = session_path
+                .as_deref()
+                .and_then(backends::codex::history::extract_codex_thread_id);
+
+            // 阶段 1 (锁内, 快速): 摘除池中占着同一 threadId 或同 sessionId 的旧 Codex runtime
+            let conflicting = {
+                let mut guard = state.lock().await;
+                guard.take_conflicting_codex(&session_id, resume_tid.as_deref())
+            };
+            // 阶段 1.5 (锁外): 先停止旧进程释放 `~/.codex/thread-writer-locks/` 写锁, 再拉起新进程
+            for (old_sid, mut old_rt) in conflicting {
+                let _ = old_rt.stop().await;
+                if old_sid != session_id {
+                    let _ = app.emit("session_evicted", serde_json::json!({ "sessionId": old_sid }));
+                }
+            }
+
+            let mode =
+                permission_mode.unwrap_or_else(|| cfg.codex_default_permission_mode.clone());
+            let mut codex = CodexBackend::spawn(
+                app.clone(),
+                session_id.clone(),
+                cwd.clone(),
+                model,
+                Some(mode),
+                session_path,
+                cfg.codex_path.clone(),
+            )
+            .await?;
+            let entries = codex.take_initial_entries();
+            let initial_plan = codex.take_initial_plan();
+            let migration_notice = codex.take_migration_notice();
+            let resolved_session_path = codex.session_path().await;
+            let current_mode = codex.current_permission_mode().await;
+            let runtime = AgentRuntime::Codex(codex);
+            let capabilities = runtime.capabilities();
+            {
+                let mut guard = state.lock().await;
+                guard.runtimes.insert(session_id.clone(), runtime);
+                guard.touch(&session_id);
+                guard.evict_lru(&app).await;
+            }
+            Ok(serde_json::json!({
+                "sessionId": session_id,
+                "agentKind": kind,
+                "capabilities": capabilities,
+                "permissionMode": current_mode,
+                "sessionPath": resolved_session_path,
+                "entries": entries,
+                "plan": initial_plan,
+                "notice": migration_notice,
             }))
         }
     }
@@ -437,6 +524,20 @@ async fn send_extension_ui_response(
     runtime.send_extension_ui_response(id, payload).await
 }
 
+/// 跨 Agent 统一提问引导回复响应 (Claude `AskUserQuestion` / Pi `extension_ui_request` / 未来 ACP & Codex 共用)
+#[tauri::command]
+async fn respond_user_prompt(
+    state: State<'_, SharedRuntime>,
+    session_id: String,
+    request_id: String,
+    response: UserPromptResponse,
+) -> Result<(), String> {
+    let mut guard = state.lock().await;
+    guard.touch(&session_id);
+    let runtime = guard.runtimes.get_mut(&session_id).ok_or("session 不存在")?;
+    runtime.respond_user_prompt(request_id, response).await
+}
+
 /// 统一工具权限审批响应 (Claude Code `can_use_tool` / ACP `session/request_permission` 共用)
 #[tauri::command]
 async fn respond_permission(
@@ -504,7 +605,7 @@ pub fn run() {
             get_state, get_available_models, set_model, cycle_model,
             set_thinking_level, cycle_thinking_level, get_available_thinking_levels,
             get_entries, get_session_stats, set_session_name,
-            send_extension_ui_response, respond_permission, set_permission_mode, get_commands,
+            send_extension_ui_response, respond_user_prompt, respond_permission, set_permission_mode, get_commands,
             session_fs::list_projects_and_sessions, session_fs::delete_session_file,
             session_fs::read_file_for_context, session_fs::list_skills_and_packages,
             session_fs::get_session_file_mtime,
@@ -543,4 +644,62 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// 计算 `RuntimePool` 中与目标 Codex 会话冲突的旧 session_id 列表：
+/// 命中同 `session_id`，或命中正在持有同一 `thread_id`（忽略 ASCII 大小写）的 Codex runtime。
+fn find_conflicting_codex_keys<'a, I>(
+    entries: I,
+    target_session_id: &str,
+    target_thread_id: Option<&str>,
+) -> Vec<String>
+where
+    I: IntoIterator<Item = (&'a str, Option<&'a str>)>,
+{
+    let needle_tid = target_thread_id.map(str::trim).filter(|s| !s.is_empty());
+    entries
+        .into_iter()
+        .filter_map(|(sid, existing_tid)| {
+            let same_session = sid == target_session_id;
+            let same_thread = match (needle_tid, existing_tid) {
+                (Some(want), Some(have)) => have.eq_ignore_ascii_case(want),
+                _ => false,
+            };
+            (same_session || same_thread).then(|| sid.to_string())
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finds_conflicting_codex_keys_by_thread_id_and_session_id() {
+        let pool = vec![
+            ("sess_pi", None),
+            ("sess_cdx_1", Some("01a20b8e-bd7e-7da0-99ef-4f8df96339ff")),
+            ("sess_cdx_2", Some("01a20cac-fb3e-75f2-9fc9-83eb16694209")),
+        ];
+
+        // HMR / 刷新后用新 sessionId 重新打开同一历史线程 -> 命中旧 Codex runtime
+        let hits = find_conflicting_codex_keys(
+            pool.iter().copied(),
+            "sess_new",
+            Some("01A20B8E-BD7E-7DA0-99EF-4F8DF96339FF"),
+        );
+        assert_eq!(hits, vec!["sess_cdx_1"]);
+
+        // 同 sessionId 重连且新建无 target_thread_id -> 命中原条目防覆盖泄漏
+        let hits = find_conflicting_codex_keys(pool.iter().copied(), "sess_cdx_2", None);
+        assert_eq!(hits, vec!["sess_cdx_2"]);
+
+        // 不冲突的新线程与非 Codex runtime 不被误摘除
+        let hits = find_conflicting_codex_keys(
+            pool.iter().copied(),
+            "sess_brand_new",
+            Some("019eab82-76d3-7643-9725-3adc5296a011"),
+        );
+        assert!(hits.is_empty());
+    }
 }

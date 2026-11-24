@@ -896,12 +896,19 @@ body,
   /* 底部渐隐到页面底色: 消息滑到卡片后方时收进底色 */
   background: linear-gradient(to bottom, transparent, var(--bg) 40%);
 }
+/* 输入卡与上方悬浮卡片堆栈: 与会话列同宽居中, ResizeObserver 统一观测整组高度 */
+.composer-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: var(--col-w);
+  margin: 0 auto;
+  pointer-events: none;
+}
 .composer {
   position: relative;
   pointer-events: auto;
-  /* 与会话列同宽: 气泡右缘、AI 正文左缘都与输入卡对齐 */
-  width: var(--col-w);
-  margin: 0 auto;
+  width: 100%;
   border: 1px solid var(--edge);
   border-radius: 24px;
   background: var(--card);

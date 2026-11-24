@@ -19,6 +19,7 @@ const AGENT_FILTERS: { value: AgentFilter; label: string }[] = [
   { value: "pi", label: "PI" },
   { value: "claude", label: "CC" },
   { value: "agy", label: "AGY" },
+  { value: "codex", label: "CDX" },
 ];
 
 /**
@@ -163,7 +164,7 @@ export function SessionPane() {
         {/* 底部摘要: 兼容多 Agent 数据源 */}
         <div className="flex h-10 shrink-0 items-center gap-2 border-t border-line px-4 text-meta text-fg-4">
           <Database className="h-3 w-3 shrink-0" />
-          <span className="truncate" title="本地 Agent 会话库 (Pi / Claude Code / Antigravity)">
+          <span className="truncate" title="本地 Agent 会话库 (Pi / Claude Code / Antigravity / Codex)">
             本地 Agent 会话
           </span>
         </div>

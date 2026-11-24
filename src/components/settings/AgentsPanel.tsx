@@ -18,22 +18,27 @@ interface AgentsConfig {
   piPath: string | null;
   claudePath: string | null;
   agyPath: string | null;
+  codexPath: string | null;
   claudeDefaultPermissionMode: string;
+  codexDefaultPermissionMode: string;
   customAcpAgents: CustomAcpAgent[];
 }
 
 const CLAUDE_MODES = ["auto", "manual", "acceptEdits", "plan", "dontAsk", "bypassPermissions"];
+const CODEX_MODES = ["auto", "manual", "read-only", "full-access"];
 
-const PATH_FIELD: Record<AgentKind, "piPath" | "claudePath" | "agyPath"> = {
+const PATH_FIELD: Record<AgentKind, "piPath" | "claudePath" | "agyPath" | "codexPath"> = {
   pi: "piPath",
   claude: "claudePath",
   agy: "agyPath",
+  codex: "codexPath",
 };
 
 const DEFAULT_CMD: Record<AgentKind, string> = {
   pi: "pi (从 PATH 解析)",
   claude: "claude (从 PATH 解析)",
   agy: "agy (从 PATH 解析，将运行 agy acp)",
+  codex: "codex (从 PATH 解析，将运行 codex app-server)",
 };
 
 /**
@@ -171,15 +176,40 @@ export function AgentsPanel() {
                     />
                   </div>
                 )}
+
+                {agent.kind === "codex" && cfg && (
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-1 text-label text-fg-3">
+                      <Shield className="h-3 w-3 text-fg-4" />
+                      新会话默认权限模式
+                    </label>
+                    <Select
+                      value={cfg.codexDefaultPermissionMode}
+                      onChange={(mode) =>
+                        setCfg((prev) =>
+                          prev ? { ...prev, codexDefaultPermissionMode: mode } : prev,
+                        )
+                      }
+                      className="w-full"
+                      options={CODEX_MODES.map((m) => ({
+                        value: m,
+                        label: PERMISSION_MODE_LABELS[m] ?? m,
+                      }))}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-wrap gap-2 text-meta text-fg-4">
                 {agent.capabilities.hotModelSwitch && <Badge>模型热切换</Badge>}
-                {agent.capabilities.steer && <Badge>Steer / FollowUp</Badge>}
+                {agent.capabilities.steer && (
+                  <Badge>{agent.capabilities.followUp ? "Steer / FollowUp" : "运行中 Steer"}</Badge>
+                )}
                 {agent.capabilities.toolApproval && <Badge>交互权限审批</Badge>}
                 {agent.capabilities.permissionModes.length > 0 && <Badge>权限模式切换</Badge>}
                 {agent.capabilities.fleetView && <Badge>Subagent 舰队</Badge>}
                 {agent.kind === "agy" && <Badge>ACP v1 协议</Badge>}
+                {agent.kind === "codex" && <Badge>App Server 协议</Badge>}
               </div>
             </Card>
           );

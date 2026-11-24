@@ -141,7 +141,9 @@ export function AgentPickerMenu({
                 <div className="truncate text-meta text-fg-4">
                   {agent.available
                     ? agent.version
-                      ? `v${agent.version.replace(/^v/i, "")}`
+                      ? /^\d/.test(agent.version)
+                        ? `v${agent.version}`
+                        : agent.version
                       : "已就绪"
                     : agent.reason || "暂不可用"}
                 </div>

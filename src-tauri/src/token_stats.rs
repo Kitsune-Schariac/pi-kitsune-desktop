@@ -824,6 +824,7 @@ fn aggregate_with_cli(
             crate::backends::AgentKind::Pi => "pi",
             crate::backends::AgentKind::Claude => "claude",
             crate::backends::AgentKind::Agy => "agy",
+            crate::backends::AgentKind::Codex => "codex",
         };
         filter_clis.insert(cli_str.to_string());
         if let Some(c) = cli {

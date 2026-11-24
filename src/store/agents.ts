@@ -54,6 +54,17 @@ const FALLBACK_AGENTS: AgentDescriptor[] = [
     reason: "正在探测…",
     capabilities: { ...PI_CAPABILITIES, steer: false, followUp: false, hotModelSwitch: true, thinkingLevel: true, permissionModes: ["default", "accept-edits", "auto", "plan"], extensionUi: false, toolApproval: true, remoteCommands: false, sessionRename: false, fleetView: false, modelsEditor: false },
   },
+  {
+    kind: "codex",
+    label: AGENT_META.codex.label,
+    badge: AGENT_META.codex.badge,
+    installed: false,
+    version: null,
+    implemented: true,
+    available: false,
+    reason: "正在探测…",
+    capabilities: { ...PI_CAPABILITIES, steer: true, followUp: false, hotModelSwitch: true, thinkingLevel: true, permissionModes: ["auto", "manual", "read-only", "full-access"], extensionUi: false, toolApproval: true, remoteCommands: false, sessionRename: true, fleetView: false, modelsEditor: false },
+  },
 ];
 
 interface AgentsStore {

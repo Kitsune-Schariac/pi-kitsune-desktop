@@ -5,10 +5,11 @@ const AGENT_STYLE: Record<AgentKind, string> = {
   pi: "border-line bg-well text-fg-3",
   claude: "border-[color-mix(in_srgb,var(--warn)_35%,transparent)] bg-[color-mix(in_srgb,var(--warn)_12%,transparent)] text-warn",
   agy: "border-[color-mix(in_srgb,var(--accent)_35%,transparent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-accent",
+  codex: "border-[color-mix(in_srgb,var(--ok)_35%,transparent)] bg-[color-mix(in_srgb,var(--ok)_12%,transparent)] text-ok",
 };
 
 /**
- * 紧凑 Agent 徽标 (PI / CC / AGY): 用于侧栏会话行、空状态最近列表与会话顶栏。
+ * 紧凑 Agent 徽标 (PI / CC / AGY / CDX): 用于侧栏会话行、空状态最近列表与会话顶栏。
  * 单行不撑高, 日间/夜间模式随语义变量自动适配。
  */
 export function AgentBadge({

@@ -13,6 +13,9 @@ import {
   type AgentKind,
   type CostBreakdown,
   type PermissionRequest,
+  type PlanSnapshot,
+  type UserPromptRequest,
+  type UserPromptResponse,
 } from "../lib/agent";
 
 // 每次 agent_start 自增的纪元号。prompt 的 disposition 回来时要靠它判断「这期间 pi 到底起没起 agent」:
@@ -126,7 +129,10 @@ export interface SessionState {
   availableThinkingLevels: string[];
   steeringQueue: string[];
   followUpQueue: string[];
-  uiRequests: UiRequest[];      // extension_ui_request dialog 类请求队列 (FIFO, 一次弹一个)
+  uiRequests: UiRequest[];      // 兼容旧 extension_ui_request (新路径统一走 promptRequests)
+  promptRequests: UserPromptRequest[];     // 跨 Agent 统一提问引导回复队列 (FIFO)
+  plan: PlanSnapshot | null;               // 跨 Agent 统一任务清单快照 (ACP plan / Claude Todo / Codex 等)
+  planDismissed: boolean;                  // 用户手动收起已完成清单的标志, 下次 plan_update 自动复位
   permissionRequests: PermissionRequest[]; // 统一工具审批队列 (Claude can_use_tool / ACP request_permission)
   permissionMode: string | null;           // 当前权限模式 (如 Claude Code: auto / manual / acceptEdits / plan)
   remoteSessionId: string | null;          // 外部 CLI 会话 ID (Claude session_id / ACP sessionId)
@@ -190,6 +196,10 @@ interface SessionStore {
   sampleSpeed: (sessionId: string) => number | null;
   // extension_ui_request 响应: 乐观移出队列后写回 pi; 失败时 pi 侧超时自动解决, 不阻塞
   resolveUiRequest: (sessionId: string, id: string, payload: Record<string, unknown>) => Promise<void>;
+  // 跨 Agent 统一引导回复响应 (Claude AskUserQuestion / Pi extension_ui / 未来 ACP & Codex)
+  respondUserPrompt: (sessionId: string, requestId: string, response: UserPromptResponse) => Promise<void>;
+  // 用户手动关闭当前任务清单悬浮卡 (下次收到新 plan_update 自动重显)
+  dismissPlan: (sessionId: string) => void;
   // 统一工具审批响应 (Claude can_use_tool / ACP request_permission)
   respondPermission: (
     sessionId: string,
@@ -243,6 +253,8 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           permissionMode?: string | null;
           sessionPath?: string | null;
           entries?: unknown[];
+          plan?: PlanSnapshot | null;
+          notice?: string | null;
         }>("start_session", {
           cwd,
           agentKind: requestedKind,
@@ -269,6 +281,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
               error: null, currentModel: null, thinkingLevel: "medium",
               availableModels: [], availableThinkingLevels: ["off"],
               steeringQueue: [], followUpQueue: [], uiRequests: [],
+              promptRequests: [], plan: data.plan ?? null, planDismissed: false,
               permissionRequests: [], permissionMode, remoteSessionId: null,
               contextUsage: null, tokenStats: null, liveCostDetail: null, turnStats: null,
             },
@@ -283,16 +296,25 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         if (capabilities.hotModelSwitch) tasks.push(get().loadModels(id));
         if (capabilities.thinkingLevel) tasks.push(get().loadThinkingLevels(id));
         // 直读路径同步 mtime baseline: reattach 的 mtime 守卫依赖它 (文件没变不重读)
-        if (sessionPath) {
+        if (resolvedSessionPath) {
           tasks.push((async () => {
             try {
-              const mtime = await invoke<number | null>("get_session_file_mtime", { sessionPath });
+              const mtime = await invoke<number | null>("get_session_file_mtime", {
+                sessionPath: resolvedSessionPath,
+              });
               patch(id, { lastEntryMtime: mtime });
             } catch { /* ignore */ }
           })());
         }
         // 历史会话兜底: Rust 直读 entries 意外缺失 (契约外) → 退回 get_entries 路径
         if (sessionPath && !rawEntries) tasks.push(get().loadEntries(id));
+        if (data.notice) {
+          get().notify(data.notice, "info");
+        }
+        // 跨供应商迁移后生成了新会话文件: 异步刷新侧栏让新会话立即可见
+        if (resolvedSessionPath && sessionPath && !pathEq(resolvedSessionPath, sessionPath)) {
+          void useProjectsStore.getState().loadProjects();
+        }
         await Promise.all(tasks);
         return id;
       } catch (e) {
@@ -314,6 +336,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         isStreaming: false,
         currentAssistantId: null,
         uiRequests: [],
+        promptRequests: [],
         permissionRequests: [],
       });
       // activeSessionId 若是被停的, 切到下一个非自己会话 (detached 也能秒切, 允许切到 detached)
@@ -397,6 +420,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         isStreaming: false,
         currentAssistantId: null,
         uiRequests: [],
+        promptRequests: [],
         permissionRequests: [],
       });
     },
@@ -832,8 +856,8 @@ export const useSessionStore = create<SessionStore>((set, get) => {
             );
             if (sp && !inDisk) {
               void useProjectsStore.getState().loadProjects().then(() => {
-                // AGY SQLite 摘要表落盘偶有毫秒级异步滞后，未命中时仅补刷一次
-                if (sess?.agentKind !== "agy") return;
+                // AGY / Codex SQLite 摘要表落盘偶有毫秒级异步滞后，未命中时仅补刷一次
+                if (sess?.agentKind !== "agy" && sess?.agentKind !== "codex") return;
                 const nowInDisk = useProjectsStore.getState().projects.some((p) =>
                   p.sessions.some((ds) => pathEq(ds.session_path, sp))
                 );
@@ -854,6 +878,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
             isStreaming: false,
             currentAssistantId: null,
             uiRequests: [],
+            promptRequests: [],
             permissionRequests: [],
             error: event.message || "Agent 进程已退出",
           });
@@ -863,6 +888,23 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           const cur = get().sessions[sessionId];
           if (!cur) break;
           patch(sessionId, { uiRequests: [...cur.uiRequests, event.request] });
+          break;
+        }
+        case "user_prompt": {
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          if (cur.promptRequests.some((r) => r.id === event.request.id)) break;
+          patch(sessionId, { promptRequests: [...cur.promptRequests, event.request] });
+          break;
+        }
+        case "plan_update": {
+          const cur = get().sessions[sessionId];
+          if (!cur) break;
+          const items = event.plan?.items ?? [];
+          patch(sessionId, {
+            plan: items.length > 0 ? event.plan : null,
+            planDismissed: false,
+          });
           break;
         }
         case "permission_request": {
@@ -882,7 +924,12 @@ export const useSessionStore = create<SessionStore>((set, get) => {
             fields.currentModel = {
               id: event.model,
               name: event.model,
-              provider: cur.agentKind === "claude" ? "anthropic" : cur.agentKind,
+              provider:
+                cur.agentKind === "claude"
+                  ? "anthropic"
+                  : cur.agentKind === "codex"
+                    ? "openai"
+                    : cur.agentKind,
             };
           }
           patch(sessionId, fields);
@@ -927,6 +974,24 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       } catch (e) {
         patch(sessionId, { error: `响应扩展请求失败: ${String(e)}` });
       }
+    },
+
+    respondUserPrompt: async (sessionId, requestId, response) => {
+      const cur = get().sessions[sessionId];
+      if (cur) {
+        patch(sessionId, {
+          promptRequests: cur.promptRequests.filter((r) => r.id !== requestId),
+        });
+      }
+      try {
+        await invoke("respond_user_prompt", { sessionId, requestId, response });
+      } catch (e) {
+        patch(sessionId, { error: `提交引导回复失败: ${String(e)}` });
+      }
+    },
+
+    dismissPlan: (sessionId) => {
+      patch(sessionId, { planDismissed: true });
     },
 
     respondPermission: async (sessionId, requestId, allow, opts) => {

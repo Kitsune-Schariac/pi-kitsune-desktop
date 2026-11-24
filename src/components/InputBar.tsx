@@ -11,6 +11,8 @@ import {
   ArrowUp, ArrowDown, Clock, DollarSign, Gauge, Database, FolderGit2, Slash, FilePlus2,
 } from "lucide-react";
 import { QueueIndicator } from "./QueueIndicator";
+import { TodoPlanCard } from "./composer/TodoPlanCard";
+import { GuidedPromptCard } from "./composer/GuidedPromptCard";
 import {
   attachmentsToRefs, buildRefsParts, refIcon, refMetaText, type Attachment, type Ref,
 } from "../lib/refs";
@@ -326,7 +328,13 @@ export function InputBar({
   const sendFollowUp = useSessionStore((s) => s.sendFollowUp);
   const abort = useSessionStore((s) => s.abort);
   const startSession = useSessionStore((s) => s.startSession);
+  const respondUserPrompt = useSessionStore((s) => s.respondUserPrompt);
+  const dismissPlan = useSessionStore((s) => s.dismissPlan);
   const projects = useProjectsStore((s) => s.projects);
+
+  const activePlan = active && !active.planDismissed ? active.plan : null;
+  const activePrompt = active?.promptRequests[0] ?? null;
+  const promptQueueCount = active?.promptRequests.length ?? 0;
 
   // 空状态项目 chip 的展示名: 项目列表 display_name 优先, 回退路径最后一段
   const emptyProjectDisplay = emptyProject
@@ -755,9 +763,26 @@ export function InputBar({
   const cacheHitRate = cacheHit(turnStats, active?.tokenStats ?? null);
 
   return (
-    // 悬浮输入卡容器: 居中定位与渐隐由 .composer-wrap 承担
+    // 悬浮输入卡容器: 居中定位与渐隐由 .composer-wrap 承担; .composer-dock 统一包裹上方悬浮卡片与输入卡
     <div className="composer-wrap">
-      <div ref={cardRef} className="composer" data-drop={dragOver || undefined}>
+      <div ref={cardRef} className="composer-dock">
+        {activePlan && activePlan.items.length > 0 && activeSessionId && (
+          <TodoPlanCard
+            plan={activePlan}
+            compactForce={!!activePrompt}
+            onDismiss={() => dismissPlan(activeSessionId)}
+          />
+        )}
+        {activePrompt && activeSessionId && (
+          <GuidedPromptCard
+            request={activePrompt}
+            queueCount={promptQueueCount}
+            escapeBlocked={!!popup || ctxOpen || projectOpen}
+            onSubmit={(response) => void respondUserPrompt(activeSessionId, activePrompt.id, response)}
+            onCancel={() => void respondUserPrompt(activeSessionId, activePrompt.id, { action: "cancel" })}
+          />
+        )}
+        <div className="composer" data-drop={dragOver || undefined}>
         {/* 拖入文件的放置提示: 盖满输入卡, 不拦截事件 (放置由 Tauri 原生事件接收, 与 DOM 无关) */}
         {dragOver && (
           <div className="composer-drop">
@@ -1102,6 +1127,7 @@ export function InputBar({
             </span>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

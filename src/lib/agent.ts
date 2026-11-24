@@ -1,7 +1,7 @@
 // 多 Agent 后端统一前端契约 (与 Rust `src-tauri/src/backends/mod.rs` 一一对应)
 import type { UiNotification, UiRequest } from "./pi";
 
-export type AgentKind = "pi" | "claude" | "agy";
+export type AgentKind = "pi" | "claude" | "agy" | "codex";
 
 export interface AgentCapabilities {
   steer: boolean;
@@ -15,6 +15,8 @@ export interface AgentCapabilities {
   sessionRename: boolean;
   fleetView: boolean;
   modelsEditor: boolean;
+  structuredPlan?: boolean;
+  guidedPrompt?: boolean;
 }
 
 export interface AgentDescriptor {
@@ -61,6 +63,67 @@ export interface PermissionRequest {
   options: PermissionOption[];
 }
 
+export type PlanItemStatus = "pending" | "in_progress" | "completed" | "cancelled";
+export type PlanItemPriority = "high" | "medium" | "low";
+
+export interface PlanItem {
+  id: string;
+  content: string;
+  activeForm?: string | null;
+  status: PlanItemStatus;
+  priority?: PlanItemPriority | null;
+  note?: string | null;
+  blockedBy?: string[];
+}
+
+export interface PlanSnapshot {
+  title?: string | null;
+  items: PlanItem[];
+  source: string;
+}
+
+export type UserPromptKind = "questions" | "confirm" | "input" | "editor";
+
+export interface PromptOption {
+  id: string;
+  label: string;
+  description?: string | null;
+  recommended?: boolean;
+}
+
+export interface PromptQuestion {
+  id: string;
+  header?: string | null;
+  prompt: string;
+  multiSelect: boolean;
+  options: PromptOption[];
+  allowCustom: boolean;
+}
+
+export interface UserPromptRequest {
+  id: string;
+  kind: UserPromptKind;
+  title?: string | null;
+  description?: string | null;
+  questions: PromptQuestion[];
+  placeholder?: string | null;
+  prefill?: string | null;
+  allowCancel: boolean;
+  sourceTool?: string | null;
+}
+
+export type UserPromptResponse =
+  | {
+      action: "submit";
+      answers?: Record<string, string[]>;
+      confirmed?: boolean | null;
+      text?: string | null;
+    }
+  | {
+      action: "cancel";
+      reason?: string | null;
+    };
+
 export const PERMISSION_MODE_LABELS: Record<string, string> = {
   default: "默认询问",
   auto: "自动 (auto)",
@@ -68,6 +131,8 @@ export const PERMISSION_MODE_LABELS: Record<string, string> = {
   acceptEdits: "自动编辑",
   "accept-edits": "自动编辑",
   plan: "仅规划",
+  "read-only": "只读模式",
+  "full-access": "完全访问",
   dontAsk: "拒绝未知",
   bypassPermissions: "跳过审批",
 };
@@ -95,6 +160,8 @@ export type UnifiedEvent =
   | { type: "retry_end"; success: boolean; attempt: number; finalError: string | null }
   | { type: "queue_update"; steering: string[]; followUp: string[] }
   | { type: "ui_request"; request: UiRequest }
+  | { type: "user_prompt"; request: UserPromptRequest }
+  | { type: "plan_update"; plan: PlanSnapshot }
   | { type: "permission_request"; request: PermissionRequest }
   | {
       type: "session_meta";
@@ -123,9 +190,10 @@ export const AGENT_META: Record<AgentKind, { label: string; badge: string }> = {
   pi: { label: "Pi", badge: "PI" },
   claude: { label: "Claude Code", badge: "CC" },
   agy: { label: "Antigravity", badge: "AGY" },
+  codex: { label: "Codex", badge: "CDX" },
 };
 
-export const AGENT_KINDS: AgentKind[] = ["pi", "claude", "agy"];
+export const AGENT_KINDS: AgentKind[] = ["pi", "claude", "agy", "codex"];
 
 export const PI_CAPABILITIES: AgentCapabilities = {
   steer: true,
@@ -139,9 +207,11 @@ export const PI_CAPABILITIES: AgentCapabilities = {
   sessionRename: true,
   fleetView: true,
   modelsEditor: true,
+  structuredPlan: true,
+  guidedPrompt: true,
 };
 
 export function normalizeAgentKind(kind?: string | null): AgentKind {
-  if (kind === "claude" || kind === "agy" || kind === "pi") return kind;
+  if (kind === "claude" || kind === "agy" || kind === "codex" || kind === "pi") return kind;
   return "pi";
 }

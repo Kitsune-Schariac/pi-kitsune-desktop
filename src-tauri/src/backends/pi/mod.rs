@@ -5,8 +5,10 @@
 
 pub mod translate;
 
+use crate::backends::plan::PlanTracker;
 use crate::backends::process::{build_cli_command, kill_process_tree, strip_newline};
-use crate::backends::{AgentKind, UnifiedEvent};
+use crate::backends::prompt::build_pi_extension_ui_payload;
+use crate::backends::{AgentKind, UnifiedEvent, UserPromptKind, UserPromptResponse};
 use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -107,6 +109,8 @@ pub struct PiBackend {
     child: Child,
     stdin: ChildStdin,
     pending: PendingRequests,
+    /// 记录已下发的 extension_ui_request 原始交互类型, 供统一 respond_user_prompt 逆向编码
+    pending_prompt_kinds: Arc<Mutex<HashMap<String, UserPromptKind>>>,
     id_counter: Arc<AtomicU64>,
 }
 
@@ -146,6 +150,9 @@ impl PiBackend {
 
         let pending: PendingRequests = Arc::new(Mutex::new(HashMap::new()));
         let pending_for_reader = pending.clone();
+        let pending_prompt_kinds: Arc<Mutex<HashMap<String, UserPromptKind>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let prompt_kinds_for_reader = pending_prompt_kinds.clone();
 
         // 严格按 \n 切帧读 stdout, 分流 response 与事件流
         let sid = Arc::new(Mutex::new(session_id));
@@ -153,6 +160,7 @@ impl PiBackend {
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout);
             let mut buf = Vec::with_capacity(8192);
+            let mut plan_tracker = PlanTracker::new();
             loop {
                 buf.clear();
                 match reader.read_until(b'\n', &mut buf).await {
@@ -195,15 +203,47 @@ impl PiBackend {
                                 }
                                 let events = translate::translate_pi_frame(&frame);
                                 if !events.is_empty() {
-                                    let sid = sid_for_reader.lock().await;
+                                    let sid_str = sid_for_reader.lock().await.clone();
                                     for ev in events {
+                                        if let UnifiedEvent::UserPrompt { ref request } = ev {
+                                            prompt_kinds_for_reader
+                                                .lock()
+                                                .await
+                                                .insert(request.id.clone(), request.kind);
+                                        }
+                                        let extra_plan = match &ev {
+                                            UnifiedEvent::ToolStart {
+                                                tool_call_id,
+                                                tool_name,
+                                                args,
+                                            } => plan_tracker.ingest_tool_start(
+                                                tool_call_id,
+                                                tool_name,
+                                                args,
+                                            ),
+                                            UnifiedEvent::ToolEnd {
+                                                tool_call_id,
+                                                result,
+                                                ..
+                                            } => plan_tracker.ingest_tool_end(tool_call_id, result),
+                                            _ => None,
+                                        };
                                         let _ = app.emit(
                                             "agent_event",
                                             serde_json::json!({
-                                                "sessionId": sid.as_str(),
+                                                "sessionId": sid_str.as_str(),
                                                 "event": ev,
                                             }),
                                         );
+                                        if let Some(plan) = extra_plan {
+                                            let _ = app.emit(
+                                                "agent_event",
+                                                serde_json::json!({
+                                                    "sessionId": sid_str.as_str(),
+                                                    "event": UnifiedEvent::PlanUpdate { plan },
+                                                }),
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -243,6 +283,7 @@ impl PiBackend {
             child,
             stdin,
             pending,
+            pending_prompt_kinds,
             id_counter: Arc::new(AtomicU64::new(0)),
         })
     }
@@ -378,6 +419,21 @@ impl PiBackend {
             obj.insert("id".into(), serde_json::json!(id));
         }
         self.send_command(frame).await
+    }
+
+    pub async fn respond_user_prompt(
+        &mut self,
+        request_id: String,
+        response: UserPromptResponse,
+    ) -> Result<(), String> {
+        let kind = self
+            .pending_prompt_kinds
+            .lock()
+            .await
+            .remove(&request_id)
+            .unwrap_or(UserPromptKind::Input);
+        let payload = build_pi_extension_ui_payload(kind, response);
+        self.send_extension_ui_response(request_id, payload).await
     }
 
     pub async fn get_state(&mut self) -> Result<serde_json::Value, String> {

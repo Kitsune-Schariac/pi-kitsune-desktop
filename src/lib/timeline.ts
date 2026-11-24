@@ -125,6 +125,48 @@ export function summarizeStep(entry: ChatEntry): string {
       const task = typeof a.task === "string" ? a.task.split("\n")[0].trim() : "";
       return task ? `${agent} ${task}` : agent;
     }
+    const lowerTool = tool.toLowerCase();
+    // 任务清单工具 (TodoWrite / update_plan / TaskCreate / TaskUpdate) 摘要
+    if (lowerTool === "todowrite" || lowerTool === "todo_write" || lowerTool === "write_todos" || lowerTool === "update_plan") {
+      const list = Array.isArray(a.todos) ? a.todos : Array.isArray(a.plan) ? a.plan : null;
+      if (list && list.length > 0) {
+        const done = list.filter((it) => {
+          const st = (it as { status?: unknown })?.status;
+          return st === "completed" || st === "done";
+        }).length;
+        const active = list.find((it) => (it as { status?: unknown })?.status === "in_progress") as
+          | { activeForm?: unknown; content?: unknown; step?: unknown }
+          | undefined;
+        const head =
+          (typeof active?.activeForm === "string" && active.activeForm) ||
+          (typeof active?.content === "string" && active.content) ||
+          (typeof active?.step === "string" && active.step) ||
+          "";
+        return head ? `${done}/${list.length} · ${head}` : `更新任务清单 (${done}/${list.length})`;
+      }
+    }
+    if (lowerTool === "taskcreate" || lowerTool === "task_create") {
+      if (typeof a.subject === "string" && a.subject.trim()) return a.subject.trim();
+    }
+    if (lowerTool === "taskupdate" || lowerTool === "task_update") {
+      const tid = typeof a.taskId === "string" || typeof a.taskId === "number" ? `#${a.taskId}` : "";
+      const st = typeof a.status === "string" ? a.status : "";
+      const subj = typeof a.subject === "string" ? a.subject.trim() : "";
+      const parts = [tid, st, subj].filter(Boolean);
+      if (parts.length > 0) return parts.join(" · ");
+    }
+    if (lowerTool === "askuserquestion" && Array.isArray(a.questions) && a.questions.length > 0) {
+      const first = a.questions[0] as { header?: unknown; question?: unknown } | undefined;
+      const q =
+        (typeof first?.question === "string" && first.question.trim()) ||
+        (typeof first?.header === "string" && first.header.trim()) ||
+        "";
+      if (q) return a.questions.length > 1 ? `${q} 等 ${a.questions.length} 题` : q;
+    }
+    if (lowerTool === "apply_patch" && Array.isArray(a.files) && a.files.length > 1) {
+      const first = typeof a.path === "string" && a.path ? a.path : String(a.files[0] ?? "");
+      if (first) return `${first} 等 ${a.files.length} 个文件`;
+    }
     if (typeof a.path === "string" && a.path) return a.path;
     if (typeof a.file_path === "string" && a.file_path) return a.file_path;
     for (const v of Object.values(a)) {

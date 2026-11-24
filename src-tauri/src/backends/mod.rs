@@ -7,8 +7,14 @@
 
 pub mod acp;
 pub mod claude;
+pub mod codex;
 pub mod pi;
+pub mod plan;
 pub mod process;
+pub mod prompt;
+
+pub use plan::PlanSnapshot;
+pub use prompt::{UserPromptKind, UserPromptRequest, UserPromptResponse};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -20,6 +26,7 @@ pub enum AgentKind {
     Pi,
     Claude,
     Agy,
+    Codex,
 }
 
 impl AgentKind {
@@ -32,6 +39,7 @@ impl AgentKind {
             Self::Pi => "Pi",
             Self::Claude => "Claude Code",
             Self::Agy => "Antigravity",
+            Self::Codex => "Codex",
         }
     }
 
@@ -40,6 +48,7 @@ impl AgentKind {
             Self::Pi => "PI",
             Self::Claude => "CC",
             Self::Agy => "AGY",
+            Self::Codex => "CDX",
         }
     }
 
@@ -57,6 +66,8 @@ impl AgentKind {
                 session_rename: true,
                 fleet_view: true,
                 models_editor: true,
+                structured_plan: true,
+                guided_prompt: true,
             },
             Self::Claude => AgentCapabilities {
                 steer: false,
@@ -73,6 +84,8 @@ impl AgentKind {
                 session_rename: false,
                 fleet_view: false,
                 models_editor: false,
+                structured_plan: true,
+                guided_prompt: true,
             },
             Self::Agy => AgentCapabilities {
                 steer: false,
@@ -89,6 +102,26 @@ impl AgentKind {
                 session_rename: false,
                 fleet_view: false,
                 models_editor: false,
+                structured_plan: true,
+                guided_prompt: true,
+            },
+            Self::Codex => AgentCapabilities {
+                steer: true,
+                follow_up: false,
+                hot_model_switch: true,
+                thinking_level: true,
+                permission_modes: codex::protocol::CODEX_PERMISSION_MODES
+                    .iter()
+                    .map(|s| (*s).to_string())
+                    .collect(),
+                extension_ui: false,
+                tool_approval: true,
+                remote_commands: false,
+                session_rename: true,
+                fleet_view: false,
+                models_editor: false,
+                structured_plan: true,
+                guided_prompt: true,
             },
         }
     }
@@ -109,6 +142,8 @@ pub struct AgentCapabilities {
     pub session_rename: bool,
     pub fleet_view: bool,
     pub models_editor: bool,
+    pub structured_plan: bool,
+    pub guided_prompt: bool,
 }
 
 /// 前端展示的 Agent 运行时描述 (新建会话选择菜单 / 运行时状态)。
@@ -259,6 +294,12 @@ pub enum UnifiedEvent {
     UiRequest {
         request: Value,
     },
+    UserPrompt {
+        request: UserPromptRequest,
+    },
+    PlanUpdate {
+        plan: PlanSnapshot,
+    },
     PermissionRequest {
         request: PermissionRequestPayload,
     },
@@ -289,6 +330,7 @@ pub enum AgentRuntime {
     Pi(pi::PiBackend),
     Claude(claude::ClaudeBackend),
     Acp(acp::AcpBackend),
+    Codex(codex::CodexBackend),
 }
 
 impl AgentRuntime {
@@ -297,11 +339,19 @@ impl AgentRuntime {
             Self::Pi(_) => AgentKind::Pi,
             Self::Claude(_) => AgentKind::Claude,
             Self::Acp(_) => AgentKind::Agy,
+            Self::Codex(_) => AgentKind::Codex,
         }
     }
 
     pub fn capabilities(&self) -> AgentCapabilities {
         self.kind().capabilities()
+    }
+
+    pub fn codex_thread_id(&self) -> Option<&str> {
+        match self {
+            Self::Codex(rt) => Some(rt.thread_id()),
+            _ => None,
+        }
     }
 
     pub async fn send_prompt(
@@ -313,6 +363,7 @@ impl AgentRuntime {
             Self::Pi(rt) => rt.send_prompt(message, images).await,
             Self::Claude(rt) => rt.send_prompt(message, images).await,
             Self::Acp(rt) => rt.send_prompt(message, images).await,
+            Self::Codex(rt) => rt.send_prompt(message, images).await,
         }
     }
 
@@ -321,12 +372,14 @@ impl AgentRuntime {
             Self::Pi(rt) => rt.abort().await,
             Self::Claude(rt) => rt.abort().await,
             Self::Acp(rt) => rt.abort().await,
+            Self::Codex(rt) => rt.abort().await,
         }
     }
 
     pub async fn steer(&mut self, message: String, images: Option<Vec<Value>>) -> Result<(), String> {
         match self {
             Self::Pi(rt) => rt.steer(message, images).await,
+            Self::Codex(rt) => rt.steer(message, images).await,
             Self::Claude(_) => Err("Claude Code 不支持运行中 steer 插话".into()),
             Self::Acp(_) => Err("ACP Agent 不支持运行中 steer 插话".into()),
         }
@@ -341,6 +394,7 @@ impl AgentRuntime {
             Self::Pi(rt) => rt.follow_up(message, images).await,
             Self::Claude(_) => Err("Claude Code 不支持 followUp 队列".into()),
             Self::Acp(_) => Err("ACP Agent 不支持 followUp 队列".into()),
+            Self::Codex(_) => Err("Codex 不支持 followUp 队列，请使用运行中 steer 插话".into()),
         }
     }
 
@@ -349,6 +403,7 @@ impl AgentRuntime {
             Self::Pi(rt) => rt.get_state().await,
             Self::Claude(rt) => rt.get_state().await,
             Self::Acp(rt) => rt.get_state().await,
+            Self::Codex(rt) => rt.get_state().await,
         }
     }
 
@@ -357,6 +412,7 @@ impl AgentRuntime {
             Self::Pi(rt) => rt.get_available_models().await,
             Self::Claude(rt) => rt.get_available_models().await,
             Self::Acp(rt) => rt.get_available_models().await,
+            Self::Codex(rt) => rt.get_available_models().await,
         }
     }
 
@@ -365,13 +421,16 @@ impl AgentRuntime {
             Self::Pi(rt) => rt.set_model(provider, model_id).await,
             Self::Claude(rt) => rt.set_model(provider, model_id).await,
             Self::Acp(rt) => rt.set_model(provider, model_id).await,
+            Self::Codex(rt) => rt.set_model(provider, model_id).await,
         }
     }
 
     pub async fn cycle_model(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.cycle_model().await,
-            Self::Claude(_) | Self::Acp(_) => Err("当前 Agent 不支持快捷循环模型".into()),
+            Self::Claude(_) | Self::Acp(_) | Self::Codex(_) => {
+                Err("当前 Agent 不支持快捷循环模型".into())
+            }
         }
     }
 
@@ -380,6 +439,7 @@ impl AgentRuntime {
             Self::Pi(rt) => rt.set_thinking_level(level).await,
             Self::Claude(rt) => rt.set_thinking_level(level).await,
             Self::Acp(rt) => rt.set_thinking_level(level).await,
+            Self::Codex(rt) => rt.set_thinking_level(level).await,
         }
     }
 
@@ -388,6 +448,7 @@ impl AgentRuntime {
             Self::Pi(rt) => rt.cycle_thinking_level().await,
             Self::Claude(rt) => rt.cycle_thinking_level().await,
             Self::Acp(rt) => rt.cycle_thinking_level().await,
+            Self::Codex(rt) => rt.cycle_thinking_level().await,
         }
     }
 
@@ -396,6 +457,7 @@ impl AgentRuntime {
             Self::Pi(rt) => rt.get_available_thinking_levels().await,
             Self::Claude(rt) => rt.get_available_thinking_levels().await,
             Self::Acp(rt) => rt.get_available_thinking_levels().await,
+            Self::Codex(rt) => rt.get_available_thinking_levels().await,
         }
     }
 
@@ -404,6 +466,7 @@ impl AgentRuntime {
             Self::Pi(rt) => rt.get_entries().await,
             Self::Claude(rt) => rt.get_entries().await,
             Self::Acp(rt) => rt.get_entries().await,
+            Self::Codex(rt) => rt.get_entries().await,
         }
     }
 
@@ -412,12 +475,14 @@ impl AgentRuntime {
             Self::Pi(rt) => rt.get_session_stats().await,
             Self::Claude(rt) => rt.get_session_stats().await,
             Self::Acp(rt) => rt.get_session_stats().await,
+            Self::Codex(rt) => rt.get_session_stats().await,
         }
     }
 
     pub async fn set_session_name(&mut self, name: String) -> Result<(), String> {
         match self {
             Self::Pi(rt) => rt.set_session_name(name).await,
+            Self::Codex(rt) => rt.set_session_name(name).await,
             Self::Claude(_) | Self::Acp(_) => Err("当前 Agent 暂不支持会话重命名".into()),
         }
     }
@@ -429,7 +494,9 @@ impl AgentRuntime {
     ) -> Result<(), String> {
         match self {
             Self::Pi(rt) => rt.send_extension_ui_response(id, payload).await,
-            Self::Claude(_) | Self::Acp(_) => Err("当前 Agent 不使用 PI 扩展 UI 协议".into()),
+            Self::Claude(_) | Self::Acp(_) | Self::Codex(_) => {
+                Err("当前 Agent 不使用 PI 扩展 UI 协议".into())
+            }
         }
     }
 
@@ -441,12 +508,27 @@ impl AgentRuntime {
         option_id: Option<String>,
     ) -> Result<(), String> {
         match self {
-            Self::Pi(_) => Err("Pi 使用扩展 UI 弹窗协议".into()),
+            Self::Pi(_) => Err("Pi 使用扩展 UI 引导回复协议".into()),
             Self::Claude(rt) => {
                 rt.respond_permission(request_id, allow, reason, option_id)
                     .await
             }
             Self::Acp(rt) => rt.respond_permission(request_id, allow, option_id).await,
+            Self::Codex(rt) => rt.respond_permission(request_id, allow, option_id).await,
+        }
+    }
+
+    /// 跨 Agent 统一提问引导回复通道: 将前端 `UserPromptResponse` 路由回对应后端私有协议。
+    pub async fn respond_user_prompt(
+        &mut self,
+        request_id: String,
+        response: UserPromptResponse,
+    ) -> Result<(), String> {
+        match self {
+            Self::Pi(rt) => rt.respond_user_prompt(request_id, response).await,
+            Self::Claude(rt) => rt.respond_user_prompt(request_id, response).await,
+            Self::Acp(rt) => rt.respond_user_prompt(request_id, response).await,
+            Self::Codex(rt) => rt.respond_user_prompt(request_id, response).await,
         }
     }
 
@@ -455,13 +537,16 @@ impl AgentRuntime {
             Self::Pi(_) => Err("当前 Agent 不支持权限模式切换".into()),
             Self::Claude(rt) => rt.set_permission_mode(mode).await,
             Self::Acp(rt) => rt.set_permission_mode(mode).await,
+            Self::Codex(rt) => rt.set_permission_mode(mode).await,
         }
     }
 
     pub async fn get_commands(&mut self) -> Result<Value, String> {
         match self {
             Self::Pi(rt) => rt.get_commands().await,
-            Self::Claude(_) | Self::Acp(_) => Ok(serde_json::json!({ "commands": [] })),
+            Self::Claude(_) | Self::Acp(_) | Self::Codex(_) => {
+                Ok(serde_json::json!({ "commands": [] }))
+            }
         }
     }
 
@@ -470,6 +555,7 @@ impl AgentRuntime {
             Self::Pi(rt) => rt.stop().await,
             Self::Claude(rt) => rt.stop().await,
             Self::Acp(rt) => rt.stop().await,
+            Self::Codex(rt) => rt.stop().await,
         }
     }
 }
@@ -481,11 +567,13 @@ pub async fn list_available_agents() -> Result<Vec<AgentDescriptor>, String> {
     let pi_prog = cfg.program_for(AgentKind::Pi).to_string();
     let claude_prog = cfg.program_for(AgentKind::Claude).to_string();
     let agy_prog = cfg.program_for(AgentKind::Agy).to_string();
+    let codex_prog = cfg.program_for(AgentKind::Codex).to_string();
 
-    let (pi_ver, claude_ver, agy_ver) = tokio::join!(
+    let (pi_ver, claude_ver, agy_ver, codex_ver) = tokio::join!(
         process::probe_cli_version(&pi_prog, &["--version"], 4),
         process::probe_cli_version(&claude_prog, &["--version"], 4),
         process::probe_cli_version(&agy_prog, &["--version"], 4),
+        process::probe_cli_version(&codex_prog, &["--version"], 4),
     );
 
     let build = |kind: AgentKind, version: Option<String>, implemented: bool, cmd_name: &str| {
@@ -515,5 +603,6 @@ pub async fn list_available_agents() -> Result<Vec<AgentDescriptor>, String> {
         build(AgentKind::Pi, pi_ver, true, &pi_prog),
         build(AgentKind::Claude, claude_ver, true, &claude_prog),
         build(AgentKind::Agy, agy_ver, true, &agy_prog),
+        build(AgentKind::Codex, codex_ver, true, &codex_prog),
     ])
 }

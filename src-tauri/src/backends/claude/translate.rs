@@ -19,6 +19,8 @@
 //! result (total_cost_usd, usage, is_error)     ← 整轮结束, 发 TurnSettled
 //! ```
 
+use crate::backends::plan::PlanTracker;
+use crate::backends::prompt::{is_claude_ask_user_tool, parse_claude_ask_user_question};
 use crate::backends::{
     ContentBlockKind, MessageUsage, NotifyLevel, PermissionOption, PermissionRequestPayload,
     UnifiedEvent,
@@ -41,6 +43,8 @@ pub struct ClaudeStreamTranslator {
     pending_stop_reason: Option<String>,
     /// 本轮内是否已由 assistant_end 结算过 usage (防止 result 重复加倍)
     turn_had_usage: bool,
+    /// 会话级任务清单追踪器 (TodoWrite / TaskCreate / TaskUpdate 统一归一)
+    plan_tracker: PlanTracker,
 }
 
 impl ClaudeStreamTranslator {
@@ -334,11 +338,17 @@ impl ClaudeStreamTranslator {
                                 .unwrap_or("tool")
                                 .to_string();
                             let args = block.get("input").cloned().unwrap_or(Value::Null);
+                            let maybe_plan =
+                                self.plan_tracker
+                                    .ingest_tool_start(&tool_call_id, &tool_name, &args);
                             out.push(UnifiedEvent::ToolStart {
                                 tool_call_id,
                                 tool_name,
                                 args,
                             });
+                            if let Some(plan) = maybe_plan {
+                                out.push(UnifiedEvent::PlanUpdate { plan });
+                            }
                         }
                     }
                     _ => {}
@@ -392,11 +402,17 @@ impl ClaudeStreamTranslator {
                 .unwrap_or(false);
             let raw_content = block.get("content").cloned().unwrap_or(Value::Null);
             let normalized_result = normalize_tool_result_content(raw_content);
+            let maybe_plan = self
+                .plan_tracker
+                .ingest_tool_end(&tool_call_id, &normalized_result);
             out.push(UnifiedEvent::ToolEnd {
                 tool_call_id,
                 is_error,
                 result: normalized_result,
             });
+            if let Some(plan) = maybe_plan {
+                out.push(UnifiedEvent::PlanUpdate { plan });
+            }
         }
         out
     }
@@ -491,6 +507,7 @@ impl ClaudeStreamTranslator {
         if subtype != "can_use_tool" || request_id.is_empty() {
             return Vec::new();
         }
+        let raw_tool_name = req.get("tool_name").and_then(|v| v.as_str()).unwrap_or("");
         let tool_name = req
             .get("display_name")
             .or_else(|| req.get("tool_name"))
@@ -506,6 +523,18 @@ impl ClaudeStreamTranslator {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
         let input = req.get("input").cloned().unwrap_or(Value::Null);
+
+        // Claude Code 的 AskUserQuestion 走 can_use_tool 控制通道:
+        // 分流为统一 UserPrompt 引导回复卡片, 避免误弹工具权限审批框。
+        if is_claude_ask_user_tool(raw_tool_name) || is_claude_ask_user_tool(&tool_name) {
+            if let Some(prompt_req) =
+                parse_claude_ask_user_question(request_id.clone(), &input, description.clone())
+            {
+                return vec![UnifiedEvent::UserPrompt {
+                    request: prompt_req,
+                }];
+            }
+        }
         let options = req
             .get("permission_suggestions")
             .and_then(|v| v.as_array())
@@ -783,5 +812,50 @@ mod tests {
             }
             other => panic!("unexpected event: {other:?}"),
         }
+    }
+
+    #[test]
+    fn routes_ask_user_question_to_user_prompt_and_todo_write_to_plan_update() {
+        let mut tr = ClaudeStreamTranslator::new();
+        let prompt_evs = tr.translate(&json!({
+            "type": "control_request",
+            "request_id": "req_ask_1",
+            "request": {
+                "subtype": "can_use_tool",
+                "tool_name": "AskUserQuestion",
+                "input": {
+                    "questions": [{
+                        "header": "Style",
+                        "question": "Which style?",
+                        "multiSelect": false,
+                        "options": [
+                            { "label": "Compact", "description": "Less space" },
+                            { "label": "Expanded", "description": "More details" }
+                        ]
+                    }]
+                }
+            }
+        }));
+        assert_eq!(prompt_evs.len(), 1);
+        assert!(matches!(prompt_evs[0], UnifiedEvent::UserPrompt { .. }));
+
+        let todo_evs = tr.translate(&json!({
+            "type": "assistant",
+            "message": {
+                "id": "msg_todo_1",
+                "content": [{
+                    "type": "tool_use",
+                    "id": "tu_todo_1",
+                    "name": "TodoWrite",
+                    "input": {
+                        "todos": [
+                            { "content": "Step A", "status": "in_progress", "activeForm": "Running Step A" }
+                        ]
+                    }
+                }]
+            }
+        }));
+        assert!(todo_evs.iter().any(|e| matches!(e, UnifiedEvent::ToolStart { .. })));
+        assert!(todo_evs.iter().any(|e| matches!(e, UnifiedEvent::PlanUpdate { .. })));
     }
 }

@@ -297,6 +297,21 @@ pub fn list_projects_and_sessions() -> Result<Vec<ProjectInfo>, String> {
         entry.sessions.push(sess);
     }
 
+    // 4. 扫描 Codex CLI (`~/.codex/`) 历史会话并按归一化 cwd 合并
+    for (cwd, sess) in crate::backends::codex::history::list_codex_sessions() {
+        let key = norm_key(&cwd);
+        let display_name = Path::new(&cwd)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| cwd.clone());
+        let entry = by_key.entry(key).or_insert_with(|| ProjectInfo {
+            display_name,
+            path: cwd,
+            sessions: Vec::new(),
+        });
+        entry.sessions.push(sess);
+    }
+
     let mut projects: Vec<ProjectInfo> = by_key.into_values().collect();
     for p in &mut projects {
         p.sessions.sort_by(|a, b| {
@@ -461,7 +476,7 @@ pub fn list_files_recursive(root: String) -> Result<Vec<DirEntry>, String> {
     Ok(files)
 }
 
-/// 读取历史会话 entries (前端「引用会话消息」用): 兼容 PI / Claude / AGY CLI 三源并做路径安全校验
+/// 读取历史会话 entries (前端「引用会话消息」用): 兼容 PI / Claude / AGY CLI / Codex 四源并做路径安全校验
 #[tauri::command]
 pub fn read_session_entries_public(session_path: String) -> Result<Vec<serde_json::Value>, String> {
     let p = Path::new(&session_path);
@@ -471,6 +486,14 @@ pub fn read_session_entries_public(session_path: String) -> Result<Vec<serde_jso
     if let Ok(abs) = crate::backends::claude::history::ensure_within_claude_projects(p) {
         return crate::backends::claude::history::read_claude_session_entries(&abs);
     }
+    if let Ok(abs) = crate::backends::codex::history::ensure_within_codex_sessions(p) {
+        let tid = crate::backends::codex::history::extract_codex_thread_id(&abs.to_string_lossy())
+            .ok_or_else(|| "无法解析 Codex 会话 ID".to_string())?;
+        return Ok(crate::backends::codex::history::read_codex_session_entries(
+            &tid,
+            Some(&abs),
+        ));
+    }
     let abs = crate::backends::acp::history::ensure_within_agy_conversations(p)?;
     let sid = abs
         .file_stem()
@@ -479,12 +502,15 @@ pub fn read_session_entries_public(session_path: String) -> Result<Vec<serde_jso
     Ok(crate::backends::acp::history::read_agy_transcript_entries(sid))
 }
 
-/// 删除会话文件 (校验路径必须位于 PI / Claude / AGY CLI 会话根目录下, 防误删任意路径)
+/// 删除会话文件 (校验路径必须位于 PI / Claude / AGY CLI / Codex 会话根目录下, 防误删任意路径)
 #[tauri::command]
 pub fn delete_session_file(session_path: String) -> Result<(), String> {
     let p = PathBuf::from(&session_path);
     if crate::backends::acp::history::ensure_within_agy_conversations(&p).is_ok() {
         return crate::backends::acp::history::delete_agy_session(&p);
+    }
+    if crate::backends::codex::history::ensure_within_codex_sessions(&p).is_ok() {
+        return crate::backends::codex::history::delete_codex_session(&p);
     }
     let target_abs = ensure_within_sessions(&p)
         .or_else(|_| crate::backends::claude::history::ensure_within_claude_projects(&p))?;

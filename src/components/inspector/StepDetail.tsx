@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import {
-  ArrowLeft, Bot, Copy, Crosshair, FilePenLine, FilePlus2, FileText, Terminal, Wrench,
+  ArrowLeft, Bot, Copy, Crosshair, FilePenLine, FilePlus2, FileText, HelpCircle, ListTodo, Terminal, Wrench,
 } from "lucide-react";
 import type { ChatEntry } from "../../store/session";
 import { useUiStore } from "../../store/ui";
@@ -19,6 +19,12 @@ const TOOL_ICONS: Record<string, typeof Wrench> = {
   read: FileText,
   subagent: Bot,
   subagent_wait: Bot,
+  TodoWrite: ListTodo,
+  todo_write: ListTodo,
+  update_plan: ListTodo,
+  TaskCreate: ListTodo,
+  TaskUpdate: ListTodo,
+  AskUserQuestion: HelpCircle,
 };
 
 // 输出/进度区展示行数上限: 几万行的工具输出全量渲染会拖垮面板, 只展示前 400 行

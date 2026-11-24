@@ -13,7 +13,7 @@ import { Inspector } from "./components/shell/Inspector";
 import { SettingsWindow, type SettingsSection } from "./components/settings/SettingsWindow";
 import { SkillsPanel } from "./components/panels/SkillsPanel";
 import { PackagesPanel } from "./components/panels/PackagesPanel";
-import { NotificationToasts, UiRequestModal } from "./components/UiRequestModal";
+import { NotificationToasts } from "./components/UiRequestModal";
 import { PermissionRequestModal } from "./components/PermissionRequestModal";
 import { FileViewer } from "./components/FileViewer";
 import { useThemeStore } from "./store/theme";
@@ -31,7 +31,6 @@ export default function App() {
   const active = activeSessionId ? sessions[activeSessionId] : null;
   const isSwitching = useSessionStore((s) => s.isSwitching);
   const loadProjects = useProjectsStore((s) => s.loadProjects);
-  const resolveUiRequest = useSessionStore((s) => s.resolveUiRequest);
   const respondPermission = useSessionStore((s) => s.respondPermission);
   const notifications = useSessionStore((s) => s.notifications);
   const dismissNotification = useSessionStore((s) => s.dismissNotification);
@@ -168,16 +167,7 @@ export default function App() {
           )}
         </div>
 
-        {/* 扩展 UI 请求弹窗: 只渲染活跃会话的队头请求 (FIFO, 关闭后自动弹下一个) */}
-        {active && active.uiRequests.length > 0 && (
-          <UiRequestModal
-            request={active.uiRequests[0]}
-            onResolve={(id, payload) => resolveUiRequest(activeSessionId!, id, payload)}
-            onCancel={(id) => resolveUiRequest(activeSessionId!, id, { cancelled: true })}
-          />
-        )}
-
-        {/* 统一工具权限审批弹窗 (Claude Code / ACP 共用, FIFO) */}
+        {/* 统一工具权限审批弹窗 (Claude Code / ACP 共用, FIFO; 引导提问已统一迁入输入卡上方 GuidedPromptCard) */}
         {active && active.permissionRequests.length > 0 && (
           <PermissionRequestModal
             request={active.permissionRequests[0]}

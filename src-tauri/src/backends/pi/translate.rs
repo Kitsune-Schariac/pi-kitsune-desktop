@@ -3,6 +3,7 @@
 //! 一条 `message_update` 帧可能同时携带实时 `usage` 与 `assistantMessageEvent`,
 //! 故返回 `Vec<UnifiedEvent>` (0~2 条), 保证无损保留原有语义。
 
+use crate::backends::prompt::parse_pi_extension_ui_request;
 use crate::backends::{ContentBlockKind, CostBreakdown, MessageUsage, NotifyLevel, UnifiedEvent};
 use serde_json::Value;
 
@@ -265,9 +266,11 @@ pub fn translate_pi_frame(frame: &Value) -> Vec<UnifiedEvent> {
         "extension_ui_request" => {
             let method = frame.get("method").and_then(|v| v.as_str()).unwrap_or("");
             match method {
-                "confirm" | "select" | "input" | "editor" => vec![UnifiedEvent::UiRequest {
-                    request: frame.clone(),
-                }],
+                "confirm" | "select" | "input" | "editor" => {
+                    parse_pi_extension_ui_request(frame)
+                        .map(|request| vec![UnifiedEvent::UserPrompt { request }])
+                        .unwrap_or_default()
+                }
                 "notify" => {
                     let id = frame
                         .get("id")
@@ -462,6 +465,16 @@ mod tests {
             "method": "setStatus"
         }))
         .is_empty());
+        // dialog 类 extension_ui_request 翻译为统一 UserPrompt
+        let ui_evs = translate_pi_frame(&json!({
+            "type": "extension_ui_request",
+            "id": "ui-9",
+            "method": "select",
+            "title": "Pick mode",
+            "options": ["fast", "safe"]
+        }));
+        assert_eq!(ui_evs.len(), 1);
+        assert!(matches!(ui_evs[0], UnifiedEvent::UserPrompt { .. }));
         // compaction 成功无 errorMessage 忽略
         assert!(translate_pi_frame(&json!({ "type": "compaction_end" })).is_empty());
         assert_eq!(

@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import {
-  Bot, Check, ChevronDown, FilePenLine, FilePlus2, FileText, Radar, Terminal, Wrench, X,
+  Bot, Check, ChevronDown, FilePenLine, FilePlus2, FileText, HelpCircle, ListTodo, Radar, Terminal, Wrench, X,
 } from "lucide-react";
 import type { ChatEntry } from "../../store/session";
 import { useFleetStore } from "../../store/fleet";
@@ -17,6 +17,12 @@ const TOOL_ICONS: Record<string, typeof Wrench> = {
   read: FileText,
   subagent: Bot,
   subagent_wait: Bot,
+  TodoWrite: ListTodo,
+  todo_write: ListTodo,
+  update_plan: ListTodo,
+  TaskCreate: ListTodo,
+  TaskUpdate: ListTodo,
+  AskUserQuestion: HelpCircle,
 };
 
 interface StepGroupProps {

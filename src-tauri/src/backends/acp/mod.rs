@@ -11,8 +11,11 @@
 pub mod history;
 pub mod protocol;
 
+use crate::backends::plan::{PlanSnapshot, PlanTracker};
 use crate::backends::process::{build_cli_command, kill_process_tree, strip_newline};
-use crate::backends::{AgentKind, MessageUsage, NotifyLevel, PermissionOption, UnifiedEvent};
+use crate::backends::{
+    AgentKind, MessageUsage, NotifyLevel, PermissionOption, UnifiedEvent, UserPromptResponse,
+};
 use serde_json::{json, Value};
 use std::collections::{HashMap, VecDeque};
 use std::process::Stdio;
@@ -160,10 +163,13 @@ pub struct AcpBackend {
     config: Arc<Mutex<protocol::AcpSessionConfig>>,
     stats: Arc<Mutex<AcpSessionStats>>,
     initial_entries: Vec<Value>,
+    initial_plan: Option<PlanSnapshot>,
     child: Child,
     stdin: Arc<Mutex<ChildStdin>>,
     pending: PendingRpc,
     pending_permissions: Arc<Mutex<HashMap<String, PendingAcpPermission>>>,
+    /// 预留: ACP 反向结构化提问请求的 JSON-RPC id 映射 (`request_key` → `rpc_id`)
+    pending_prompts: Arc<Mutex<HashMap<String, Value>>>,
     stderr_tail: StderrTail,
     id_counter: Arc<AtomicU64>,
 }
@@ -233,6 +239,9 @@ impl AcpBackend {
         let pending_permissions: Arc<Mutex<HashMap<String, PendingAcpPermission>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let perms_for_reader = pending_permissions.clone();
+        let pending_prompts: Arc<Mutex<HashMap<String, Value>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let prompts_for_reader = pending_prompts.clone();
         let perm_counter = Arc::new(AtomicU64::new(0));
         let config: Arc<Mutex<protocol::AcpSessionConfig>> =
             Arc::new(Mutex::new(protocol::AcpSessionConfig::default()));
@@ -251,6 +260,7 @@ impl AcpBackend {
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout);
             let mut buf = Vec::with_capacity(8192);
+            let mut tool_plan_tracker = PlanTracker::new();
             loop {
                 buf.clear();
                 match reader.read_until(b'\n', &mut buf).await {
@@ -313,6 +323,35 @@ impl AcpBackend {
                                     }),
                                 );
                             }
+                            // 2b. 预留: Agent 反向结构化提问请求 (`session/request_user_input` / `session/elicit`)
+                            (
+                                Some("session/request_user_input" | "session/elicit"),
+                                Some(id_val),
+                            ) => {
+                                let params = frame.get("params").cloned().unwrap_or(Value::Null);
+                                let req_key = format!(
+                                    "acp-prompt-{}",
+                                    perm_counter.fetch_add(1, Ordering::SeqCst)
+                                );
+                                if let Some(prompt_req) =
+                                    protocol::translate_acp_user_prompt_request(
+                                        req_key.clone(),
+                                        &params,
+                                    )
+                                {
+                                    prompts_for_reader
+                                        .lock()
+                                        .await
+                                        .insert(req_key, id_val.clone());
+                                    let _ = app_for_reader.emit(
+                                        "agent_event",
+                                        json!({
+                                            "sessionId": sid_for_reader,
+                                            "event": UnifiedEvent::UserPrompt { request: prompt_req }
+                                        }),
+                                    );
+                                }
+                            }
                             // 3. Notification: session/update → 同步配置/用量快照并按是否处于回放期分流
                             (Some("session/update"), None) => {
                                 let params = frame.get("params").cloned().unwrap_or(Value::Null);
@@ -369,10 +408,37 @@ impl AcpBackend {
                                 }
                                 if !is_replaying {
                                     for ev in protocol::translate_acp_update(&params) {
+                                        let extra_plan = match &ev {
+                                            UnifiedEvent::ToolStart {
+                                                tool_call_id,
+                                                tool_name,
+                                                args,
+                                            } => tool_plan_tracker.ingest_tool_start(
+                                                tool_call_id,
+                                                tool_name,
+                                                args,
+                                            ),
+                                            UnifiedEvent::ToolEnd {
+                                                tool_call_id,
+                                                result,
+                                                ..
+                                            } => tool_plan_tracker
+                                                .ingest_tool_end(tool_call_id, result),
+                                            _ => None,
+                                        };
                                         let _ = app_for_reader.emit(
                                             "agent_event",
                                             json!({ "sessionId": sid_for_reader, "event": ev }),
                                         );
+                                        if let Some(plan) = extra_plan {
+                                            let _ = app_for_reader.emit(
+                                                "agent_event",
+                                                json!({
+                                                    "sessionId": sid_for_reader,
+                                                    "event": UnifiedEvent::PlanUpdate { plan }
+                                                }),
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -424,10 +490,12 @@ impl AcpBackend {
             config,
             stats,
             initial_entries: Vec::new(),
+            initial_plan: None,
             child,
             stdin,
             pending,
             pending_permissions,
+            pending_prompts,
             stderr_tail,
             id_counter,
         };
@@ -459,7 +527,7 @@ impl AcpBackend {
         let resume_id = resume_session_id
             .as_deref()
             .and_then(history::extract_agy_session_id);
-        let (acp_sid, parsed_cfg, initial_entries) = if let Some(rid) = resume_id {
+        let (acp_sid, parsed_cfg, initial_entries, initial_plan) = if let Some(rid) = resume_id {
             *replay_buffer.lock().await = Some(Vec::new());
             let lid = backend.next_id();
             let load_res = backend
@@ -480,23 +548,26 @@ impl AcpBackend {
                     if entries.is_empty() {
                         entries = history::read_agy_transcript_entries(&rid);
                     }
+                    let plan = protocol::extract_active_plan_from_updates(&replayed)
+                        .or_else(|| crate::backends::plan::derive_active_plan_from_entries(&entries));
                     // 用 transcript 历史补齐累计 token 与消息数（不覆盖 usage_update 的权威上下文值）
                     let tr_stats = history::read_agy_transcript_stats(&rid);
                     backend.stats.lock().await.merge_transcript_stats(&tr_stats);
-                    (rid, cfg, entries)
+                    (rid, cfg, entries, plan)
                 }
                 _ => {
                     let (sid, cfg) = backend.create_new_acp_session(&cwd).await?;
-                    (sid, cfg, Vec::new())
+                    (sid, cfg, Vec::new(), None)
                 }
             }
         } else {
             let (sid, cfg) = backend.create_new_acp_session(&cwd).await?;
-            (sid, cfg, Vec::new())
+            (sid, cfg, Vec::new(), None)
         };
         backend.acp_session_id = acp_sid.clone();
         backend.session_path = history::agy_conversation_db_path(&acp_sid);
         backend.initial_entries = initial_entries;
+        backend.initial_plan = initial_plan;
         let meta_model = parsed_cfg.current_model_id.clone();
         let meta_mode = parsed_cfg.current_mode_id.clone();
         *backend.config.lock().await = parsed_cfg;
@@ -735,6 +806,21 @@ impl AcpBackend {
         self.write_frame(&resp).await
     }
 
+    pub async fn respond_user_prompt(
+        &mut self,
+        request_id: String,
+        response: UserPromptResponse,
+    ) -> Result<(), String> {
+        let rpc_id = self
+            .pending_prompts
+            .lock()
+            .await
+            .remove(&request_id)
+            .ok_or_else(|| "未找到对应的 ACP 引导提问请求".to_string())?;
+        let resp = protocol::build_acp_user_prompt_response(rpc_id, response);
+        self.write_frame(&resp).await
+    }
+
     pub async fn current_permission_mode(&self) -> Option<String> {
         self.config.lock().await.current_mode_id.clone()
     }
@@ -905,6 +991,10 @@ impl AcpBackend {
 
     pub fn take_initial_entries(&mut self) -> Vec<Value> {
         std::mem::take(&mut self.initial_entries)
+    }
+
+    pub fn take_initial_plan(&mut self) -> Option<PlanSnapshot> {
+        self.initial_plan.take()
     }
 
     pub fn session_path(&self) -> Option<String> {
